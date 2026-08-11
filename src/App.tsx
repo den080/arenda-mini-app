@@ -35,8 +35,8 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Navigate to={user.role === 'landlord' ? '/landlord' : '/tenant'} replace />} />
-        <Route path="/landlord" element={<LandlordDashboard userId={user.id} />} />
-        <Route path="/tenant" element={<TenantDashboard userId={user.id} />} />
+        <Route path="/landlord" element={<LandlordDashboard />} />
+        <Route path="/tenant" element={<TenantDashboard />} />
         <Route path="*" element={<Navigate to={user.role === 'landlord' ? '/landlord' : '/tenant'} replace />} />
       </Routes>
     </BrowserRouter>
