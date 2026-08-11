@@ -1,98 +1,44 @@
-import { Component, ReactNode } from 'react'
-import { Navigate } from 'react-router-dom'
+import { useState } from 'react'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useTelegramUser } from './hooks/useTelegramUser'
+import LandlordDashboard from './pages/LandlordDashboard'
+import TenantDashboard from './pages/TenantDashboard'
 
-interface ErrorBoundaryState {
-  hasError: boolean
-  error: Error | null
-}
+export default function App() {
+  const { user, loading, error, loginWithId } = useTelegramUser()
+  const [value, setValue] = useState('')
 
-class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryState> {
-  constructor(props: { children: ReactNode }) {
-    super(props)
-    this.state = { hasError: false, error: null }
-  }
+  if (loading) return <div style={{ padding: 40, textAlign: 'center', fontFamily: 'system-ui' }}>⏳ Загрузка...</div>
 
-  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
-    return { hasError: true, error }
-  }
-
-  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('ErrorBoundary caught:', error, errorInfo)
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div style={styles.container}>
-          <h2 style={{ color: '#f44336' }}>Произошла ошибка</h2>
-          <p style={{ color: '#666' }}>
-            {this.state.error?.message || 'Неизвестная ошибка'}
-          </p>
-          <button
-            onClick={() => window.location.reload()}
-            style={styles.button}
-          >
-            Обновить страницу
-          </button>
-        </div>
-      )
-    }
-    return this.props.children
-  }
-}
-
-function AppContent() {
-  const { user, loading, error } = useTelegramUser()
-  
-  if (loading) {
-    return <div style={styles.container}>Загрузка...</div>
-  }
-  
-  if (error) {
-    return <div style={styles.container}>{error}</div>
-  }
-  
   if (!user) {
-    return <div style={styles.container}>Пользователь не найден</div>
+    return (
+      <div style={{ padding: 24, fontFamily: 'system-ui', maxWidth: 600, margin: '0 auto' }}>
+        <h2 style={{ fontSize: 20 }}>🔑 Вход</h2>
+        <p style={{ color: '#555', fontSize: 14 }}>{error}</p>
+        <input
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="Ваш Telegram ID (например: 28606967)"
+          style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box' }}
+        />
+        <button
+          onClick={() => value.trim() && loginWithId(value.trim())}
+          style={{ marginTop: 12, width: '100%', padding: 14, borderRadius: 10, border: 'none', background: '#2196f3', color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}
+        >
+          Войти
+        </button>
+      </div>
+    )
   }
-  
-  if (user.role === 'landlord') {
-    return <Navigate to="/landlord" replace />
-  }
-  
-  if (user.role === 'tenant') {
-    return <Navigate to="/tenant" replace />
-  }
-  
-  return <div style={styles.container}>Неизвестная роль</div>
-}
 
-function App() {
   return (
-    <ErrorBoundary>
-      <AppContent />
-    </ErrorBoundary>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Navigate to={user.role === 'landlord' ? '/landlord' : '/tenant'} replace />} />
+        <Route path="/landlord" element={<LandlordDashboard userId={user.id} />} />
+        <Route path="/tenant" element={<TenantDashboard userId={user.id} />} />
+        <Route path="*" element={<Navigate to={user.role === 'landlord' ? '/landlord' : '/tenant'} replace />} />
+      </Routes>
+    </BrowserRouter>
   )
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    fontFamily: 'system-ui, -apple-system, sans-serif',
-    maxWidth: '600px',
-    margin: '0 auto',
-    padding: '16px',
-  },
-  button: {
-    padding: '12px 24px',
-    fontSize: '16px',
-    backgroundColor: '#007AFF',
-    color: '#fff',
-    border: 'none',
-    borderRadius: '8px',
-    cursor: 'pointer',
-    marginTop: '16px',
-  },
-}
-
-export default App
