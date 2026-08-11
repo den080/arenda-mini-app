@@ -12,57 +12,58 @@ export function useTelegramUser() {
       try {
         let telegramId: string | undefined
 
-        // Try to get telegram ID from URL parameters (tgWebAppData)
+        // Пытаемся получить telegram_id из URL-параметров (tgWebAppData)
         if (typeof window !== 'undefined') {
           try {
             const params = new URLSearchParams(window.location.search)
-            const raw = params.get('tgWebAppData')
-            if (raw) {
-              const data = new URLSearchParams(raw)
-              const userRaw = data.get('user')
-              if (userRaw) {
-                const parsedUser = JSON.parse(userRaw) as { id?: number }
-                telegramId = parsedUser?.id?.toString()
+            const rawInitData = params.get('tgWebAppData')
+            
+            if (rawInitData) {
+              // tgWebAppData - это строка вида "user=%7B...%7D&query_id=..."
+              const initDataParams = new URLSearchParams(rawInitData)
+              const userJson = initDataParams.get('user')
+              
+              if (userJson) {
+                const userData = JSON.parse(decodeURIComponent(userJson))
+                telegramId = userData.id?.toString()
               }
             }
-          } catch {
-            telegramId = undefined
-          }
-        }
-
-        // Fallback: try window.Telegram.WebApp if available
-        if (!telegramId && typeof window !== 'undefined') {
-          try {
-            const tg = (window as unknown as { Telegram?: { WebApp?: { initDataUnsafe?: { user?: { id?: number } } } } }).Telegram?.WebApp
-            if (tg?.initDataUnsafe?.user?.id) {
-              telegramId = tg.initDataUnsafe.user.id.toString()
-            }
-          } catch {
+          } catch (e) {
+            console.error('Ошибка парсинга tgWebAppData:', e)
             telegramId = undefined
           }
         }
 
         if (!telegramId) {
-          setError('Не удалось получить ID из Telegram. Откройте приложение через кнопку меню в боте.')
+          setError('Не удалось получить ID пользователя из Telegram. Убедитесь, что приложение открыто через бота.')
           setLoading(false)
           return
         }
 
+        // Ищем пользователя в базе данных
         const { data, error: dbError } = await supabase
           .from('users')
           .select('*')
           .eq('telegram_id', telegramId)
           .maybeSingle()
 
-        if (dbError || !data) {
-          setError('Пользователь не найден. Обратитесь к арендодателю.')
+        if (dbError) {
+          console.error('Ошибка Supabase:', dbError)
+          setError('Ошибка подключения к базе данных')
+          setLoading(false)
+          return
+        }
+
+        if (!data) {
+          setError('Пользователь не найден. Обратитесь к арендодателю для регистрации.')
           setLoading(false)
           return
         }
 
         setUser(data)
-      } catch {
-        setError('Ошибка подключения')
+      } catch (e) {
+        console.error('Неожиданная ошибка:', e)
+        setError('Произошла непредвиденная ошибка')
       } finally {
         setLoading(false)
       }
