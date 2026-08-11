@@ -1,14 +1,32 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useTelegramUser } from '../hooks/useTelegramUser'
+import type { Contract, CashMeeting, NotificationLog } from '../types/database'
+
+interface DashboardData {
+  contract: Contract
+  obj: any
+  landlord: any
+  payments: any[]
+  meters: any[]
+  meterTypes: any[]
+  cashMeetings?: CashMeeting[]
+}
+
+interface NotificationItem extends NotificationLog {
+  users?: { full_name: string }
+}
 
 export function TenantDashboard() {
   const { user, loading: userLoading } = useTelegramUser()
-  const [data, setData] = useState<any>(null)
+  const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [vals, setVals] = useState<Record<string, string>>({})
   const [msg, setMsg] = useState<string | null>(null)
+  const [selectedSlot, setSelectedSlot] = useState<string>('')
+  const [cashMeetingStatus, setCashMeetingStatus] = useState<'proposed' | 'confirmed' | null>(null)
+  const [notifications, setNotifications] = useState<NotificationItem[]>([])
 
   useEffect(() => {
     if (!user) return
@@ -24,8 +42,32 @@ export function TenantDashboard() {
         const { data: payments } = await supabase.from('payments').select('*').eq('contract_id', contract.id).order('period', { ascending: false })
         const { data: meters } = await supabase.from('object_meters').select('*').eq('object_id', contract.object_id).eq('is_active', true)
         const { data: meterTypes } = await supabase.from('meter_types').select('*')
+        
+        // Load cash meetings for this contract
+        let cashMeetings: CashMeeting[] = []
+        if (contract.payment_method === 'cash') {
+          const { data: cmData } = await supabase
+            .from('cash_meetings')
+            .select('*')
+            .eq('contract_id', contract.id)
+            .order('created_at', { ascending: false })
+            .limit(1)
+          if (cmData && cmData.length > 0) {
+            cashMeetings = cmData
+            setCashMeetingStatus(cmData[0].status as 'proposed' | 'confirmed')
+          }
+        }
 
-        setData({ contract, obj, landlord, payments: payments || [], meters: meters || [], meterTypes: meterTypes || [] })
+        setData({ contract, obj, landlord, payments: payments || [], meters: meters || [], meterTypes: meterTypes || [], cashMeetings })
+        
+        // Load notifications
+        const { data: notifData } = await supabase
+          .from('notifications_log')
+          .select('*, users(full_name)')
+          .eq('user_id', user!.id)
+          .order('sent_at', { ascending: false })
+          .limit(5)
+        if (notifData) setNotifications(notifData as NotificationItem[])
       } catch (e) {
         setError('Ошибка загрузки: ' + String(e))
       } finally {
@@ -62,6 +104,52 @@ export function TenantDashboard() {
     setVals({})
   }
 
+  async function proposeCashTime() {
+    if (!data || !selectedSlot) return
+    const slotIdx = Number(selectedSlot)
+    const slot = data.contract.cash_slots?.[slotIdx]
+    if (!slot) return
+    
+    const payment = data.payments[0]
+    const { error: e, data: inserted } = await supabase
+      .from('cash_meetings')
+      .insert({
+        contract_id: data.contract.id,
+        payment_id: payment?.id || null,
+        day: slot.day,
+        time_from: slot.time_from,
+        time_to: slot.time_to,
+        status: 'proposed',
+      })
+      .select()
+    
+    if (!e && inserted && inserted.length > 0) {
+      // Notify landlord
+      await supabase.from('notifications_log').insert({
+        user_id: data.landlord.id,
+        type: 'cash_proposed',
+        related_id: data.contract.id,
+        sent_at: new Date().toISOString(),
+      })
+      setCashMeetingStatus('proposed')
+      setMsg('✅ Заявка отправлена арендодателю')
+      setSelectedSlot('')
+    } else {
+      setMsg(e ? 'Ошибка: ' + e.message : 'Не удалось отправить заявку')
+    }
+  }
+
+  const getNotificationText = (type: string) => {
+    switch (type) {
+      case 'payment_claimed': return '✅ Арендатор сообщил об оплате'
+      case 'payment_confirmed': return '🟢 Арендодатель подтвердил оплату'
+      case 'meter_submitted': return '💦 Переданы новые показания'
+      case 'cash_proposed': return '💵 Арендатор предложил время оплаты наличными'
+      case 'cash_confirmed': return '🤝 Время оплаты наличными подтверждено'
+      default: return ''
+    }
+  }
+
   if (userLoading || loading) return <div style={s.container}>Загрузка...</div>
   if (error) return <div style={s.container}>{error}</div>
   if (!data) return <div style={s.container}>Нет данных</div>
@@ -77,6 +165,7 @@ export function TenantDashboard() {
       : { icon: '🟡', text: 'Ожидает оплаты' }
     : { icon: '⚪', text: 'Нет счёта' }
   const monthLabel = payment ? new Date(payment.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : ''
+  const dayNames = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
 
   return (
     <div style={s.container}>
@@ -93,11 +182,46 @@ export function TenantDashboard() {
         <div style={s.row}><span>Итого</span><b style={s.total}>{total.toFixed(2)} ₽</b></div>
         {payment && <div style={s.small}>Оплатить до: {new Date(payment.due_date).toLocaleDateString('ru-RU')}</div>}
         <div style={s.statusRow}><span>{status.icon}</span><span>{status.text}</span></div>
-        {contract.card_number && <div style={s.small}>💳 Оплата на карту: {contract.card_number}</div>}
-        {!payment?.confirmed_by_landlord && (
+        
+        {contract.payment_method === 'card' && contract.card_number && (
+          <div style={s.small}>💳 Оплата на карту: {contract.card_number}</div>
+        )}
+        
+        {!payment?.confirmed_by_landlord && contract.payment_method === 'card' && (
           <button onClick={claimPaid} style={s.button}>✅ Я оплатил</button>
         )}
       </div>
+
+      {/* Оплата наличными */}
+      {contract.payment_method === 'cash' && (
+        <div style={s.card}>
+          <div style={s.h2}>💵 Оплата наличными</div>
+          {cashMeetingStatus === 'confirmed' ? (
+            <div style={s.statusSuccess}>🟢 Время подтверждено</div>
+          ) : cashMeetingStatus === 'proposed' ? (
+            <div style={s.statusWarning}>🟡 Заявка на рассмотрении</div>
+          ) : (
+            <>
+              <div style={s.small}>Выберите удобный слот:</div>
+              <select
+                value={selectedSlot}
+                onChange={(e) => setSelectedSlot(e.target.value)}
+                style={s.select}
+              >
+                <option value="">-- Выберите слот --</option>
+                {(contract.cash_slots || []).map((slot, idx) => (
+                  <option key={idx} value={String(idx)}>
+                    {dayNames[slot.day - 1]} {slot.time_from}–{slot.time_to}
+                  </option>
+                ))}
+              </select>
+              <button onClick={proposeCashTime} style={s.button} disabled={!selectedSlot}>
+                📅 Предложить время
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       {meters.length > 0 && (
         <div style={s.card}>
@@ -130,6 +254,20 @@ export function TenantDashboard() {
           </div>
         ))}
       </div>
+
+      {/* Уведомления */}
+      <div style={s.card}>
+        <div style={s.h2}>🔔 Уведомления</div>
+        {notifications.length === 0 ? (
+          <div style={s.empty}>Нет уведомлений</div>
+        ) : (
+          notifications.map(n => (
+            <div key={n.id} style={s.notifRow}>
+              {getNotificationText(n.type)}
+            </div>
+          ))
+        )}
+      </div>
     </div>
   )
 }
@@ -147,6 +285,11 @@ const s: Record<string, React.CSSProperties> = {
   button: { marginTop: 10, width: '100%', padding: 12, borderRadius: 10, border: 'none', background: '#2196f3', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer' },
   input: { width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 15, marginBottom: 8, boxSizing: 'border-box' },
   msg: { padding: 12, borderRadius: 10, backgroundColor: '#e8f5e9', color: '#2e7d32', marginBottom: 12, fontSize: 14 },
+  select: { width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 15, marginBottom: 10, boxSizing: 'border-box' },
+  statusSuccess: { fontSize: 14, color: '#2e7d32', padding: '8px 0' },
+  statusWarning: { fontSize: 14, color: '#f57c00', padding: '8px 0' },
+  empty: { color: '#888', textAlign: 'center', padding: '8px 0' },
+  notifRow: { fontSize: 14, padding: '8px 0', borderBottom: '1px solid #eee' },
 }
 
 export default TenantDashboard

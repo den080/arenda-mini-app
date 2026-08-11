@@ -29,8 +29,20 @@ export interface Contract {
   end_date: string
   payment_method: PaymentMethod
   card_number: string | null
+  cash_slots: { day: number; time_from: string; time_to: string }[] | null
   reminder_days_before: number
   status: ContractStatus
+}
+
+export interface CashMeeting {
+  id: string
+  contract_id: string
+  payment_id: string | null
+  day: number
+  time_from: string
+  time_to: string
+  status: 'proposed' | 'confirmed' | 'cancelled'
+  created_at: string
 }
 
 export interface MeterType {
@@ -79,7 +91,7 @@ export interface Payment {
 export interface NotificationLog {
   id: string
   user_id: string
-  type: string
+  type: 'payment_claimed' | 'payment_confirmed' | 'meter_submitted' | 'cash_proposed' | 'cash_confirmed'
   related_id: string
   sent_at: string
 }
