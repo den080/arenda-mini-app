@@ -2,14 +2,21 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import type { User } from '../types/database'
 
+let cachedUser: User | null = null
+
 export function useTelegramUser() {
-  const [user, setUser] = useState<User | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [user, setUser] = useState<User | null>(cachedUser)
+  const [loading, setLoading] = useState<boolean>(!cachedUser)
   const [error, setError] = useState<string | null>(null)
 
   async function loginWithId(telegramId: string) {
     setLoading(true)
     setError(null)
+    try {
+      localStorage.setItem('rentflow_tg_id', telegramId)
+    } catch {
+      // ignore
+    }
     try {
       const { data, error: dbError } = await supabase
         .from('users')
@@ -18,7 +25,10 @@ export function useTelegramUser() {
         .maybeSingle()
       if (dbError) setError('Ошибка базы: ' + dbError.message)
       else if (!data) setError('Пользователь с ID ' + telegramId + ' не найден в базе.')
-      else setUser(data as User)
+      else {
+        cachedUser = data as User
+        setUser(cachedUser)
+      }
     } catch (e) {
       setError('Ошибка подключения: ' + String(e))
     } finally {
@@ -27,6 +37,7 @@ export function useTelegramUser() {
   }
 
   useEffect(() => {
+    if (cachedUser) return
     let autoId: string | undefined
     try {
       const w = window as any
@@ -41,6 +52,13 @@ export function useTelegramUser() {
       }
     } catch {
       autoId = undefined
+    }
+    if (!autoId) {
+      try {
+        autoId = localStorage.getItem('rentflow_tg_id') || undefined
+      } catch {
+        // ignore
+      }
     }
     if (autoId) loginWithId(autoId)
     else {
