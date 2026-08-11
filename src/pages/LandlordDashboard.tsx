@@ -19,7 +19,6 @@ export function LandlordDashboard() {
 
     async function fetchData() {
       try {
-        // Get objects
         const { data: objectsData } = await supabase
           .from('objects')
           .select('*')
@@ -31,11 +30,9 @@ export function LandlordDashboard() {
           return
         }
 
-        // For each object, get contract and payment status
         const objectsWithStatus: ObjectWithStatus[] = []
 
         for (const obj of objectsData) {
-          // Get active contract
           const { data: contract } = await supabase
             .from('contracts')
             .select('*')
@@ -52,8 +49,7 @@ export function LandlordDashboard() {
             continue
           }
 
-          // Get current period payment
-          const currentPeriod = new Date().toISOString().slice(0, 7) // YYYY-MM
+          const currentPeriod = new Date().toISOString().slice(0, 7)
           const { data: payment } = await supabase
             .from('payments')
             .select('*')
@@ -65,23 +61,26 @@ export function LandlordDashboard() {
           const dueDate = payment ? new Date(payment.due_date) : new Date(contract.end_date)
           const isOverdue = today > dueDate
 
+          const baseAmount = payment?.base_amount || contract.rent_amount
+          const penaltyAmount = payment?.penalty_amount || 0
+
           if (payment?.confirmed_by_landlord) {
             objectsWithStatus.push({
               ...obj,
               status: 'paid',
-              amount: payment.base_amount + (payment.penalty_amount || 0),
+              amount: baseAmount + penaltyAmount,
             })
           } else if (isOverdue) {
             objectsWithStatus.push({
               ...obj,
               status: 'overdue',
-              amount: (payment?.base_amount || contract.rent_amount) + (payment.penalty_amount || 0),
+              amount: baseAmount + penaltyAmount,
             })
           } else {
             objectsWithStatus.push({
               ...obj,
               status: 'pending',
-              amount: (payment?.base_amount || contract.rent_amount) + (payment.penalty_amount || 0),
+              amount: baseAmount + penaltyAmount,
             })
           }
         }
