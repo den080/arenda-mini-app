@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { useTelegramUser } from '../hooks/useTelegramUser'
 import type { Object as PropertyObject } from '../types/database'
 
 interface ObjectWithStatus extends PropertyObject {
@@ -7,58 +8,22 @@ interface ObjectWithStatus extends PropertyObject {
   amount: number
 }
 
-function getTelegramIdFromUrl(): string | undefined {
-  if (typeof window === 'undefined') return undefined
-  try {
-    const params = new URLSearchParams(window.location.search)
-    const rawInitData = params.get('tgWebAppData')
-    if (!rawInitData) return undefined
-    
-    const initDataParams = new URLSearchParams(rawInitData)
-    const userJson = initDataParams.get('user')
-    if (!userJson) return undefined
-    
-    const userData = JSON.parse(decodeURIComponent(userJson))
-    return userData?.id?.toString()
-  } catch {
-    return undefined
-  }
-}
-
 export function LandlordDashboard() {
+  const { user, loading: userLoading } = useTelegramUser()
   const [objects, setObjects] = useState<ObjectWithStatus[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    if (!user) return
+
     async function fetchData() {
       try {
-        const telegramId = getTelegramIdFromUrl()
-
-        if (!telegramId) {
-          setError('Не удалось получить ID из Telegram. Откройте приложение через кнопку меню в боте.')
-          setLoading(false)
-          return
-        }
-
-        // Get user
-        const { data: userData, error: userError } = await supabase
-          .from('users')
-          .select('id')
-          .eq('telegram_id', telegramId)
-          .single()
-
-        if (userError || !userData) {
-          setError('Пользователь не найден. Обратитесь к арендодателю.')
-          setLoading(false)
-          return
-        }
-
         // Get objects
         const { data: objectsData } = await supabase
           .from('objects')
           .select('*')
-          .eq('landlord_id', userData.id)
+          .eq('landlord_id', user!.id)
 
         if (!objectsData) {
           setObjects([])
@@ -110,13 +75,13 @@ export function LandlordDashboard() {
             objectsWithStatus.push({
               ...obj,
               status: 'overdue',
-              amount: (payment?.base_amount || contract.rent_amount) + (payment?.penalty_amount || 0),
+              amount: (payment?.base_amount || contract.rent_amount) + (payment.penalty_amount || 0),
             })
           } else {
             objectsWithStatus.push({
               ...obj,
               status: 'pending',
-              amount: (payment?.base_amount || contract.rent_amount) + (payment?.penalty_amount || 0),
+              amount: (payment?.base_amount || contract.rent_amount) + (payment.penalty_amount || 0),
             })
           }
         }
@@ -130,7 +95,7 @@ export function LandlordDashboard() {
     }
 
     fetchData()
-  }, [])
+  }, [user])
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -152,7 +117,7 @@ export function LandlordDashboard() {
     }
   }
 
-  if (loading) {
+  if (userLoading || loading) {
     return <div style={styles.container}>Загрузка...</div>
   }
 
@@ -162,7 +127,7 @@ export function LandlordDashboard() {
 
   return (
     <div style={styles.container}>
-      <h1 style={styles.title}>Мои объекты</h1>
+      <h1 style={styles.title}>🏠 Мои объекты</h1>
       {objects.length === 0 ? (
         <p style={styles.empty}>Объектов нет</p>
       ) : (
