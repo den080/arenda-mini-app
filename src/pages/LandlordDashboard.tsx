@@ -6,6 +6,7 @@ import type { Object as PropertyObject } from '../types/database'
 interface ObjectWithStatus extends PropertyObject {
   status: 'paid' | 'overdue' | 'pending' | 'no_contract'
   amount: number
+  paymentId: string | null
 }
 
 export function LandlordDashboard() {
@@ -41,11 +42,7 @@ export function LandlordDashboard() {
             .maybeSingle()
 
           if (!contract) {
-            objectsWithStatus.push({
-              ...obj,
-              status: 'no_contract',
-              amount: 0,
-            })
+            objectsWithStatus.push({ ...obj, status: 'no_contract', amount: 0, paymentId: null })
             continue
           }
 
@@ -63,25 +60,14 @@ export function LandlordDashboard() {
 
           const baseAmount = payment?.base_amount || contract.rent_amount
           const penaltyAmount = payment?.penalty_amount || 0
+          const paymentId = payment ? String(payment.id) : null
 
           if (payment?.confirmed_by_landlord) {
-            objectsWithStatus.push({
-              ...obj,
-              status: 'paid',
-              amount: baseAmount + penaltyAmount,
-            })
+            objectsWithStatus.push({ ...obj, status: 'paid', amount: baseAmount + penaltyAmount, paymentId })
           } else if (isOverdue) {
-            objectsWithStatus.push({
-              ...obj,
-              status: 'overdue',
-              amount: baseAmount + penaltyAmount,
-            })
+            objectsWithStatus.push({ ...obj, status: 'overdue', amount: baseAmount + penaltyAmount, paymentId })
           } else {
-            objectsWithStatus.push({
-              ...obj,
-              status: 'pending',
-              amount: baseAmount + penaltyAmount,
-            })
+            objectsWithStatus.push({ ...obj, status: 'pending', amount: baseAmount + penaltyAmount, paymentId })
           }
         }
 
@@ -95,6 +81,19 @@ export function LandlordDashboard() {
 
     fetchData()
   }, [user])
+
+  async function confirmPayment(objId: string, paymentId: string) {
+    const { error: updError } = await supabase
+      .from('payments')
+      .update({ confirmed_by_landlord: true })
+      .eq('id', paymentId)
+
+    if (!updError) {
+      setObjects(prev => prev.map(o => (o.id === objId ? { ...o, status: 'paid' as const } : o)))
+    } else {
+      alert('Не удалось подтвердить: ' + updError.message)
+    }
+  }
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -139,6 +138,14 @@ export function LandlordDashboard() {
             </div>
             {obj.amount > 0 && (
               <div style={styles.amount}>{obj.amount.toFixed(2)} ₽</div>
+            )}
+            {obj.paymentId && (obj.status === 'overdue' || obj.status === 'pending') && (
+              <button
+                onClick={() => confirmPayment(String(obj.id), obj.paymentId!)}
+                style={styles.confirmButton}
+              >
+                ✅ Подтвердить оплату
+              </button>
             )}
           </div>
         ))
@@ -191,6 +198,18 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '18px',
     fontWeight: 'bold',
     color: '#333',
+  },
+  confirmButton: {
+    marginTop: '12px',
+    width: '100%',
+    padding: '12px',
+    borderRadius: '10px',
+    border: 'none',
+    background: '#4caf50',
+    color: '#fff',
+    fontSize: '15px',
+    fontWeight: 700,
+    cursor: 'pointer',
   },
 }
 
