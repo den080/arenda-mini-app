@@ -7,6 +7,24 @@ interface ObjectWithStatus extends PropertyObject {
   amount: number
 }
 
+function getTelegramIdFromUrl(): string | undefined {
+  if (typeof window === 'undefined') return undefined
+  try {
+    const params = new URLSearchParams(window.location.search)
+    const rawInitData = params.get('tgWebAppData')
+    if (!rawInitData) return undefined
+    
+    const initDataParams = new URLSearchParams(rawInitData)
+    const userJson = initDataParams.get('user')
+    if (!userJson) return undefined
+    
+    const userData = JSON.parse(decodeURIComponent(userJson))
+    return userData?.id?.toString()
+  } catch {
+    return undefined
+  }
+}
+
 export function LandlordDashboard() {
   const [objects, setObjects] = useState<ObjectWithStatus[]>([])
   const [loading, setLoading] = useState(true)
@@ -15,33 +33,7 @@ export function LandlordDashboard() {
   useEffect(() => {
     async function fetchData() {
       try {
-        // Get landlord ID from Telegram with safe access
-        let telegramId: string | undefined
-
-        try {
-          const lp = window.Telegram?.WebApp?.initDataUnsafe?.user?.id?.toString()
-          if (lp) {
-            telegramId = lp
-          }
-        } catch {
-          telegramId = undefined
-        }
-
-        if (!telegramId && typeof window !== 'undefined') {
-          try {
-            const params = new URLSearchParams(window.location.search)
-            const raw = params.get('tgWebAppData')
-            if (raw) {
-              const data = new URLSearchParams(raw)
-              const userRaw = data.get('user')
-              if (userRaw) {
-                telegramId = (JSON.parse(userRaw) as { id?: number })?.id?.toString()
-              }
-            }
-          } catch {
-            telegramId = undefined
-          }
-        }
+        const telegramId = getTelegramIdFromUrl()
 
         if (!telegramId) {
           setError('Не удалось получить ID из Telegram. Откройте приложение через кнопку меню в боте.')
