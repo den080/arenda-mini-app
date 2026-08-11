@@ -95,9 +95,11 @@ export interface CashMeeting {
   id: string
   contract_id: string
   payment_id: string | null
-  day: number
+  meeting_date: string | null
   time_from: string
   time_to: string
+  day: number
   status: 'proposed' | 'confirmed' | 'cancelled'
+  proposer: 'landlord' | 'tenant'
   created_at: string
 }

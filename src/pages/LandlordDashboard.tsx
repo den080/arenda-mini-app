@@ -161,15 +161,20 @@ export function LandlordDashboard() {
   }
 
   async function updatePaymentMethod(contractId: string, method: 'card' | 'cash') {
+    const updateData: any = { payment_method: method }
+    if (method === 'cash') {
+      updateData.cash_slots = []
+    }
+    
     const { error } = await supabase
       .from('contracts')
-      .update({ payment_method: method, cash_slots: method === 'cash' ? [] : null })
+      .update(updateData)
       .eq('id', contractId)
     
     if (!error) {
       setObjects(prev => prev.map(o => 
         o.contract?.id === contractId 
-          ? { ...o, contract: { ...o.contract!, payment_method: method, cash_slots: method === 'cash' ? [] : null } }
+          ? { ...o, contract: { ...o.contract!, payment_method: method, cash_slots: method === 'cash' ? [] : o.contract!.cash_slots } }
           : o
       ))
     } else {
