@@ -1,30 +1,8 @@
-import { Component, useState } from 'react'
-import type { ReactNode } from 'react'
+import { useState } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useTelegramUser } from './hooks/useTelegramUser'
 import LandlordDashboard from './pages/LandlordDashboard'
 import TenantDashboard from './pages/TenantDashboard'
-
-class ErrorBoundary extends Component<{ children: ReactNode }, { error: string | null }> {
-  constructor(props: { children: ReactNode }) {
-    super(props)
-    this.state = { error: null }
-  }
-  static getDerivedStateFromError(e: unknown) {
-    return { error: String(e) }
-  }
-  render() {
-    if (this.state.error) {
-      return (
-        <div style={{ padding: 24, fontFamily: 'system-ui', color: '#c00' }}>
-          <h2>Ошибка интерфейса</h2>
-          <p>{this.state.error}</p>
-        </div>
-      )
-    }
-    return this.props.children
-  }
-}
 
 export default function App() {
   const { user, loading, error, loginWithId } = useTelegramUser()
@@ -41,4 +19,24 @@ export default function App() {
           value={value}
           onChange={(e) => setValue(e.target.value)}
           placeholder="Ваш Telegram ID (например: 28606967)"
-          style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize
+          style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box' }}
+        />
+        <button
+          onClick={() => value.trim() && loginWithId(value.trim())}
+          style={{ marginTop: 12, width: '100%', padding: 14, borderRadius: 10, border: 'none', background: '#2196f3', color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}
+        >
+          Войти
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <Routes>
+      <Route path="/" element={<Navigate to={user.role === 'landlord' ? '/landlord' : '/tenant'} replace />} />
+      <Route path="/landlord" element={<LandlordDashboard />} />
+      <Route path="/tenant" element={<TenantDashboard />} />
+      <Route path="*" element={<Navigate to={user.role === 'landlord' ? '/landlord' : '/tenant'} replace />} />
+    </Routes>
+  )
+}
