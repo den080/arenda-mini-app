@@ -31,6 +31,7 @@ export interface Contract {
   card_number: string | null
   reminder_days_before: number
   status: ContractStatus
+  cash_slots: CashSlot[] | null
 }
 
 export interface MeterType {
@@ -82,4 +83,21 @@ export interface NotificationLog {
   type: string
   related_id: string
   sent_at: string
+}
+
+export interface CashSlot {
+  day: number
+  time_from: string
+  time_to: string
+}
+
+export interface CashMeeting {
+  id: string
+  contract_id: string
+  payment_id: string | null
+  day: number
+  time_from: string
+  time_to: string
+  status: 'proposed' | 'confirmed' | 'cancelled'
+  created_at: string
 }
