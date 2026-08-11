@@ -1,355 +1,152 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import type { Object as PropertyObject, Contract, ObjectMeter, MeterType } from '../types/database'
-
-interface TenantData {
-  object: PropertyObject | null
-  contract: Contract | null
-  payment: {
-    base_amount: number
-    penalty_amount: number
-    total: number
-    due_date: string
-    confirmed: boolean
-  } | null
-  meters: (ObjectMeter & { meter_type: MeterType })[]
-}
-
-function getTelegramIdFromUrl(): string | undefined {
-  if (typeof window === 'undefined') return undefined
-  try {
-    const params = new URLSearchParams(window.location.search)
-    const rawInitData = params.get('tgWebAppData')
-    if (!rawInitData) return undefined
-    
-    const initDataParams = new URLSearchParams(rawInitData)
-    const userJson = initDataParams.get('user')
-    if (!userJson) return undefined
-    
-    const userData = JSON.parse(decodeURIComponent(userJson))
-    return userData?.id?.toString()
-  } catch {
-    return undefined
-  }
-}
+import { useTelegramUser } from '../hooks/useTelegramUser'
 
 export function TenantDashboard() {
-  const [data, setData] = useState<TenantData>({
-    object: null,
-    contract: null,
-    payment: null,
-    meters: [],
-  })
-  const [readings, setReadings] = useState<Record<string, string>>({})
-  const [submitting, setSubmitting] = useState(false)
-  const [submitResult, setSubmitResult] = useState<{ success: boolean; message: string } | null>(null)
+  const { user, loading: userLoading } = useTelegramUser()
+  const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [vals, setVals] = useState<Record<string, string>>({})
+  const [msg, setMsg] = useState<string | null>(null)
 
   useEffect(() => {
-    async function fetchData() {
+    if (!user) return
+    async function load() {
       try {
-        const telegramId = getTelegramIdFromUrl()
-
-        if (!telegramId) {
-          setError('Не удалось получить ID из Telegram. Откройте приложение через кнопку меню в боте.')
-          setLoading(false)
-          return
-        }
-
-        // Get user
-        const { data: userData, error: userError } = await supabase
-          .from('users')
-          .select('id')
-          .eq('telegram_id', telegramId)
-          .single()
-
-        if (userError || !userData) {
-          setError('Пользователь не найден. Обратитесь к арендодателю.')
-          setLoading(false)
-          return
-        }
-
-        // Get active contract
         const { data: contract } = await supabase
-          .from('contracts')
-          .select('*')
-          .eq('tenant_id', userData.id)
-          .eq('status', 'active')
-          .single()
+          .from('contracts').select('*')
+          .eq('tenant_id', user!.id).eq('status', 'active').maybeSingle()
+        if (!contract) { setError('Договор не найден. Обратитесь к арендодателю.'); setLoading(false); return }
 
-        if (!contract) {
-          setLoading(false)
-          return
-        }
+        const { data: obj } = await supabase.from('objects').select('*').eq('id', contract.object_id).maybeSingle()
+        const { data: landlord } = await supabase.from('users').select('*').eq('id', obj?.landlord_id).maybeSingle()
+        const { data: payments } = await supabase.from('payments').select('*').eq('contract_id', contract.id).order('period', { ascending: false })
+        const { data: meters } = await supabase.from('object_meters').select('*').eq('object_id', contract.object_id).eq('is_active', true)
+        const { data: meterTypes } = await supabase.from('meter_types').select('*')
 
-        // Get object
-        const { data: object } = await supabase
-          .from('objects')
-          .select('*')
-          .eq('id', contract.object_id)
-          .single()
-
-        // Get current period payment
-        const currentPeriod = new Date().toISOString().slice(0, 7)
-        const { data: payment } = await supabase
-          .from('payments')
-          .select('*')
-          .eq('contract_id', contract.id)
-          .eq('period', currentPeriod)
-          .single()
-
-        // Get active meters
-        const { data: metersData } = await supabase
-          .from('object_meters')
-          .select('*, meter_type:meter_types(*)')
-          .eq('object_id', object?.id)
-          .eq('is_active', true)
-
-        setData({
-          object: object || null,
-          contract,
-          payment: payment ? {
-            base_amount: payment.base_amount,
-            penalty_amount: payment.penalty_amount || 0,
-            total: payment.base_amount + (payment.penalty_amount || 0),
-            due_date: payment.due_date,
-            confirmed: payment.confirmed_by_landlord,
-          } : {
-            base_amount: contract.rent_amount,
-            penalty_amount: 0,
-            total: contract.rent_amount,
-            due_date: new Date(new Date().getFullYear(), new Date().getMonth(), contract.payment_day).toISOString(),
-            confirmed: false,
-          },
-          meters: metersData || [],
-        })
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Unknown error')
+        setData({ contract, obj, landlord, payments: payments || [], meters: meters || [], meterTypes: meterTypes || [] })
+      } catch (e) {
+        setError('Ошибка загрузки: ' + String(e))
       } finally {
         setLoading(false)
       }
     }
+    load()
+  }, [user])
 
-    fetchData()
-  }, [])
-
-  const handleReadingChange = (meterId: string, value: string) => {
-    setReadings(prev => ({ ...prev, [meterId]: value }))
+  async function claimPaid() {
+    if (!data || !data.landlord) return
+    const payment = data.payments[0]
+    if (!payment) return
+    const { error: e } = await supabase.from('notifications_log').insert({
+      user_id: data.landlord.id,
+      type: 'payment_claimed',
+      related_id: payment.id,
+      sent_at: new Date().toISOString(),
+    })
+    setMsg(e ? 'Ошибка: ' + e.message : '✅ Арендодатель уведомлён об оплате')
   }
 
-  const handleSubmitReadings = async () => {
-    setSubmitting(true)
-    setSubmitResult(null)
-
-    try {
-      const period = new Date().toISOString().slice(0, 7)
-      const promises = Object.entries(readings).map(([meterId, value]) =>
-        supabase.rpc('submit_meter_reading', {
-          p_object_meter_id: meterId,
-          p_contract_id: data.contract?.id,
-          p_value: parseFloat(value),
-          p_period: period,
-        })
-      )
-
-      await Promise.all(promises)
-      setSubmitResult({ success: true, message: 'Показания успешно отправлены' })
-      setReadings({})
-    } catch (err) {
-      setSubmitResult({ success: false, message: err instanceof Error ? err.message : 'Ошибка отправки' })
-    } finally {
-      setSubmitting(false)
+  async function submitMeters() {
+    if (!data) return
+    const period = new Date().toISOString().slice(0, 7) + '-01'
+    const rows: any[] = []
+    for (const m of data.meters) {
+      const v = vals[m.id]
+      if (v) rows.push({ object_meter_id: m.id, contract_id: data.contract.id, value: Number(v), period, submitted_at: new Date().toISOString() })
     }
+    if (rows.length === 0) { setMsg('Введите показания счётчиков'); return }
+    const { error: e } = await supabase.from('meter_readings').insert(rows)
+    setMsg(e ? 'Ошибка: ' + e.message : '✅ Показания переданы')
+    setVals({})
   }
 
-  if (loading) {
-    return <div style={styles.container}>Загрузка...</div>
-  }
+  if (userLoading || loading) return <div style={s.container}>Загрузка...</div>
+  if (error) return <div style={s.container}>{error}</div>
+  if (!data) return <div style={s.container}>Нет данных</div>
 
-  if (error) {
-    return <div style={styles.container}>{error}</div>
-  }
-
-  if (!data.object || !data.contract) {
-    return <div style={styles.container}>Нет активного договора</div>
-  }
+  const { contract, obj, landlord, payments, meters, meterTypes } = data
+  const payment = payments[0]
+  const today = new Date()
+  const isOverdue = payment && !payment.confirmed_by_landlord && today > new Date(payment.due_date)
+  const total = payment ? Number(payment.base_amount) + Number(payment.penalty_amount || 0) : Number(contract.rent_amount)
+  const status = payment
+    ? payment.confirmed_by_landlord ? { icon: '🟢', text: 'Оплачено' }
+      : isOverdue ? { icon: '🔴', text: 'Просрочка' }
+      : { icon: '🟡', text: 'Ожидает оплаты' }
+    : { icon: '⚪', text: 'Нет счёта' }
+  const monthLabel = payment ? new Date(payment.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : ''
 
   return (
-    <div style={styles.container}>
-      <h1 style={styles.title}>Личный кабинет</h1>
-
-      <div style={styles.card}>
-        <h2 style={styles.cardTitle}>Адрес объекта</h2>
-        <p style={styles.text}>{data.object.address}</p>
+    <div style={s.container}>
+      <h1 style={s.title}>💧 Моя аренда</h1>
+      <div style={s.card}>
+        <div style={s.address}>{obj?.address}</div>
+        <div style={s.small}>Арендодатель: {landlord?.full_name}{landlord?.phone ? ', ' + landlord.phone : ''}</div>
       </div>
 
-      <div style={styles.card}>
-        <h2 style={styles.cardTitle}>Сумма к оплате</h2>
-        <div style={styles.amount}>{data.payment?.total.toFixed(2)} ₽</div>
-        {data.payment && data.payment.penalty_amount > 0 && (
-          <div style={styles.penalty}>в т.ч. пеня: {data.payment.penalty_amount.toFixed(2)} ₽</div>
-        )}
-        <div style={styles.dueDate}>
-          Срок оплаты: {data.payment ? new Date(data.payment.due_date).toLocaleDateString('ru-RU') : ''}
-        </div>
-        {data.payment?.confirmed && (
-          <div style={styles.confirmed}>✓ Подтверждено арендодателем</div>
+      <div style={s.card}>
+        <div style={s.h2}>🧾 Счёт за {monthLabel}</div>
+        <div style={s.row}><span>Аренда</span><b>{Number(payment?.base_amount ?? contract.rent_amount).toFixed(2)} ₽</b></div>
+        <div style={s.row}><span>Штраф</span><b>{Number(payment?.penalty_amount || 0).toFixed(2)} ₽</b></div>
+        <div style={s.row}><span>Итого</span><b style={s.total}>{total.toFixed(2)} ₽</b></div>
+        {payment && <div style={s.small}>Оплатить до: {new Date(payment.due_date).toLocaleDateString('ru-RU')}</div>}
+        <div style={s.statusRow}><span>{status.icon}</span><span>{status.text}</span></div>
+        {contract.card_number && <div style={s.small}>💳 Оплата на карту: {contract.card_number}</div>}
+        {!payment?.confirmed_by_landlord && (
+          <button onClick={claimPaid} style={s.button}>✅ Я оплатил</button>
         )}
       </div>
 
-      <div style={styles.card}>
-        <h2 style={styles.cardTitle}>Реквизиты оплаты</h2>
-        {data.contract.payment_method === 'card' || data.contract.payment_method === 'both' ? (
-          <>
-            <div style={styles.label}>Банковская карта:</div>
-            <div style={styles.cardNumber}>{data.contract.card_number || 'Не указана'}</div>
-          </>
-        ) : null}
-        {data.contract.payment_method === 'cash' || data.contract.payment_method === 'both' ? (
-          <div style={styles.cashNote}>Оплата наличными</div>
-        ) : null}
-      </div>
-
-      {data.meters.length > 0 && (
-        <div style={styles.card}>
-          <h2 style={styles.cardTitle}>Показания счётчиков</h2>
-          {data.meters.map((meter) => (
-            <div key={meter.id} style={styles.meterRow}>
-              <label style={styles.meterLabel}>
-                {meter.meter_type.label} ({meter.meter_type.unit}):
-              </label>
+      {meters.length > 0 && (
+        <div style={s.card}>
+          <div style={s.h2}>💦 Передать показания</div>
+          {meters.map((m: any) => {
+            const t = meterTypes.find((x: any) => x.id === m.meter_type_id)
+            return (
               <input
-                type="number"
-                value={readings[meter.id] || ''}
-                onChange={(e) => handleReadingChange(meter.id, e.target.value)}
-                placeholder="Введите показания"
-                style={styles.input}
+                key={m.id}
+                value={vals[m.id] || ''}
+                onChange={(e) => setVals({ ...vals, [m.id]: e.target.value })}
+                placeholder={(t?.label || 'Счётчик') + ', ' + (t?.unit || 'м³')}
+                style={s.input}
+                inputMode="decimal"
               />
-            </div>
-          ))}
-          <button
-            onClick={handleSubmitReadings}
-            disabled={submitting || Object.keys(readings).length === 0}
-            style={{
-              ...styles.button,
-              opacity: submitting || Object.keys(readings).length === 0 ? 0.5 : 1,
-            }}
-          >
-            {submitting ? 'Отправка...' : 'Отправить показания'}
-          </button>
-          {submitResult && (
-            <div style={{
-              ...styles.result,
-              color: submitResult.success ? '#4CAF50' : '#f44336',
-            }}>
-              {submitResult.message}
-            </div>
-          )}
+            )
+          })}
+          <button onClick={submitMeters} style={s.button}>📤 Передать показания</button>
         </div>
       )}
+
+      {msg && <div style={s.msg}>{msg}</div>}
+
+      <div style={s.card}>
+        <div style={s.h2}>📜 История платежей</div>
+        {payments.slice(0, 5).map((p: any) => (
+          <div key={p.id} style={s.row}>
+            <span>{new Date(p.period).toLocaleDateString('ru-RU', { month: 'short', year: 'numeric' })} {p.confirmed_by_landlord ? '🟢' : '🟡'}</span>
+            <b>{(Number(p.base_amount) + Number(p.penalty_amount || 0)).toFixed(2)} ₽</b>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
 
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    fontFamily: 'system-ui, -apple-system, sans-serif',
-    maxWidth: '600px',
-    margin: '0 auto',
-    padding: '16px',
-    backgroundColor: '#f5f5f5',
-    minHeight: '100vh',
-  },
-  title: {
-    fontSize: '24px',
-    fontWeight: 'bold',
-    marginBottom: '16px',
-  },
-  card: {
-    backgroundColor: '#fff',
-    borderRadius: '12px',
-    padding: '16px',
-    marginBottom: '12px',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-  },
-  cardTitle: {
-    fontSize: '16px',
-    fontWeight: '600',
-    marginBottom: '8px',
-    color: '#333',
-  },
-  text: {
-    fontSize: '14px',
-    color: '#666',
-  },
-  amount: {
-    fontSize: '28px',
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: '4px',
-  },
-  penalty: {
-    fontSize: '14px',
-    color: '#f44336',
-    marginBottom: '8px',
-  },
-  dueDate: {
-    fontSize: '14px',
-    color: '#666',
-  },
-  confirmed: {
-    fontSize: '14px',
-    color: '#4CAF50',
-    marginTop: '8px',
-  },
-  label: {
-    fontSize: '14px',
-    color: '#666',
-    marginBottom: '4px',
-  },
-  cardNumber: {
-    fontSize: '18px',
-    fontWeight: '600',
-    fontFamily: 'monospace',
-  },
-  cashNote: {
-    fontSize: '14px',
-    color: '#666',
-  },
-  meterRow: {
-    marginBottom: '12px',
-  },
-  meterLabel: {
-    display: 'block',
-    fontSize: '14px',
-    color: '#666',
-    marginBottom: '4px',
-  },
-  input: {
-    width: '100%',
-    padding: '10px',
-    fontSize: '16px',
-    border: '1px solid #ddd',
-    borderRadius: '8px',
-    boxSizing: 'border-box',
-  },
-  button: {
-    width: '100%',
-    padding: '12px',
-    fontSize: '16px',
-    fontWeight: '600',
-    color: '#fff',
-    backgroundColor: '#007AFF',
-    border: 'none',
-    borderRadius: '8px',
-    cursor: 'pointer',
-  },
-  result: {
-    marginTop: '12px',
-    fontSize: '14px',
-    textAlign: 'center',
-  },
+const s: Record<string, React.CSSProperties> = {
+  container: { fontFamily: 'system-ui', maxWidth: 600, margin: '0 auto', padding: 16, backgroundColor: '#f5f5f5', minHeight: '100vh' },
+  title: { fontSize: 24, fontWeight: 'bold', marginBottom: 16 },
+  card: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' },
+  address: { fontSize: 16, fontWeight: 600, marginBottom: 8 },
+  small: { fontSize: 13, color: '#666', marginTop: 6 },
+  h2: { fontSize: 17, fontWeight: 700, marginBottom: 10 },
+  row: { display: 'flex', justifyContent: 'space-between', fontSize: 14, marginBottom: 6 },
+  total: { fontSize: 17 },
+  statusRow: { display: 'flex', gap: 8, alignItems: 'center', margin: '10px 0' },
+  button: { marginTop: 10, width: '100%', padding: 12, borderRadius: 10, border: 'none', background: '#2196f3', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer' },
+  input: { width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 15, marginBottom: 8, boxSizing: 'border-box' },
+  msg: { padding: 12, borderRadius: 10, backgroundColor: '#e8f5e9', color: '#2e7d32', marginBottom: 12, fontSize: 14 },
 }
 
 export default TenantDashboard
