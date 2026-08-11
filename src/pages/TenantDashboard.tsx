@@ -31,19 +31,50 @@ export function TenantDashboard() {
   useEffect(() => {
     async function fetchData() {
       try {
-        // Get tenant ID from Telegram
-        const launchParams = await import('@telegram-apps/sdk')
-        const telegramId = (launchParams.retrieveLaunchParams().initData as { user: { id: number } }).user.id
+        // Get tenant ID from Telegram with safe access
+        let telegramId: string | undefined
+
+        try {
+          const launchParams = await import('@telegram-apps/sdk')
+          const lp = launchParams.retrieveLaunchParams()
+          telegramId = lp?.initData?.user?.id?.toString()
+        } catch {
+          telegramId = undefined
+        }
+
+        if (!telegramId && typeof window !== 'undefined') {
+          try {
+            const params = new URLSearchParams(window.location.search)
+            const raw = params.get('tgWebAppData')
+            if (raw) {
+              const data = new URLSearchParams(raw)
+              const userRaw = data.get('user')
+              if (userRaw) {
+                telegramId = (JSON.parse(userRaw) as { id?: number })?.id?.toString()
+              }
+            }
+          } catch {
+            telegramId = undefined
+          }
+        }
+
+        if (!telegramId) {
+          setError('Не удалось получить ID из Telegram. Откройте приложение через кнопку меню в боте.')
+          setLoading(false)
+          return
+        }
 
         // Get user
-        const { data: userData } = await supabase
+        const { data: userData, error: userError } = await supabase
           .from('users')
           .select('id')
           .eq('telegram_id', telegramId)
           .single()
 
-        if (!userData) {
-          throw new Error('Tenant not found')
+        if (userError || !userData) {
+          setError('Пользователь не найден. Обратитесь к арендодателю.')
+          setLoading(false)
+          return
         }
 
         // Get active contract
