@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { retrieveLaunchParams } from '@telegram-apps/sdk'
 import { supabase } from '../lib/supabase'
 import type { User } from '../types/database'
 
@@ -13,14 +12,8 @@ export function useTelegramUser() {
       try {
         let telegramId: string | undefined
 
-        try {
-          const launchParams = retrieveLaunchParams()
-          telegramId = launchParams?.initData?.user?.id?.toString()
-        } catch {
-          telegramId = undefined
-        }
-
-        if (!telegramId && typeof window !== 'undefined') {
+        // Try to get telegram ID from URL parameters (tgWebAppData)
+        if (typeof window !== 'undefined') {
           try {
             const params = new URLSearchParams(window.location.search)
             const raw = params.get('tgWebAppData')
@@ -28,8 +21,21 @@ export function useTelegramUser() {
               const data = new URLSearchParams(raw)
               const userRaw = data.get('user')
               if (userRaw) {
-                telegramId = (JSON.parse(userRaw) as { id?: number })?.id?.toString()
+                const parsedUser = JSON.parse(userRaw) as { id?: number }
+                telegramId = parsedUser?.id?.toString()
               }
+            }
+          } catch {
+            telegramId = undefined
+          }
+        }
+
+        // Fallback: try window.Telegram.WebApp if available
+        if (!telegramId && typeof window !== 'undefined') {
+          try {
+            const tg = (window as unknown as { Telegram?: { WebApp?: { initDataUnsafe?: { user?: { id?: number } } } } }).Telegram?.WebApp
+            if (tg?.initDataUnsafe?.user?.id) {
+              telegramId = tg.initDataUnsafe.user.id.toString()
             }
           } catch {
             telegramId = undefined
