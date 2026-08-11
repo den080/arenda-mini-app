@@ -8,18 +8,36 @@ function extractTelegramId(): { id?: string; debug: string } {
   try {
     const w = window as any
 
-    // ===== СПОСОБ 1: через глобальный объект Telegram (самый надёжный) =====
     if (typeof w.Telegram !== 'undefined') {
       debugParts.push('tg: да')
 
-      // initDataUnsafe — готовый объект с данными
-      const unsafeUser = w.Telegram?.WebApp?.initDataUnsafe?.user
-      if (unsafeUser && unsafeUser.id) {
-        return { id: String(unsafeUser.id), debug: debugParts.join(' | ') + ' (способ 1: initDataUnsafe)' }
+      const webApp = w.Telegram?.WebApp
+      if (!webApp) {
+        debugParts.push('WebApp: нет')
+        return { id: undefined, debug: debugParts.join(' | ') }
       }
 
-      // initData — строка, которую нужно распарсить
-      const initDataStr = w.Telegram?.WebApp?.initData
+      debugParts.push('WebApp: да')
+
+      // Проверяем initDataUnsafe
+      const unsafeData = webApp.initDataUnsafe
+      debugParts.push('initDataUnsafe: ' + (unsafeData ? 'есть' : 'нет'))
+
+      if (unsafeData) {
+        debugParts.push('initDataUnsafe keys: ' + Object.keys(unsafeData).join(','))
+
+        const unsafeUser = unsafeData.user
+        if (unsafeUser && unsafeUser.id) {
+          return { id: String(unsafeUser.id), debug: debugParts.join(' | ') + ' (способ 1: initDataUnsafe.user)' }
+        } else {
+          debugParts.push('user в initDataUnsafe: ' + (unsafeUser ? 'есть, но без id' : 'нет'))
+        }
+      }
+
+      // Проверяем initData
+      const initDataStr = webApp.initData
+      debugParts.push('initData: ' + (initDataStr ? initDataStr.slice(0, 50) : '(пусто)'))
+
       if (initDataStr) {
         try {
           const inner = new URLSearchParams(initDataStr)
@@ -31,14 +49,14 @@ function extractTelegramId(): { id?: string; debug: string } {
             }
           }
         } catch {
-          // продолжаем искать
+          // продолжаем
         }
       }
     } else {
       debugParts.push('tg: нет')
     }
 
-    // ===== СПОСОБ 2: tgWebAppData в URL-строке (search) =====
+    // Способ 2: search
     const search = window.location.search || ''
     debugParts.push('search: ' + (search ? search.slice(0, 80) : '(пусто)'))
 
@@ -61,7 +79,7 @@ function extractTelegramId(): { id?: string; debug: string } {
       }
     }
 
-    // ===== СПОСОБ 3: tgWebAppData в URL-хэше (после #) =====
+    // Способ 3: hash
     const hash = window.location.hash || ''
     debugParts.push('hash: ' + (hash ? hash.slice(0, 80) : '(пусто)'))
 
@@ -109,28 +127,4 @@ export function useTelegramUser() {
       }
 
       try {
-        const { data, error: dbError } = await supabase
-          .from('users')
-          .select('*')
-          .eq('telegram_id', telegramId)
-          .maybeSingle()
-
-        if (dbError) {
-          setError('Ошибка подключения к базе: ' + dbError.message)
-        } else if (!data) {
-          setError('Пользователь не найден в базе (telegram_id=' + telegramId + ').')
-        } else {
-          setUser(data as User)
-        }
-      } catch (e) {
-        setError('Ошибка подключения к базе: ' + String(e))
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchUser()
-  }, [])
-
-  return { user, loading, error }
-}
+        const {
