@@ -38,7 +38,7 @@ export function LandlordDashboard() {
             .select('*')
             .eq('object_id', obj.id)
             .eq('status', 'active')
-            .single()
+            .maybeSingle()
 
           if (!contract) {
             objectsWithStatus.push({
@@ -49,13 +49,13 @@ export function LandlordDashboard() {
             continue
           }
 
-          const currentPeriod = new Date().toISOString().slice(0, 7)
           const { data: payment } = await supabase
             .from('payments')
             .select('*')
             .eq('contract_id', contract.id)
-            .eq('period', currentPeriod)
-            .single()
+            .order('period', { ascending: false })
+            .limit(1)
+            .maybeSingle()
 
           const today = new Date()
           const dueDate = payment ? new Date(payment.due_date) : new Date(contract.end_date)
