@@ -35,9 +35,10 @@ export function TenantDashboard() {
         let telegramId: string | undefined
 
         try {
-          const launchParams = await import('@telegram-apps/sdk')
-          const lp = launchParams.retrieveLaunchParams()
-          telegramId = lp?.initData?.user?.id?.toString()
+          const lp = window.Telegram?.WebApp?.initDataUnsafe?.user?.id?.toString()
+          if (lp) {
+            telegramId = lp
+          }
         } catch {
           telegramId = undefined
         }
