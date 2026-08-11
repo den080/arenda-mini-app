@@ -1,15 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { retrieveLaunchParams } from '@telegram-apps/sdk'
 import { supabase } from '../lib/supabase'
 import type { User } from '../types/database'
 
-interface UseTelegramUserResult {
-  user: User | null
-  loading: boolean
-  error: string | null
-}
-
-export function useTelegramUser(): UseTelegramUserResult {
+export function useTelegramUser() {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -17,22 +11,52 @@ export function useTelegramUser(): UseTelegramUserResult {
   useEffect(() => {
     async function fetchUser() {
       try {
-        const launchParams = retrieveLaunchParams()
-        const telegramId = (launchParams.initData as { user: { id: number } }).user.id
+        let telegramId: string | undefined
 
-        const { data, error: fetchError } = await supabase
+        try {
+          const launchParams = retrieveLaunchParams()
+          telegramId = launchParams?.initData?.user?.id?.toString()
+        } catch {
+          telegramId = undefined
+        }
+
+        if (!telegramId && typeof window !== 'undefined') {
+          try {
+            const params = new URLSearchParams(window.location.search)
+            const raw = params.get('tgWebAppData')
+            if (raw) {
+              const data = new URLSearchParams(raw)
+              const userRaw = data.get('user')
+              if (userRaw) {
+                telegramId = (JSON.parse(userRaw) as { id?: number })?.id?.toString()
+              }
+            }
+          } catch {
+            telegramId = undefined
+          }
+        }
+
+        if (!telegramId) {
+          setError('Не удалось получить ID из Telegram. Откройте приложение через кнопку меню в боте.')
+          setLoading(false)
+          return
+        }
+
+        const { data, error: dbError } = await supabase
           .from('users')
           .select('*')
           .eq('telegram_id', telegramId)
-          .single()
+          .maybeSingle()
 
-        if (fetchError) {
-          throw fetchError
+        if (dbError || !data) {
+          setError('Пользователь не найден. Обратитесь к арендодателю.')
+          setLoading(false)
+          return
         }
 
-        setUser(data as User)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Unknown error')
+        setUser(data)
+      } catch {
+        setError('Ошибка подключения')
       } finally {
         setLoading(false)
       }
