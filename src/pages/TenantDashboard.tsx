@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useTelegramUser } from '../hooks/useTelegramUser'
 
@@ -30,51 +30,57 @@ export function TenantDashboard() {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [cashMeetings, setCashMeetings] = useState<CashMeeting[]>([])
   const [selectedSlotIndex, setSelectedSlotIndex] = useState<number>(0)
+  const valsRef = useRef(vals)
+  valsRef.current = vals
+
+  async function load() {
+    if (!user) return
+    try {
+      const { data: contract } = await supabase
+        .from('contracts').select('*')
+        .eq('tenant_id', user!.id).eq('status', 'active').maybeSingle()
+      if (!contract) { setError('Договор не найден. Обратитесь к арендодателю.'); setLoading(false); return }
+
+      const { data: obj } = await supabase.from('objects').select('*').eq('id', contract.object_id).maybeSingle()
+      const { data: landlord } = await supabase.from('users').select('*').eq('id', obj?.landlord_id).maybeSingle()
+      const { data: payments } = await supabase.from('payments').select('*').eq('contract_id', contract.id).order('period', { ascending: false })
+      const { data: meters } = await supabase.from('object_meters').select('*').eq('object_id', contract.object_id).eq('is_active', true)
+      const { data: meterTypes } = await supabase.from('meter_types').select('*')
+
+      const { data: meetings } = await supabase
+        .from('cash_meetings')
+        .select('*')
+        .eq('contract_id', contract.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      if (meetings && meetings.length > 0) {
+        setCashMeetings(meetings)
+      } else {
+        setCashMeetings([])
+      }
+
+      const { data: notifData } = await supabase
+        .from('notifications_log')
+        .select('*')
+        .eq('user_id', user!.id)
+        .order('sent_at', { ascending: false })
+        .limit(5)
+      setNotifications(notifData || [])
+
+      setData({ contract, obj, landlord, payments: payments || [], meters: meters || [], meterTypes: meterTypes || [] })
+    } catch (e) {
+      setError('Ошибка загрузки: ' + String(e))
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    if (!user) return
-    async function load() {
-      try {
-        const { data: contract } = await supabase
-          .from('contracts').select('*')
-          .eq('tenant_id', user!.id).eq('status', 'active').maybeSingle()
-        if (!contract) { setError('Договор не найден. Обратитесь к арендодателю.'); setLoading(false); return }
-
-        const { data: obj } = await supabase.from('objects').select('*').eq('id', contract.object_id).maybeSingle()
-        const { data: landlord } = await supabase.from('users').select('*').eq('id', obj?.landlord_id).maybeSingle()
-        const { data: payments } = await supabase.from('payments').select('*').eq('contract_id', contract.id).order('period', { ascending: false })
-        const { data: meters } = await supabase.from('object_meters').select('*').eq('object_id', contract.object_id).eq('is_active', true)
-        const { data: meterTypes } = await supabase.from('meter_types').select('*')
-
-        // Загружаем заявки на наличные
-        const { data: meetings } = await supabase
-          .from('cash_meetings')
-          .select('*')
-          .eq('contract_id', contract.id)
-          .order('created_at', { ascending: false })
-          .limit(1)
-        
-        if (meetings && meetings.length > 0) {
-          setCashMeetings(meetings)
-        }
-
-        // Загружаем уведомления
-        const { data: notifData } = await supabase
-          .from('notifications_log')
-          .select('*')
-          .eq('user_id', user!.id)
-          .order('sent_at', { ascending: false })
-          .limit(5)
-        setNotifications(notifData || [])
-
-        setData({ contract, obj, landlord, payments: payments || [], meters: meters || [], meterTypes: meterTypes || [] })
-      } catch (e) {
-        setError('Ошибка загрузки: ' + String(e))
-      } finally {
-        setLoading(false)
-      }
-    }
     load()
+    const interval = setInterval(() => load(), 30000)
+    window.addEventListener('rentflow-refresh', () => load())
+    return () => clearInterval(interval)
   }, [user])
 
   async function claimPaid() {
@@ -88,7 +94,6 @@ export function TenantDashboard() {
       sent_at: new Date().toISOString(),
     })
     setMsg(e ? 'Ошибка: ' + e.message : '✅ Арендодатель уведомлён об оплате')
-    // Обновляем уведомления
     const { data: notifData } = await supabase
       .from('notifications_log')
       .select('*')
@@ -110,7 +115,6 @@ export function TenantDashboard() {
     const { error: e } = await supabase.from('meter_readings').insert(rows)
     setMsg(e ? 'Ошибка: ' + e.message : '✅ Показания переданы')
     setVals({})
-    // Добавляем уведомление
     if (!e) {
       await supabase.from('notifications_log').insert({
         user_id: user!.id,
@@ -132,10 +136,10 @@ export function TenantDashboard() {
     if (!data || !data.contract) return
     const slots = data.contract.cash_slots || []
     if (slots.length === 0) { setMsg('Нет доступных слотов времени'); return }
-    
+
     const slot = slots[selectedSlotIndex]
     if (!slot) return
-    
+
     const payment = data.payments[0]
     const meetingData = {
       contract_id: data.contract.id,
@@ -145,22 +149,20 @@ export function TenantDashboard() {
       time_to: slot.time_to,
       status: 'proposed' as const
     }
-    
+
     const { error: e } = await supabase.from('cash_meetings').insert(meetingData)
     if (e) {
       setMsg('Ошибка: ' + e.message)
       return
     }
-    
-    // Добавляем уведомление арендодателю
+
     await supabase.from('notifications_log').insert({
       user_id: data.landlord.id,
       type: 'cash_proposed',
       related_id: data.contract.id,
       sent_at: new Date().toISOString()
     })
-    
-    // Обновляем локальный статус
+
     const { data: newMeeting } = await supabase
       .from('cash_meetings')
       .select('*')
@@ -168,11 +170,11 @@ export function TenantDashboard() {
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
-    
+
     if (newMeeting) {
       setCashMeetings([newMeeting])
     }
-    
+
     setMsg('✅ Заявка отправлена арендодателю')
   }
 
@@ -230,7 +232,7 @@ export function TenantDashboard() {
         <div style={s.row}><span>Итого</span><b style={s.total}>{total.toFixed(2)} ₽</b></div>
         {payment && <div style={s.small}>Оплатить до: {new Date(payment.due_date).toLocaleDateString('ru-RU')}</div>}
         <div style={s.statusRow}><span>{status.icon}</span><span>{status.text}</span></div>
-        
+
         {contract.payment_method === 'card' ? (
           <>
             {contract.card_number && <div style={s.small}>💳 Оплата на карту: {contract.card_number}</div>}
@@ -245,8 +247,8 @@ export function TenantDashboard() {
               <div style={s.small}>Арендодатель ещё не указал слоты времени</div>
             ) : (
               <>
-                <select 
-                  value={selectedSlotIndex} 
+                <select
+                  value={selectedSlotIndex}
                   onChange={(e) => setSelectedSlotIndex(Number(e.target.value))}
                   style={s.select}
                 >
@@ -300,7 +302,6 @@ export function TenantDashboard() {
         ))}
       </div>
 
-      {/* Уведомления */}
       <div style={s.card}>
         <div style={s.h2}>🔔 Уведомления</div>
         {notifications.length === 0 ? (
@@ -318,7 +319,7 @@ export function TenantDashboard() {
 }
 
 const s: Record<string, React.CSSProperties> = {
-  container: { fontFamily: 'system-ui', maxWidth: 600, margin: '0 auto', padding: 16, backgroundColor: '#f5f5f5', minHeight: '100vh' },
+  container: { fontFamily: 'system-ui', maxWidth: 600, margin: '0 auto', padding: 16, backgroundColor: '#f5f5f5', minHeight: 'auto' },
   title: { fontSize: 24, fontWeight: 'bold', marginBottom: 16 },
   card: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' },
   address: { fontSize: 16, fontWeight: 600, marginBottom: 8 },
