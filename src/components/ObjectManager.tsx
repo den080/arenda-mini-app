@@ -38,6 +38,16 @@ function DetailsEditor({ list, onChange }: { list: PayDetail[]; onChange: (v: Pa
   )
 }
 
+function ReadingsModeSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <select style={s.input} value={value} onChange={(e) => onChange(e.target.value)}>
+      <option value="manual">Арендатор подаёт показания вручную</option>
+      <option value="auto">Показания передаются автоматически</option>
+      <option value="self">Арендатор платит полную квитанцию сам (показания не нужны)</option>
+    </select>
+  )
+}
+
 export function ObjectManager() {
   const { user } = useTelegramUser()
   const [objects, setObjects] = useState<any[]>([])
@@ -55,6 +65,7 @@ export function ObjectManager() {
   const [paymentDay, setPaymentDay] = useState('')
   const [endDate, setEndDate] = useState('')
   const [meterDay, setMeterDay] = useState('')
+  const [readingsMode, setReadingsMode] = useState('manual')
   const [rent, setRent] = useState('')
   const [method, setMethod] = useState('card')
   const [penPay, setPenPay] = useState('')
@@ -73,6 +84,7 @@ export function ObjectManager() {
   const [eRent, setERent] = useState('')
   const [ePaymentDay, setEPaymentDay] = useState('')
   const [eMeterDay, setEMeterDay] = useState('')
+  const [eReadingsMode, setEReadingsMode] = useState('manual')
   const [eEndDate, setEEndDate] = useState('')
   const [eMethod, setEMethod] = useState('card')
   const [ePenPay, setEPenPay] = useState('')
@@ -125,6 +137,7 @@ export function ObjectManager() {
         rent_amount: Number(rent) || 0,
         payment_day: Number(paymentDay) || 1,
         meter_deadline_day: Number(meterDay) || 5,
+        readings_mode: readingsMode,
         start_date: startISO,
         end_date: endDate || null,
         payment_method: method,
@@ -138,8 +151,6 @@ export function ObjectManager() {
         { contract_id: contract.id, violation_type: 'payment_overdue', rate: Number(penPay) || 500, rate_unit: 'per_day_rub', starts_after_days: 0 },
         { contract_id: contract.id, violation_type: 'readings_overdue', rate: Number(penRead) || 100, rate_unit: 'per_day_rub', starts_after_days: 0 },
       ])
-      // Первый платёж: отсчёт только с дня добавления — если день платежа в этом месяце уже прошёл,
-      // срок ставим на сегодня, чтобы старые даты не считались долгом
       const now = new Date()
       const payDay = Number(paymentDay) || 1
       let due = new Date(now.getFullYear(), now.getMonth(), payDay)
@@ -148,11 +159,11 @@ export function ObjectManager() {
       const period = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10)
       await supabase.from('payments').insert({
         contract_id: contract.id, period, due_date: due.toISOString().slice(0, 10),
-        base_amount: Number(rent) || 0, penalty_amount: 0,
+        base_amount: Number(rent) || 0, penalty_amount: 0, utilities_amount: 0,
       })
       setMsg('✅ Объект, договор и первый платёж сохранены')
       setShowForm(false)
-      setAddress(''); setNotes(''); setName(''); setPhone(''); setTgId(''); setRent(''); setStartDate(''); setDetails([])
+      setAddress(''); setNotes(''); setName(''); setPhone(''); setTgId(''); setRent(''); setStartDate(''); setDetails([]); setReadingsMode('manual')
       load()
     } finally {
       setSaving(false)
@@ -170,6 +181,7 @@ export function ObjectManager() {
       setERent(String(contract.rent_amount ?? ''))
       setEPaymentDay(String(contract.payment_day ?? ''))
       setEMeterDay(String(contract.meter_deadline_day ?? ''))
+      setEReadingsMode(contract.readings_mode || 'manual')
       setEEndDate(contract.end_date || '')
       setEMethod(contract.payment_method || 'card')
       setERemind(String(contract.reminder_days_before ?? ''))
@@ -201,6 +213,7 @@ export function ObjectManager() {
         rent_amount: Number(eRent) || 0,
         payment_day: Number(ePaymentDay) || 1,
         meter_deadline_day: Number(eMeterDay) || 5,
+        readings_mode: eReadingsMode,
         start_date: eStartDate || null,
         end_date: eEndDate || null,
         payment_method: eMethod,
@@ -281,8 +294,14 @@ export function ObjectManager() {
           <input style={s.input} value={rent} onChange={(e) => setRent(e.target.value)} placeholder="85000" inputMode="numeric" />
           <div style={s.small}>День платежа (число месяца)</div>
           <input style={s.input} value={paymentDay} onChange={(e) => setPaymentDay(e.target.value)} placeholder="1" inputMode="numeric" />
-          <div style={s.small}>Крайний день подачи показаний (число месяца)</div>
-          <input style={s.input} value={meterDay} onChange={(e) => setMeterDay(e.target.value)} placeholder="5" inputMode="numeric" />
+          <div style={s.small}>Режим показаний счётчиков</div>
+          <ReadingsModeSelect value={readingsMode} onChange={setReadingsMode} />
+          {readingsMode === 'manual' && (
+            <div>
+              <div style={s.small}>Крайний день подачи показаний (число месяца)</div>
+              <input style={s.input} value={meterDay} onChange={(e) => setMeterDay(e.target.value)} placeholder="5" inputMode="numeric" />
+            </div>
+          )}
           <div style={s.small}>Окончание договора</div>
           <input style={s.input} type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
           <div style={s.small}>Способ оплаты</div>
@@ -295,8 +314,12 @@ export function ObjectManager() {
           )}
           <div style={s.small}>Штраф за просрочку оплаты, руб/день</div>
           <input style={s.input} value={penPay} onChange={(e) => setPenPay(e.target.value)} placeholder="500" inputMode="numeric" />
-          <div style={s.small}>Штраф за просрочку показаний, руб/день</div>
-          <input style={s.input} value={penRead} onChange={(e) => setPenRead(e.target.value)} placeholder="100" inputMode="numeric" />
+          {readingsMode === 'manual' && (
+            <div>
+              <div style={s.small}>Штраф за просрочку показаний, руб/день</div>
+              <input style={s.input} value={penRead} onChange={(e) => setPenRead(e.target.value)} placeholder="100" inputMode="numeric" />
+            </div>
+          )}
           <div style={s.small}>Напоминать за сколько дней до срока</div>
           <input style={s.input} value={remind} onChange={(e) => setRemind(e.target.value)} placeholder="3" inputMode="numeric" />
           <button style={s.button} onClick={save}>{saving ? 'Сохранение...' : 'Сохранить'}</button>
@@ -321,8 +344,14 @@ export function ObjectManager() {
               <input style={s.input} value={eRent} onChange={(e) => setERent(e.target.value)} inputMode="numeric" />
               <div style={s.small}>День платежа</div>
               <input style={s.input} value={ePaymentDay} onChange={(e) => setEPaymentDay(e.target.value)} inputMode="numeric" />
-              <div style={s.small}>Крайний день показаний</div>
-              <input style={s.input} value={eMeterDay} onChange={(e) => setEMeterDay(e.target.value)} inputMode="numeric" />
+              <div style={s.small}>Режим показаний счётчиков</div>
+              <ReadingsModeSelect value={eReadingsMode} onChange={setEReadingsMode} />
+              {eReadingsMode === 'manual' && (
+                <div>
+                  <div style={s.small}>Крайний день показаний</div>
+                  <input style={s.input} value={eMeterDay} onChange={(e) => setEMeterDay(e.target.value)} inputMode="numeric" />
+                </div>
+              )}
               <div style={s.small}>Окончание договора</div>
               <input style={s.input} type="date" value={eEndDate} onChange={(e) => setEEndDate(e.target.value)} />
               <div style={s.small}>Способ оплаты</div>
@@ -335,8 +364,12 @@ export function ObjectManager() {
               )}
               <div style={s.small}>Штраф за просрочку оплаты, руб/день</div>
               <input style={s.input} value={ePenPay} onChange={(e) => setEPenPay(e.target.value)} inputMode="numeric" />
-              <div style={s.small}>Штраф за просрочку показаний, руб/день</div>
-              <input style={s.input} value={ePenRead} onChange={(e) => setEPenRead(e.target.value)} inputMode="numeric" />
+              {eReadingsMode === 'manual' && (
+                <div>
+                  <div style={s.small}>Штраф за просрочку показаний, руб/день</div>
+                  <input style={s.input} value={ePenRead} onChange={(e) => setEPenRead(e.target.value)} inputMode="numeric" />
+                </div>
+              )}
               <div style={s.small}>Напоминать за сколько дней</div>
               <input style={s.input} value={eRemind} onChange={(e) => setERemind(e.target.value)} inputMode="numeric" />
               <button style={s.smallButton} onClick={saveEdit}>Сохранить</button>
