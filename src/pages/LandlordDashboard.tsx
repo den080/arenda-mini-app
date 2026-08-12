@@ -513,6 +513,7 @@ export function LandlordDashboard() {
           const contract = obj.contract
           const isExpanded = expandedIds.has(obj.id)
           const elecMode = getElecMode(obj.id)
+          const tenantChoseCash = contract && (contract.payment_method === 'cash' || (contract.payment_method === 'both' && (contract as any).tenant_pay_method === 'cash'))
 
           return (
             <div key={obj.id} style={{ ...styles.card, backgroundColor: obj.bgColor || '#fff' }}>
@@ -677,8 +678,11 @@ export function LandlordDashboard() {
                           {' '}Наличный и безналичный расчёт
                         </label>
                       </div>
+                      {contract.payment_method === 'both' && (
+                        <div style={styles.smallNote}>💡 Способ оплаты выбирает арендатор: карта или наличные.</div>
+                      )}
 
-                      {contract.payment_method === 'cash' && (
+                      {contract.payment_method !== 'card' && (
                         <div style={styles.slotsEditor}>
                           <div style={styles.slotsList}>
                             {(contract.cash_slots as CashSlot[] || []).map((slot: CashSlot, idx: number) => (
@@ -748,7 +752,7 @@ export function LandlordDashboard() {
                     </div>
                   )}
 
-                  {contract && contract.payment_method !== 'card' && (
+                  {contract && tenantChoseCash && (
                     <div style={styles.subCard}>
                       <div style={styles.subCardTitle}>🤝 Оплата наличными</div>
                       <CashMeetingsList
@@ -822,7 +826,7 @@ export function LandlordDashboard() {
         ) : (
           notifications.map(n => (
             <div key={n.id} style={styles.notificationItem}>
-              {getNotificationText(n.type)}
+              {(n as any).message || getNotificationText(n.type)}
             </div>
           ))
         )}
