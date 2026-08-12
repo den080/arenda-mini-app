@@ -2,6 +2,17 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useTelegramUser } from '../hooks/useTelegramUser'
 
+function normalizePhone(input: string): string {
+  let cleaned = input.replace(/[\s\-\(\)]/g, '')
+  if (cleaned.startsWith('8') && cleaned.length === 11) {
+    cleaned = '+7' + cleaned.slice(1)
+  }
+  if (!cleaned.startsWith('+')) {
+    cleaned = '+' + cleaned
+  }
+  return cleaned
+}
+
 export function ObjectManager() {
   const { user } = useTelegramUser()
   const [objects, setObjects] = useState<any[]>([])
@@ -42,16 +53,17 @@ export function ObjectManager() {
     if (!user || !address) { setMsg('Укажите адрес объекта'); return }
     setSaving(true)
     try {
+      const normalizedPhone = phone ? normalizePhone(phone) : null
       let counter: any = null
-      if (phone || tgId) {
+      if (normalizedPhone || tgId) {
         const { data } = await supabase.from('users').select('*')
-          .or(`telegram_id.eq."${tgId}",phone.eq."${phone}"`).limit(1)
+          .or(`telegram_id.eq."${tgId}",phone.eq."${normalizedPhone}"`).limit(1)
         counter = data && data[0]
       }
       if (!counter) {
         const { data, error } = await supabase.from('users').insert({
           full_name: name || 'Контрагент',
-          phone: phone || null,
+          phone: normalizedPhone,
           telegram_id: tgId || null,
           role: role === 'landlord' ? 'tenant' : 'landlord',
         }).select().single()
@@ -104,7 +116,7 @@ export function ObjectManager() {
 
   async function removeObject(id: string) {
     const answer = window.prompt('Введите слово "удалить" для подтверждения удаления объекта')
-    if (answer !== 'удалить') { setMsg('Удаление отменено'); return }
+    if (!answer || answer.trim().toLowerCase() !== 'удалить') { setMsg('Удаление отменено'); return }
     const { data: contracts } = await supabase.from('contracts').select('id').eq('object_id', id)
     const ids = (contracts || []).map((c: any) => c.id)
     if (ids.length) {
@@ -137,7 +149,7 @@ export function ObjectManager() {
           <div style={s.small}>{role === 'landlord' ? 'Арендатор' : 'Арендодатель'}</div>
           <input style={s.input} value={name} onChange={(e) => setName(e.target.value)} placeholder="Имя" />
           <div style={s.small}>Телефон контрагента</div>
-          <input style={s.input} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+79995553322" />
+          <input style={s.input} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+79995553322 или 89995553322" />
           <div style={s.small}>Telegram ID контрагента</div>
           <input style={s.input} value={tgId} onChange={(e) => setTgId(e.target.value)} placeholder="Необязательно" />
           <div style={s.small}>Сумма аренды, руб</div>
