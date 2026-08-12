@@ -18,7 +18,7 @@ export default function App() {
         <input
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          placeholder="Ваш Telegram ID (например: 28606967)"
+          placeholder="Telegram ID или телефон (например: +79995553322)"
           style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box' }}
         />
         <button

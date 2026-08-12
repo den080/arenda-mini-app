@@ -21,10 +21,10 @@ export function useTelegramUser() {
       const { data, error: dbError } = await supabase
         .from('users')
         .select('*')
-        .eq('telegram_id', telegramId)
+        .or(`telegram_id.eq."${telegramId}",phone.eq."${telegramId}"`)
         .maybeSingle()
       if (dbError) setError('Ошибка базы: ' + dbError.message)
-      else if (!data) setError('Пользователь с ID ' + telegramId + ' не найден в базе.')
+      else if (!data) setError('Пользователь с таким ID или телефоном не найден.')
       else {
         cachedUser = data as User
         setUser(cachedUser)
