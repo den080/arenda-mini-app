@@ -5,9 +5,11 @@ import type { Object as PropertyObject, Contract, MeterType, ObjectMeter, Notifi
 
 interface ObjectWithStatus extends PropertyObject {
   status: 'paid' | 'overdue' | 'pending' | 'no_contract'
+  statusDetail?: string
   amount: number
+  penaltyAmount?: number
   paymentId: string | null
-  contract?: Contract
+  contract?: Contract & { tenant?: { full_name: string; phone: string } }
   cashMeetings?: CashMeeting[]
 }
 
