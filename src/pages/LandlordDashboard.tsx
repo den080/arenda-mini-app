@@ -462,12 +462,14 @@ export function LandlordDashboard() {
                         </select>
                         <input
                           type="time"
+                          step={600}
                           value={newSlotTimeFrom}
                           onChange={(e) => setNewSlotTimeFrom(e.target.value)}
                           style={styles.timeInput}
                         />
                         <input
                           type="time"
+                          step={600}
                           value={newSlotTimeTo}
                           onChange={(e) => setNewSlotTimeTo(e.target.value)}
                           style={styles.timeInput}
