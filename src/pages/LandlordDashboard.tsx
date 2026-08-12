@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useTelegramUser } from '../hooks/useTelegramUser'
-import type { Object as PropertyObject, Contract, MeterType, ObjectMeter, NotificationLog, CashSlot, CashMeeting, Payment, PenaltyRule, User } from '../types/database'
+import type { Object as PropertyObject, Contract, MeterType, ObjectMeter, NotificationLog, CashSlot, CashMeeting, Payment, User } from '../types/database'
 
 interface ObjectWithStatus extends PropertyObject {
   status: 'paid' | 'overdue' | 'pending' | 'no_contract' | 'no_payment'
