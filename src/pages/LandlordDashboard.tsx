@@ -276,7 +276,7 @@ export function LandlordDashboard() {
     }
   }, [user])
 
-  async function confirmPayment(objId: string, paymentId: string) {
+  async function confirmPayment(_objId: string, paymentId: string) {
     const { error: updError } = await supabase
       .from('payments')
       .update({ confirmed_by_landlord: true, confirmed_at: new Date().toISOString() })
@@ -392,7 +392,7 @@ export function LandlordDashboard() {
     }
   }
 
-  async function confirmCashMeeting(meetingId: string, contractId: string, tenantId: string) {
+  async function confirmCashMeeting(meetingId: string, _contractId: string, tenantId: string) {
     const { error: meetError } = await supabase
       .from('cash_meetings')
       .update({ status: 'confirmed' })
