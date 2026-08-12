@@ -11,6 +11,12 @@ function parseDate(d: any): Date {
   return new Date(y, (m || 1) - 1, dd || 1)
 }
 
+function formatSlotDate(d: any): string {
+  const dt = parseDate(d)
+  const wd = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'][dt.getDay()]
+  return `${String(dt.getDate()).padStart(2, '0')}.${String(dt.getMonth() + 1).padStart(2, '0')}.${dt.getFullYear()} (${wd})`
+}
+
 export function TenantDashboard() {
   const { user, loading: userLoading } = useTelegramUser()
   const [data, setData] = useState<any>(null)
@@ -131,7 +137,10 @@ export function TenantDashboard() {
     const meetingData = {
       contract_id: data.contract.id,
       payment_id: payment ? payment.id : null,
-      day: slot.day, time_from: slot.time_from, time_to: slot.time_to,
+      day: slot.day,
+      meeting_date: (slot as any).date || null,
+      time_from: slot.time_from,
+      time_to: slot.time_to,
       status: 'proposed' as const
     }
     const { error: e } = await supabase.from('cash_meetings').insert(meetingData)
@@ -320,7 +329,9 @@ export function TenantDashboard() {
               <>
                 <select value={selectedSlotIndex} onChange={(e) => setSelectedSlotIndex(Number(e.target.value))} style={s.select}>
                   {slots.map((slot: any, idx: number) => (
-                    <option key={idx} value={idx}>{dayNames[slot.day - 1]} {slot.time_from}–{slot.time_to}</option>
+                    <option key={idx} value={idx}>
+                      {slot.date ? formatSlotDate(slot.date) : (dayNames[slot.day] || '')} {slot.time_from}–{slot.time_to}
+                    </option>
                   ))}
                 </select>
                 <button onClick={proposeCashMeeting} style={s.button}>Предложить время</button>
