@@ -15,6 +15,8 @@ interface ObjectWithStatus extends PropertyObject {
   daysOverdue?: number
   waitingForReadings?: boolean
   bgColor?: string
+  deferredTotal?: number
+  deferredRequests?: any[]
 }
 
 const DAYS_OF_WEEK = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
@@ -95,6 +97,14 @@ export function LandlordDashboard() {
             continue
           }
 
+          const { data: dReq } = await supabase
+            .from('deferred_requests').select('*')
+            .eq('contract_id', contract.id).eq('status', 'proposed')
+          const { data: dDebts } = await supabase
+            .from('deferred_debts').select('*')
+            .eq('contract_id', contract.id)
+          const deferredTotal = (dDebts || []).reduce((s2: number, d: any) => s2 + Number(d.amount || 0), 0)
+
           const { data: payment } = await supabase
             .from('payments')
             .select('*')
@@ -112,7 +122,9 @@ export function LandlordDashboard() {
               penaltyAmount: 0,
               paymentId: null,
               contract,
-              bgColor: '#fdf6e3'
+              bgColor: '#fdf6e3',
+              deferredTotal,
+              deferredRequests: dReq || []
             })
             continue
           }
@@ -174,7 +186,9 @@ export function LandlordDashboard() {
             payment,
             daysOverdue: isOverdue ? Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)) : undefined,
             waitingForReadings,
-            bgColor
+            bgColor,
+            deferredTotal,
+            deferredRequests: dReq || []
           })
         }
 
@@ -194,7 +208,13 @@ export function LandlordDashboard() {
     }
 
     fetchData()
-    window.addEventListener('rentflow-refresh', () => fetchData())   ; setInterval(() => fetchData(), 30000)
+    const onRefresh = () => fetchData()
+    window.addEventListener('rentflow-refresh', onRefresh)
+    const interval = setInterval(() => fetchData(), 30000)
+    return () => {
+      window.removeEventListener('rentflow-refresh', onRefresh)
+      clearInterval(interval)
+    }
   }, [user])
 
   async function confirmPayment(objId: string, paymentId: string) {
@@ -208,6 +228,21 @@ export function LandlordDashboard() {
     } else {
       alert('Не удалось подтвердить: ' + updError.message)
     }
+  }
+
+  async function confirmDeferral(requestId: string, contractId: string, paymentId: string, amount: number, tenantId: string) {
+    const { error: e1 } = await supabase.from('deferred_debts').insert({ contract_id: contractId, amount })
+    if (e1) { alert('Ошибка: ' + e1.message); return }
+    await supabase.from('deferred_requests').update({ status: 'confirmed' }).eq('id', requestId)
+    if (paymentId) {
+      const { data: pay } = await supabase.from('payments').select('penalty_amount').eq('id', paymentId).maybeSingle()
+      const newPenalty = Math.max(0, Number(pay?.penalty_amount || 0) - amount)
+      await supabase.from('payments').update({ penalty_amount: newPenalty }).eq('id', paymentId)
+    }
+    await supabase.from('notifications_log').insert({
+      user_id: tenantId, type: 'deferred_confirmed', related_id: contractId, sent_at: new Date().toISOString()
+    })
+    window.dispatchEvent(new Event('rentflow-refresh'))
   }
 
   async function toggleMeter(objId: string, meterTypeId: string) {
@@ -334,6 +369,8 @@ export function LandlordDashboard() {
       case 'meter_submitted': return '💦 Переданы новые показания'
       case 'cash_proposed': return '💵 Арендатор предложил время оплаты наличными'
       case 'cash_confirmed': return '🤝 Время оплаты наличными подтверждено'
+      case 'deferred_proposed': return '🙏 Арендатор попросил отсрочку штрафа'
+      case 'deferred_confirmed': return '🤝 Отсрочка штрафа подтверждена'
       default: return type
     }
   }
@@ -377,6 +414,9 @@ export function LandlordDashboard() {
                       }
                     </div>
                   )}
+                  {!!obj.deferredTotal && obj.deferredTotal > 0 && (
+                    <div style={styles.deferredNote}>⚠️ Приостановленный долг: {obj.deferredTotal.toFixed(2)} ₽</div>
+                  )}
                 </div>
               </div>
 
@@ -389,6 +429,23 @@ export function LandlordDashboard() {
                     >
                       ✅ Подтвердить оплату
                     </button>
+                  )}
+
+                  {contract && (obj.deferredRequests || []).length > 0 && (
+                    <div style={styles.subCard}>
+                      <div style={styles.subCardTitle}>🙏 Отсрочка штрафа</div>
+                      {(obj.deferredRequests || []).map((r: any) => (
+                        <div key={r.id} style={styles.slotItem}>
+                          <span>Арендатор просит отсрочить {Number(r.amount).toFixed(2)} ₽</span>
+                          <button
+                            onClick={() => confirmDeferral(r.id, contract.id, r.payment_id, Number(r.amount), contract.tenant_id)}
+                            style={{ ...styles.confirmButton, marginTop: 0, width: 'auto', padding: '6px 12px', fontSize: '13px', background: '#ff9800' }}
+                          >
+                            Подтвердить
+                          </button>
+                        </div>
+                      ))}
+                    </div>
                   )}
 
                   {contract && (
@@ -436,6 +493,16 @@ export function LandlordDashboard() {
                             onChange={() => updatePaymentMethod(contract.id, 'cash')}
                           />
                           {' '}Наличные
+                        </label>
+                        <label style={styles.methodLabel}>
+                          <input
+                            type="radio"
+                            name={`payment-method-${obj.id}`}
+                            value="both"
+                            checked={contract.payment_method === 'both'}
+                            onChange={() => updatePaymentMethod(contract.id, 'both' as any)}
+                          />
+                          {' '}Наличный и безналичный расчёт
                         </label>
                       </div>
 
@@ -500,7 +567,7 @@ export function LandlordDashboard() {
                     </div>
                   )}
 
-                  {contract && contract.payment_method === 'cash' && (
+                  {contract && contract.payment_method !== 'card' && (
                     <div style={styles.subCard}>
                       <div style={styles.subCardTitle}>🤝 Оплата наличными</div>
                       <CashMeetingsList
@@ -566,6 +633,12 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#999',
     marginLeft: '8px',
   },
+  deferredNote: {
+    fontSize: '13px',
+    color: '#e65100',
+    marginTop: '6px',
+    fontWeight: 600,
+  },
   cardTitle: {
     fontSize: '18px',
     fontWeight: 'bold',
@@ -622,8 +695,9 @@ const styles: Record<string, React.CSSProperties> = {
   },
   methodRow: {
     display: 'flex',
-    gap: '16px',
+    gap: '12px',
     marginBottom: '12px',
+    flexWrap: 'wrap' as const,
   },
   methodLabel: {
     fontSize: '14px',
