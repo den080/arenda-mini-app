@@ -22,11 +22,12 @@ export function useTelegramUser() {
         .from('users')
         .select('*')
         .or(`telegram_id.eq."${telegramId}",phone.eq."${telegramId}"`)
-        .maybeSingle()
+        .limit(1)
+      const found = data && data[0]
       if (dbError) setError('Ошибка базы: ' + dbError.message)
-      else if (!data) setError('Пользователь с таким ID или телефоном не найден.')
+      else if (!found) setError('Пользователь с таким ID или телефоном не найден.')
       else {
-        cachedUser = data as User
+        cachedUser = found as User
         setUser(cachedUser)
       }
     } catch (e) {
