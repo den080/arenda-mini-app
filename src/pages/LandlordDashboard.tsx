@@ -7,13 +7,17 @@ interface ObjectWithStatus extends PropertyObject {
   status: 'paid' | 'overdue' | 'pending' | 'no_contract' | 'no_payment'
   statusDetail?: string
   amount: number
+  baseAmount?: number
   penaltyAmount?: number
+  utilitiesAmount?: number
   paymentId: string | null
   contract?: Contract & { tenant?: User }
   cashMeetings?: CashMeeting[]
   payment?: Payment
   daysOverdue?: number
   waitingForReadings?: boolean
+  needUtilitiesReminder?: boolean
+  readingsMode?: string
   bgColor?: string
   deferredTotal?: number
   deferredRequests?: any[]
@@ -30,6 +34,7 @@ export function LandlordDashboard() {
   const [objectMeters, setObjectMeters] = useState<Record<string, ObjectMeter[]>>({})
   const [notifications, setNotifications] = useState<NotificationLog[]>([])
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
+  const [utilInputs, setUtilInputs] = useState<Record<string, string>>({})
 
   const [newSlotDay, setNewSlotDay] = useState<number>(0)
   const [newSlotTimeFrom, setNewSlotTimeFrom] = useState<string>('')
@@ -97,6 +102,8 @@ export function LandlordDashboard() {
             continue
           }
 
+          const readingsMode = contract.readings_mode || 'manual'
+
           const { data: dReq } = await supabase
             .from('deferred_requests').select('*')
             .eq('contract_id', contract.id).eq('status', 'proposed')
@@ -119,10 +126,13 @@ export function LandlordDashboard() {
               status: 'no_payment',
               statusDetail: 'Платёж не создан',
               amount: contract.rent_amount,
+              baseAmount: contract.rent_amount,
               penaltyAmount: 0,
+              utilitiesAmount: 0,
               paymentId: null,
               contract,
               bgColor: '#fdf6e3',
+              readingsMode,
               deferredTotal,
               deferredRequests: dReq || []
             })
@@ -135,10 +145,11 @@ export function LandlordDashboard() {
 
           const baseAmount = payment.base_amount || contract.rent_amount
           const penaltyAmount = payment.penalty_amount || 0
+          const utilitiesAmount = Number(payment.utilities_amount || 0)
           const paymentId = String(payment.id)
 
           let waitingForReadings = false
-          if (contract.meter_deadline_day && today.getDate() > contract.meter_deadline_day) {
+          if (readingsMode === 'manual' && contract.meter_deadline_day && today.getDate() > contract.meter_deadline_day) {
             const { data: readingsData } = await supabase
               .from('meter_readings')
               .select('*')
@@ -150,6 +161,9 @@ export function LandlordDashboard() {
               waitingForReadings = true
             }
           }
+
+          const needUtilitiesReminder = !payment.confirmed_by_landlord && readingsMode !== 'self'
+            && daysUntilDue >= 0 && daysUntilDue <= (contract.reminder_days_before || 3) && utilitiesAmount === 0
 
           let status: 'paid' | 'overdue' | 'pending' = 'pending'
           let statusDetail = ''
@@ -179,13 +193,17 @@ export function LandlordDashboard() {
             ...obj,
             status,
             statusDetail,
-            amount: baseAmount + penaltyAmount,
+            amount: baseAmount + penaltyAmount + utilitiesAmount,
+            baseAmount,
             penaltyAmount,
+            utilitiesAmount,
             paymentId,
             contract,
             payment,
             daysOverdue: isOverdue ? Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)) : undefined,
             waitingForReadings,
+            needUtilitiesReminder,
+            readingsMode,
             bgColor,
             deferredTotal,
             deferredRequests: dReq || []
@@ -227,6 +245,18 @@ export function LandlordDashboard() {
       setObjects(prev => prev.map(o => (o.id === objId ? { ...o, status: 'paid' as const } : o)))
     } else {
       alert('Не удалось подтвердить: ' + updError.message)
+    }
+  }
+
+  async function saveUtilities(paymentId: string, value: string) {
+    const { error } = await supabase
+      .from('payments')
+      .update({ utilities_amount: Number(value) || 0 })
+      .eq('id', paymentId)
+    if (error) {
+      alert('Ошибка: ' + error.message)
+    } else {
+      window.dispatchEvent(new Event('rentflow-refresh'))
     }
   }
 
@@ -281,7 +311,7 @@ export function LandlordDashboard() {
     }
   }
 
-  async function updatePaymentMethod(contractId: string, method: 'card' | 'cash') {
+  async function updatePaymentMethod(contractId: string, method: 'card' | 'cash' | 'both') {
     const updateData: any = { payment_method: method }
     if (method === 'cash') {
       updateData.cash_slots = []
@@ -375,6 +405,13 @@ export function LandlordDashboard() {
     }
   }
 
+  function amountBreakdown(obj: ObjectWithStatus): string {
+    const parts: string[] = [`${(obj.baseAmount ?? obj.amount).toFixed(2)}`]
+    if (obj.penaltyAmount && obj.penaltyAmount > 0) parts.push(`${obj.penaltyAmount.toFixed(2)} руб штраф`)
+    if (obj.utilitiesAmount && obj.utilitiesAmount > 0) parts.push(`${obj.utilitiesAmount.toFixed(2)} руб ресурсы`)
+    return parts.join(' + ')
+  }
+
   if (userLoading || loading) {
     return <div style={styles.container}>Загрузка...</div>
   }
@@ -407,12 +444,7 @@ export function LandlordDashboard() {
                     <span style={{ ...styles.statusText, color: obj.status === 'overdue' ? '#c00' : obj.status === 'paid' ? '#080' : '#a80' }}>{obj.statusDetail}</span>
                   </div>
                   {obj.amount > 0 && (
-                    <div style={styles.amount}>
-                      {obj.penaltyAmount && obj.penaltyAmount > 0
-                        ? `${(obj.amount - obj.penaltyAmount).toFixed(2)} + ${obj.penaltyAmount.toFixed(2)} руб штраф`
-                        : `${obj.amount.toFixed(2)} ₽`
-                      }
-                    </div>
+                    <div style={styles.amount}>{amountBreakdown(obj)}</div>
                   )}
                   {!!obj.deferredTotal && obj.deferredTotal > 0 && (
                     <div style={styles.deferredNote}>⚠️ Приостановленный долг: {obj.deferredTotal.toFixed(2)} ₽</div>
@@ -429,6 +461,32 @@ export function LandlordDashboard() {
                     >
                       ✅ Подтвердить оплату
                     </button>
+                  )}
+
+                  {contract && obj.paymentId && !obj.payment?.confirmed_by_landlord && obj.readingsMode !== 'self' && (
+                    <div style={styles.subCard}>
+                      <div style={styles.subCardTitle}>🧮 Ресурсы по квитанции</div>
+                      {obj.needUtilitiesReminder && (
+                        <div style={styles.reminderNote}>⏳ Посчитайте ресурсы с квитанции и добавьте сумму к платежу</div>
+                      )}
+                      <div style={styles.utilRow}>
+                        <input
+                          type="number"
+                          value={utilInputs[obj.id] ?? String(obj.utilitiesAmount || '')}
+                          onChange={(e) => setUtilInputs({ ...utilInputs, [obj.id]: e.target.value })}
+                          placeholder="Сумма по квитанции, ₽"
+                          style={styles.utilInput}
+                          inputMode="numeric"
+                        />
+                        <button
+                          onClick={() => saveUtilities(obj.paymentId!, utilInputs[obj.id] ?? String(obj.utilitiesAmount || 0))}
+                          style={styles.addButton}
+                        >
+                          Включить в платёж
+                        </button>
+                      </div>
+                      <div style={styles.smallNote}>Сумма добавляется к платежу отдельно, не растёт при просрочке и не входит в штрафы</div>
+                    </div>
                   )}
 
                   {contract && (obj.deferredRequests || []).length > 0 && (
@@ -451,6 +509,8 @@ export function LandlordDashboard() {
                   {contract && (
                     <div style={styles.subCard}>
                       <div style={styles.subCardTitle}>⚙️ Счётчики</div>
+                      {obj.readingsMode === 'auto' && <div style={styles.smallNote}>💡 Показания передаются автоматически</div>}
+                      {obj.readingsMode === 'self' && <div style={styles.smallNote}>💡 Арендатор платит полную квитанцию сам</div>}
                       {meterTypes.map(mt => {
                         const om = objMeters.find(m => m.meter_type_id === mt.id)
                         const isActive = !!om?.is_active
@@ -500,7 +560,7 @@ export function LandlordDashboard() {
                             name={`payment-method-${obj.id}`}
                             value="both"
                             checked={contract.payment_method === 'both'}
-                            onChange={() => updatePaymentMethod(contract.id, 'both' as any)}
+                            onChange={() => updatePaymentMethod(contract.id, 'both')}
                           />
                           {' '}Наличный и безналичный расчёт
                         </label>
@@ -638,6 +698,33 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#e65100',
     marginTop: '6px',
     fontWeight: 600,
+  },
+  reminderNote: {
+    padding: '8px 10px',
+    backgroundColor: '#fff3e0',
+    border: '1px solid #ffb74d',
+    borderRadius: '8px',
+    color: '#e65100',
+    fontSize: '13px',
+    fontWeight: 600,
+    marginBottom: '8px',
+  },
+  smallNote: {
+    fontSize: '12px',
+    color: '#888',
+    marginTop: '6px',
+  },
+  utilRow: {
+    display: 'flex',
+    gap: '8px',
+    alignItems: 'center',
+  },
+  utilInput: {
+    flex: 1,
+    padding: '8px 10px',
+    borderRadius: '8px',
+    border: '1px solid #ddd',
+    fontSize: '14px',
   },
   cardTitle: {
     fontSize: '18px',
