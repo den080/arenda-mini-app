@@ -29,7 +29,6 @@ export function LandlordDashboard() {
   const [notifications, setNotifications] = useState<NotificationLog[]>([])
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
 
-  // Состояния для редактора слотов
   const [newSlotDay, setNewSlotDay] = useState<number>(0)
   const [newSlotTimeFrom, setNewSlotTimeFrom] = useState<string>('')
   const [newSlotTimeTo, setNewSlotTimeTo] = useState<string>('')
@@ -72,7 +71,6 @@ export function LandlordDashboard() {
 
         const objectsWithStatus: ObjectWithStatus[] = []
         const allObjectMeters: Record<string, ObjectMeter[]> = {}
-        const allPenaltyRules: Record<string, PenaltyRule> = {}
 
         const today = new Date()
         const currentMonth = today.getMonth()
@@ -92,19 +90,6 @@ export function LandlordDashboard() {
             .eq('object_id', obj.id)
           allObjectMeters[obj.id] = omData || []
 
-          if (contract) {
-            const { data: prData } = await supabase
-              .from('penalty_rules')
-              .select('*')
-              .in('violation_type', ['payment_overdue', 'readings_overdue'])
-              .eq('contract_id', contract.id)
-            if (prData) {
-              prData.forEach(pr => {
-                allPenaltyRules[`${contract.id}-${pr.violation_type}`] = pr
-              })
-            }
-          }
-
           if (!contract) {
             objectsWithStatus.push({ ...obj, status: 'no_contract', amount: 0, paymentId: null })
             continue
@@ -118,7 +103,6 @@ export function LandlordDashboard() {
             .limit(1)
             .maybeSingle()
 
-          // Случай: платёж вообще не создан
           if (!payment) {
             objectsWithStatus.push({
               ...obj,
@@ -210,6 +194,7 @@ export function LandlordDashboard() {
     }
 
     fetchData()
+    window.addEventListener('rentflow-refresh', () => fetchData())
   }, [user])
 
   async function confirmPayment(objId: string, paymentId: string) {
@@ -374,7 +359,6 @@ export function LandlordDashboard() {
 
           return (
             <div key={obj.id} style={{ ...styles.card, backgroundColor: obj.bgColor || '#fff' }}>
-              {/* Шапка карточки — кликабельная для сворачивания */}
               <div style={styles.cardHeader} onClick={() => toggleExpanded(obj.id)}>
                 <div style={{ flex: 1 }}>
                   <div style={styles.address}>
@@ -396,7 +380,6 @@ export function LandlordDashboard() {
                 </div>
               </div>
 
-              {/* Содержимое карточки — только если раскрыта */}
               {isExpanded && (
                 <>
                   {obj.paymentId && obj.status === 'overdue' && (
@@ -557,7 +540,6 @@ const styles: Record<string, React.CSSProperties> = {
     margin: '0 auto',
     padding: '16px',
     backgroundColor: '#f5f5f5',
-    minHeight: '100vh',
   },
   title: {
     fontSize: '24px',
