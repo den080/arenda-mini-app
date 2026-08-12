@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useTelegramUser } from '../hooks/useTelegramUser'
-import type { Object as PropertyObject, Contract, MeterType, ObjectMeter, NotificationLog, CashSlot, CashMeeting, Payment, PenaltyRule } from '../types/database'
+import type { Object as PropertyObject, Contract, MeterType, ObjectMeter, NotificationLog, CashSlot, CashMeeting, Payment, PenaltyRule, User } from '../types/database'
 
 interface ObjectWithStatus extends PropertyObject {
   status: 'paid' | 'overdue' | 'pending' | 'no_contract'
@@ -9,7 +9,7 @@ interface ObjectWithStatus extends PropertyObject {
   amount: number
   penaltyAmount?: number
   paymentId: string | null
-  contract?: Contract & { tenant?: { full_name: string; phone: string } }
+  contract?: Contract & { tenant?: User }
   cashMeetings?: CashMeeting[]
   payment?: Payment
   daysOverdue?: number
@@ -27,6 +27,11 @@ export function LandlordDashboard() {
   const [objectMeters, setObjectMeters] = useState<Record<string, ObjectMeter[]>>({})
   const [notifications, setNotifications] = useState<NotificationLog[]>([])
   
+  // Состояния для редактора слотов
+  const [newSlotDay, setNewSlotDay] = useState<number>(0)
+  const [newSlotTimeFrom, setNewSlotTimeFrom] = useState<string>('')
+  const [newSlotTimeTo, setNewSlotTimeTo] = useState<string>('')
+
 
   useEffect(() => {
     if (!user) return
@@ -159,7 +164,9 @@ export function LandlordDashboard() {
             penaltyAmount,
             paymentId, 
             contract,
-            payment
+            payment,
+            daysOverdue: isOverdue ? Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)) : undefined,
+            waitingForReadings
           })
         }
 
@@ -333,10 +340,6 @@ export function LandlordDashboard() {
     }
   }
 
-  // Состояния для редактора слотов
-  const [newSlotDay, setNewSlotDay] = useState<number>(0)
-  const [newSlotTimeFrom, setNewSlotTimeFrom] = useState<string>('')
-  const [newSlotTimeTo, setNewSlotTimeTo] = useState<string>('')
 
   if (userLoading || loading) {
     return <div style={styles.container}>Загрузка...</div>
