@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useTelegramUser } from '../hooks/useTelegramUser'
-import type { Object as PropertyObject, Contract, MeterType, ObjectMeter, NotificationLog, CashSlot, CashMeeting } from '../types/database'
+import type { Object as PropertyObject, Contract, MeterType, ObjectMeter, NotificationLog, CashSlot, CashMeeting, Payment, PenaltyRule } from '../types/database'
 
 interface ObjectWithStatus extends PropertyObject {
   status: 'paid' | 'overdue' | 'pending' | 'no_contract'
@@ -11,6 +11,7 @@ interface ObjectWithStatus extends PropertyObject {
   paymentId: string | null
   contract?: Contract & { tenant?: { full_name: string; phone: string } }
   cashMeetings?: CashMeeting[]
+  payment?: Payment
 }
 
 const DAYS_OF_WEEK = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
@@ -23,6 +24,7 @@ export function LandlordDashboard() {
   const [meterTypes, setMeterTypes] = useState<MeterType[]>([])
   const [objectMeters, setObjectMeters] = useState<Record<string, ObjectMeter[]>>({})
   const [notifications, setNotifications] = useState<NotificationLog[]>([])
+  
 
   useEffect(() => {
     if (!user) return
@@ -55,11 +57,16 @@ export function LandlordDashboard() {
 
         const objectsWithStatus: ObjectWithStatus[] = []
         const allObjectMeters: Record<string, ObjectMeter[]> = {}
+        const allPenaltyRules: Record<string, PenaltyRule> = {}
+
+        const today = new Date()
+        const currentMonth = today.getMonth()
+        const currentYear = today.getFullYear()
 
         for (const obj of objectsData) {
           const { data: contract } = await supabase
             .from('contracts')
-            .select('*')
+            .select('*, tenant:users!tenant_id(full_name, phone)')
             .eq('object_id', obj.id)
             .eq('status', 'active')
             .maybeSingle()
@@ -70,6 +77,20 @@ export function LandlordDashboard() {
             .select('*')
             .eq('object_id', obj.id)
           allObjectMeters[obj.id] = omData || []
+
+          // Загружаем правила штрафов
+          if (contract) {
+            const { data: prData } = await supabase
+              .from('penalty_rules')
+              .select('*')
+              .in('violation_type', ['payment_overdue', 'readings_overdue'])
+              .eq('contract_id', contract.id)
+            if (prData) {
+              prData.forEach(pr => {
+                allPenaltyRules[`${contract.id}-${pr.violation_type}`] = pr
+              })
+            }
+          }
 
           if (!contract) {
             objectsWithStatus.push({ ...obj, status: 'no_contract', amount: 0, paymentId: null })
@@ -84,25 +105,71 @@ export function LandlordDashboard() {
             .limit(1)
             .maybeSingle()
 
-          const today = new Date()
           const dueDate = payment ? new Date(payment.due_date) : new Date(contract.end_date)
           const isOverdue = today > dueDate
+          const daysUntilDue = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
 
           const baseAmount = payment?.base_amount || contract.rent_amount
           const penaltyAmount = payment?.penalty_amount || 0
           const paymentId = payment ? String(payment.id) : null
 
-          if (payment?.confirmed_by_landlord) {
-            objectsWithStatus.push({ ...obj, status: 'paid', amount: baseAmount + penaltyAmount, paymentId, contract })
-          } else if (isOverdue) {
-            objectsWithStatus.push({ ...obj, status: 'overdue', amount: baseAmount + penaltyAmount, paymentId, contract })
-          } else {
-            objectsWithStatus.push({ ...obj, status: 'pending', amount: baseAmount + penaltyAmount, paymentId, contract })
+          // Проверка показаний: если прошёл meter_deadline_day, а показаний за текущий месяц нет
+          let waitingForReadings = false
+          if (contract.meter_deadline_day && today.getDate() > contract.meter_deadline_day) {
+            const { data: readingsData } = await supabase
+              .from('meter_readings')
+              .select('*')
+              .eq('contract_id', contract.id)
+              .gte('submitted_at', new Date(currentYear, currentMonth, 1).toISOString())
+              .lt('submitted_at', new Date(currentYear, currentMonth + 1, 1).toISOString())
+            
+            if (!readingsData || readingsData.length === 0) {
+              waitingForReadings = true
+            }
           }
+
+          let status: 'paid' | 'overdue' | 'pending' | 'no_contract' = 'no_contract'
+          let statusDetail = ''
+
+          if (payment?.confirmed_by_landlord) {
+            status = 'paid'
+            statusDetail = 'Оплачено'
+          } else if (isOverdue) {
+            status = 'overdue'
+            const daysOverdue = Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24))
+            statusDetail = `Просрочка ${daysOverdue} дн.`
+          } else if (waitingForReadings) {
+            status = 'pending'
+            statusDetail = 'Ждём показания'
+          } else if (daysUntilDue <= (contract.reminder_days_before || 3)) {
+            status = 'pending'
+            statusDetail = 'Срок приближается'
+          } else {
+            status = 'pending'
+            statusDetail = 'Ждём платёж'
+          }
+
+          objectsWithStatus.push({ 
+            ...obj, 
+            status, 
+            statusDetail,
+            amount: baseAmount + penaltyAmount, 
+            penaltyAmount,
+            paymentId, 
+            contract,
+            payment
+          })
         }
 
         setObjectMeters(allObjectMeters)
-        setObjects(objectsWithStatus)
+        
+        // Сортировка: красные (overdue), затем жёлтые (pending), затем зелёные (paid), без договора в конце
+        const sortedObjects = objectsWithStatus.sort((a, b) => {
+          const order: Record<string, number> = { overdue: 0, pending: 1, paid: 2, no_contract: 3 }
+          return order[a.status] - order[b.status]
+        })
+        
+        setObjects(sortedObjects)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Unknown error')
       } finally {
