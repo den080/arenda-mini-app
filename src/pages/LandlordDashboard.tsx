@@ -6,6 +6,7 @@ import type { Object as PropertyObject, Contract, MeterType, ObjectMeter, Notifi
 interface ObjectWithStatus extends PropertyObject {
   status: 'paid' | 'overdue' | 'pending' | 'no_contract' | 'no_payment'
   statusDetail?: string
+  statusColor?: string
   amount: number
   baseAmount?: number
   penaltyAmount?: number
@@ -24,6 +25,11 @@ interface ObjectWithStatus extends PropertyObject {
 }
 
 const DAYS_OF_WEEK = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
+
+function parseDate(d: any): Date {
+  const [y, m, dd] = String(d).slice(0, 10).split('-').map(Number)
+  return new Date(y, (m || 1) - 1, dd || 1)
+}
 
 export function LandlordDashboard() {
   const { user, loading: userLoading } = useTelegramUser()
@@ -80,6 +86,7 @@ export function LandlordDashboard() {
         const allObjectMeters: Record<string, ObjectMeter[]> = {}
 
         const today = new Date()
+        const todayMid = new Date(today.getFullYear(), today.getMonth(), today.getDate())
         const currentMonth = today.getMonth()
         const currentYear = today.getFullYear()
 
@@ -98,11 +105,12 @@ export function LandlordDashboard() {
           allObjectMeters[obj.id] = omData || []
 
           if (!contract) {
-            objectsWithStatus.push({ ...obj, status: 'no_contract', amount: 0, paymentId: null })
+            objectsWithStatus.push({ ...obj, status: 'no_contract', amount: 0, paymentId: null, statusColor: '#888', statusDetail: 'Нет договора', bgColor: '#fff' })
             continue
           }
 
           const readingsMode = contract.readings_mode || 'manual'
+          const reminder = contract.reminder_days_before || 3
 
           const { data: dReq } = await supabase
             .from('deferred_requests').select('*')
@@ -125,6 +133,7 @@ export function LandlordDashboard() {
               ...obj,
               status: 'no_payment',
               statusDetail: 'Платёж не создан',
+              statusColor: '#a80',
               amount: contract.rent_amount,
               baseAmount: contract.rent_amount,
               penaltyAmount: 0,
@@ -139,9 +148,9 @@ export function LandlordDashboard() {
             continue
           }
 
-          const dueDate = new Date(payment.due_date)
-          const isOverdue = today > dueDate
-          const daysUntilDue = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+          const dueMid = parseDate(payment.due_date)
+          const isOverdue = todayMid > dueMid
+          const daysUntilDue = Math.round((dueMid.getTime() - todayMid.getTime()) / 86400000)
 
           const baseAmount = payment.base_amount || contract.rent_amount
           const penaltyAmount = payment.penalty_amount || 0
@@ -163,36 +172,66 @@ export function LandlordDashboard() {
           }
 
           const needUtilitiesReminder = !payment.confirmed_by_landlord && readingsMode !== 'self'
-            && daysUntilDue >= 0 && daysUntilDue <= (contract.reminder_days_before || 3) && utilitiesAmount === 0
+            && daysUntilDue >= 0 && daysUntilDue <= reminder && utilitiesAmount === 0
 
           let status: 'paid' | 'overdue' | 'pending' = 'pending'
           let statusDetail = ''
+          let statusColor = '#a80'
           let bgColor = '#fff'
 
-          if (payment.confirmed_by_landlord) {
-            status = 'paid'
-            statusDetail = 'Оплачено'
-            bgColor = '#eaf7ef'
-          } else if (isOverdue) {
-            status = 'overdue'
-            const daysOverdue = Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24))
-            statusDetail = `Просрочка ${daysOverdue} дн.`
-            bgColor = '#fdecea'
-          } else if (waitingForReadings) {
-            statusDetail = 'Ждём показания'
-            bgColor = '#fdf6e3'
-          } else if (daysUntilDue <= (contract.reminder_days_before || 3)) {
-            statusDetail = 'Срок приближается'
-            bgColor = '#fdf6e3'
+          if (!payment.confirmed_by_landlord) {
+            if (isOverdue) {
+              status = 'overdue'
+              const daysOverdue = Math.round((todayMid.getTime() - dueMid.getTime()) / 86400000)
+              statusDetail = `Просрочка ${daysOverdue} дн.`
+              statusColor = '#c00'
+              bgColor = '#fdecea'
+            } else if (waitingForReadings) {
+              statusDetail = 'Ждём показания'
+              statusColor = '#a80'
+              bgColor = '#fdf6e3'
+            } else if (daysUntilDue === 0) {
+              statusDetail = 'Сегодня последний день оплаты'
+              statusColor = '#a80'
+              bgColor = '#fdf6e3'
+            } else if (daysUntilDue <= reminder) {
+              statusDetail = `До оплаты ${daysUntilDue} дн.`
+              statusColor = '#a80'
+              bgColor = '#fdf6e3'
+            } else {
+              statusDetail = `До оплаты ${daysUntilDue} дн.`
+              statusColor = '#080'
+              bgColor = '#eaf7ef'
+            }
           } else {
-            statusDetail = 'Ждём платёж'
-            bgColor = '#fdf6e3'
+            status = 'paid'
+            const periodDate = parseDate(payment.period)
+            const nextDue = new Date(periodDate.getFullYear(), periodDate.getMonth() + 1, contract.payment_day || 1)
+            const daysLeft = Math.round((nextDue.getTime() - todayMid.getTime()) / 86400000)
+            if (daysLeft < 0) {
+              statusDetail = `Следующий платёж просрочен на ${-daysLeft} дн.`
+              statusColor = '#c00'
+              bgColor = '#fdecea'
+            } else if (daysLeft === 0) {
+              statusDetail = 'Следующая оплата: сегодня последний день'
+              statusColor = '#a80'
+              bgColor = '#fdf6e3'
+            } else if (daysLeft <= reminder) {
+              statusDetail = `${daysLeft} дн. до следующей оплаты`
+              statusColor = '#a80'
+              bgColor = '#fdf6e3'
+            } else {
+              statusDetail = `${daysLeft} дн. до следующей оплаты`
+              statusColor = '#080'
+              bgColor = '#eaf7ef'
+            }
           }
 
           objectsWithStatus.push({
             ...obj,
             status,
             statusDetail,
+            statusColor,
             amount: baseAmount + penaltyAmount + utilitiesAmount,
             baseAmount,
             penaltyAmount,
@@ -200,7 +239,7 @@ export function LandlordDashboard() {
             paymentId,
             contract,
             payment,
-            daysOverdue: isOverdue ? Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)) : undefined,
+            daysOverdue: isOverdue ? Math.round((todayMid.getTime() - dueMid.getTime()) / 86400000) : undefined,
             waitingForReadings,
             needUtilitiesReminder,
             readingsMode,
@@ -214,7 +253,9 @@ export function LandlordDashboard() {
 
         const sortedObjects = objectsWithStatus.sort((a, b) => {
           const order: Record<string, number> = { overdue: 0, pending: 1, no_payment: 1.5, paid: 2, no_contract: 3 }
-          return (order[a.status] ?? 9) - (order[b.status] ?? 9)
+          const colorOrder = (o: ObjectWithStatus) => o.statusColor === '#c00' ? 0 : o.statusColor === '#a80' ? 1 : 2
+          const so = (order[a.status] ?? 9) - (order[b.status] ?? 9)
+          return so !== 0 ? so : colorOrder(a) - colorOrder(b)
         })
 
         setObjects(sortedObjects)
@@ -238,11 +279,11 @@ export function LandlordDashboard() {
   async function confirmPayment(objId: string, paymentId: string) {
     const { error: updError } = await supabase
       .from('payments')
-      .update({ confirmed_by_landlord: true })
+      .update({ confirmed_by_landlord: true, confirmed_at: new Date().toISOString() })
       .eq('id', paymentId)
 
     if (!updError) {
-      setObjects(prev => prev.map(o => (o.id === objId ? { ...o, status: 'paid' as const } : o)))
+      window.dispatchEvent(new Event('rentflow-refresh'))
     } else {
       alert('Не удалось подтвердить: ' + updError.message)
     }
@@ -368,28 +409,19 @@ export function LandlordDashboard() {
         })
 
       if (!notifError) {
-        setObjects(prev => prev.map(o => {
-          if (o.contract?.id === contractId && o.cashMeetings) {
-            return { ...o, cashMeetings: o.cashMeetings.filter((m: CashMeeting) => m.id !== meetingId) }
-          }
-          return o
-        }))
         alert('Время подтверждено')
+        window.dispatchEvent(new Event('rentflow-refresh'))
       }
     } else {
       alert('Ошибка: ' + meetError.message)
     }
   }
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'paid': return '🟢'
-      case 'overdue': return '🔴'
-      case 'pending': return '🟡'
-      case 'no_payment': return '🟡'
-      case 'no_contract': return '⚪'
-      default: return ''
-    }
+  const getStatusIcon = (color?: string) => {
+    if (color === '#c00') return '🔴'
+    if (color === '#a80') return '🟡'
+    if (color === '#080') return '🟢'
+    return '⚪'
   }
 
   const getNotificationText = (type: string) => {
@@ -440,8 +472,8 @@ export function LandlordDashboard() {
                     <span style={styles.expandArrow}>{isExpanded ? '▲' : '▼'}</span>
                   </div>
                   <div style={styles.statusRow}>
-                    <span>{getStatusIcon(obj.status)}</span>
-                    <span style={{ ...styles.statusText, color: obj.status === 'overdue' ? '#c00' : obj.status === 'paid' ? '#080' : '#a80' }}>{obj.statusDetail}</span>
+                    <span>{getStatusIcon(obj.statusColor)}</span>
+                    <span style={{ ...styles.statusText, color: obj.statusColor || '#666' }}>{obj.statusDetail}</span>
                   </div>
                   {obj.amount > 0 && (
                     <div style={styles.amount}>{amountBreakdown(obj)}</div>
@@ -744,7 +776,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   statusText: {
     fontSize: '14px',
-    color: '#666',
+    fontWeight: 600,
   },
   amount: {
     fontSize: '18px',
