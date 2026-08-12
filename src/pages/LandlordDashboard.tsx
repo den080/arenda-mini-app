@@ -4,7 +4,7 @@ import { useTelegramUser } from '../hooks/useTelegramUser'
 import type { Object as PropertyObject, Contract, MeterType, ObjectMeter, NotificationLog, CashSlot, CashMeeting, Payment, PenaltyRule, User } from '../types/database'
 
 interface ObjectWithStatus extends PropertyObject {
-  status: 'paid' | 'overdue' | 'pending' | 'no_contract'
+  status: 'paid' | 'overdue' | 'pending' | 'no_contract' | 'no_payment'
   statusDetail?: string
   amount: number
   penaltyAmount?: number
@@ -27,23 +27,30 @@ export function LandlordDashboard() {
   const [meterTypes, setMeterTypes] = useState<MeterType[]>([])
   const [objectMeters, setObjectMeters] = useState<Record<string, ObjectMeter[]>>({})
   const [notifications, setNotifications] = useState<NotificationLog[]>([])
-  
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
+
   // Состояния для редактора слотов
   const [newSlotDay, setNewSlotDay] = useState<number>(0)
   const [newSlotTimeFrom, setNewSlotTimeFrom] = useState<string>('')
   const [newSlotTimeTo, setNewSlotTimeTo] = useState<string>('')
 
+  function toggleExpanded(id: string) {
+    setExpandedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   useEffect(() => {
     if (!user) return
 
     async function fetchData() {
       try {
-        // Загружаем типы счётчиков
         const { data: mtData } = await supabase.from('meter_types').select('*')
         if (mtData) setMeterTypes(mtData)
 
-        // Загружаем уведомления
         const { data: notifData } = await supabase
           .from('notifications_log')
           .select('*')
@@ -79,14 +86,12 @@ export function LandlordDashboard() {
             .eq('status', 'active')
             .maybeSingle()
 
-          // Загружаем счётчики объекта
           const { data: omData } = await supabase
             .from('object_meters')
             .select('*')
             .eq('object_id', obj.id)
           allObjectMeters[obj.id] = omData || []
 
-          // Загружаем правила штрафов
           if (contract) {
             const { data: prData } = await supabase
               .from('penalty_rules')
@@ -113,15 +118,29 @@ export function LandlordDashboard() {
             .limit(1)
             .maybeSingle()
 
-          const dueDate = payment ? new Date(payment.due_date) : new Date(contract.end_date)
+          // Случай: платёж вообще не создан
+          if (!payment) {
+            objectsWithStatus.push({
+              ...obj,
+              status: 'no_payment',
+              statusDetail: 'Платёж не создан',
+              amount: contract.rent_amount,
+              penaltyAmount: 0,
+              paymentId: null,
+              contract,
+              bgColor: '#fdf6e3'
+            })
+            continue
+          }
+
+          const dueDate = new Date(payment.due_date)
           const isOverdue = today > dueDate
           const daysUntilDue = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
 
-          const baseAmount = payment?.base_amount || contract.rent_amount
-          const penaltyAmount = payment?.penalty_amount || 0
-          const paymentId = payment ? String(payment.id) : null
+          const baseAmount = payment.base_amount || contract.rent_amount
+          const penaltyAmount = payment.penalty_amount || 0
+          const paymentId = String(payment.id)
 
-          // Проверка показаний: если прошёл meter_deadline_day, а показаний за текущий месяц нет
           let waitingForReadings = false
           if (contract.meter_deadline_day && today.getDate() > contract.meter_deadline_day) {
             const { data: readingsData } = await supabase
@@ -130,17 +149,17 @@ export function LandlordDashboard() {
               .eq('contract_id', contract.id)
               .gte('submitted_at', new Date(currentYear, currentMonth, 1).toISOString())
               .lt('submitted_at', new Date(currentYear, currentMonth + 1, 1).toISOString())
-            
+
             if (!readingsData || readingsData.length === 0) {
               waitingForReadings = true
             }
           }
 
-          let status: 'paid' | 'overdue' | 'pending' | 'no_contract' = 'no_contract'
+          let status: 'paid' | 'overdue' | 'pending' = 'pending'
           let statusDetail = ''
           let bgColor = '#fff'
 
-          if (payment?.confirmed_by_landlord) {
+          if (payment.confirmed_by_landlord) {
             status = 'paid'
             statusDetail = 'Оплачено'
             bgColor = '#eaf7ef'
@@ -150,26 +169,23 @@ export function LandlordDashboard() {
             statusDetail = `Просрочка ${daysOverdue} дн.`
             bgColor = '#fdecea'
           } else if (waitingForReadings) {
-            status = 'pending'
             statusDetail = 'Ждём показания'
             bgColor = '#fdf6e3'
           } else if (daysUntilDue <= (contract.reminder_days_before || 3)) {
-            status = 'pending'
             statusDetail = 'Срок приближается'
             bgColor = '#fdf6e3'
           } else {
-            status = 'pending'
             statusDetail = 'Ждём платёж'
             bgColor = '#fdf6e3'
           }
 
-          objectsWithStatus.push({ 
-            ...obj, 
-            status, 
+          objectsWithStatus.push({
+            ...obj,
+            status,
             statusDetail,
-            amount: baseAmount + penaltyAmount, 
+            amount: baseAmount + penaltyAmount,
             penaltyAmount,
-            paymentId, 
+            paymentId,
             contract,
             payment,
             daysOverdue: isOverdue ? Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)) : undefined,
@@ -179,13 +195,12 @@ export function LandlordDashboard() {
         }
 
         setObjectMeters(allObjectMeters)
-        
-        // Сортировка: красные (overdue), затем жёлтые (pending), затем зелёные (paid), без договора в конце
+
         const sortedObjects = objectsWithStatus.sort((a, b) => {
-          const order: Record<string, number> = { overdue: 0, pending: 1, paid: 2, no_contract: 3 }
-          return order[a.status] - order[b.status]
+          const order: Record<string, number> = { overdue: 0, pending: 1, no_payment: 1.5, paid: 2, no_contract: 3 }
+          return (order[a.status] ?? 9) - (order[b.status] ?? 9)
         })
-        
+
         setObjects(sortedObjects)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Unknown error')
@@ -212,17 +227,17 @@ export function LandlordDashboard() {
 
   async function toggleMeter(objId: string, meterTypeId: string) {
     const existing = objectMeters[objId]?.find(om => om.meter_type_id === meterTypeId)
-    
+
     if (existing) {
       const { error } = await supabase
         .from('object_meters')
         .update({ is_active: !existing.is_active })
         .eq('id', existing.id)
-      
+
       if (!error) {
         setObjectMeters(prev => ({
           ...prev,
-          [objId]: prev[objId].map(om => 
+          [objId]: prev[objId].map(om =>
             om.id === existing.id ? { ...om, is_active: !om.is_active } : om
           )
         }))
@@ -234,7 +249,7 @@ export function LandlordDashboard() {
         .from('object_meters')
         .insert({ object_id: objId, meter_type_id: meterTypeId, is_active: true })
         .select()
-      
+
       if (!error && data) {
         setObjectMeters(prev => ({
           ...prev,
@@ -251,15 +266,15 @@ export function LandlordDashboard() {
     if (method === 'cash') {
       updateData.cash_slots = []
     }
-    
+
     const { error } = await supabase
       .from('contracts')
       .update(updateData)
       .eq('id', contractId)
-    
+
     if (!error) {
-      setObjects(prev => prev.map(o => 
-        o.contract?.id === contractId 
+      setObjects(prev => prev.map(o =>
+        o.contract?.id === contractId
           ? { ...o, contract: { ...o.contract!, payment_method: method, cash_slots: method === 'cash' ? [] : o.contract!.cash_slots } }
           : o
       ))
@@ -273,10 +288,10 @@ export function LandlordDashboard() {
       .from('contracts')
       .update({ cash_slots: slots })
       .eq('id', contractId)
-    
+
     if (!error) {
-      setObjects(prev => prev.map(o => 
-        o.contract?.id === contractId 
+      setObjects(prev => prev.map(o =>
+        o.contract?.id === contractId
           ? { ...o, contract: { ...o.contract!, cash_slots: slots } }
           : o
       ))
@@ -291,19 +306,18 @@ export function LandlordDashboard() {
       .from('cash_meetings')
       .update({ status: 'confirmed' })
       .eq('id', meetingId)
-    
+
     if (!meetError) {
       const { error: notifError } = await supabase
         .from('notifications_log')
-        .insert({ 
-          user_id: tenantId, 
-          type: 'cash_confirmed', 
-          related_id: meetingId, 
-          sent_at: new Date().toISOString() 
+        .insert({
+          user_id: tenantId,
+          type: 'cash_confirmed',
+          related_id: meetingId,
+          sent_at: new Date().toISOString()
         })
-      
+
       if (!notifError) {
-        // Обновляем UI - убираем подтверждённую заявку из списка
         setObjects(prev => prev.map(o => {
           if (o.contract?.id === contractId && o.cashMeetings) {
             return { ...o, cashMeetings: o.cashMeetings.filter((m: CashMeeting) => m.id !== meetingId) }
@@ -322,11 +336,11 @@ export function LandlordDashboard() {
       case 'paid': return '🟢'
       case 'overdue': return '🔴'
       case 'pending': return '🟡'
+      case 'no_payment': return '🟡'
       case 'no_contract': return '⚪'
       default: return ''
     }
   }
-
 
   const getNotificationText = (type: string) => {
     switch (type) {
@@ -338,7 +352,6 @@ export function LandlordDashboard() {
       default: return type
     }
   }
-
 
   if (userLoading || loading) {
     return <div style={styles.container}>Загрузка...</div>
@@ -357,159 +370,170 @@ export function LandlordDashboard() {
         objects.map((obj) => {
           const objMeters = objectMeters[obj.id] || []
           const contract = obj.contract
-          
+          const isExpanded = expandedIds.has(obj.id)
+
           return (
             <div key={obj.id} style={{ ...styles.card, backgroundColor: obj.bgColor || '#fff' }}>
-              <div style={styles.address}>{obj.address}</div>
-              <div style={styles.statusRow}>
-                <span>{getStatusIcon(obj.status)}</span>
-                <span style={{ ...styles.statusText, color: obj.status === 'overdue' ? '#c00' : obj.status === 'paid' ? '#080' : '#a80' }}>{obj.statusDetail}</span>
-              </div>
-              {obj.amount > 0 && (
-                <div style={styles.amount}>
-                  {obj.penaltyAmount && obj.penaltyAmount > 0 
-                    ? `${(obj.amount - obj.penaltyAmount).toFixed(2)} + ${obj.penaltyAmount.toFixed(2)} руб штраф`
-                    : `${obj.amount.toFixed(2)} ₽`
-                  }
-                </div>
-              )}
-              {obj.paymentId && obj.status === 'overdue' && (
-                <button
-                  onClick={() => confirmPayment(String(obj.id), obj.paymentId!)}
-                  style={styles.confirmButton}
-                >
-                  ✅ Подтвердить оплату
-                </button>
-              )}
-
-              {/* ⚙️ Счётчики */}
-              {contract && (
-                <div style={styles.subCard}>
-                  <div style={styles.subCardTitle}>⚙️ Счётчики</div>
-                  {meterTypes.map(mt => {
-                    const om = objMeters.find(m => m.meter_type_id === mt.id)
-                    const isActive = !!om?.is_active
-                    return (
-                      <div key={mt.id} style={styles.meterRow}>
-                        <label style={styles.meterLabel}>
-                          <input
-                            type="checkbox"
-                            checked={isActive}
-                            onChange={() => toggleMeter(obj.id, mt.id)}
-                          />
-                          {' '}{mt.label} ({mt.unit})
-                        </label>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-
-              {/* 💵 Способ оплаты */}
-              {contract && (
-                <div style={styles.subCard}>
-                  <div style={styles.subCardTitle}>💵 Способ оплаты</div>
-                  <div style={styles.methodRow}>
-                    <label style={styles.methodLabel}>
-                      <input
-                        type="radio"
-                        name={`payment-method-${obj.id}`}
-                        value="card"
-                        checked={contract.payment_method === 'card'}
-                        onChange={() => updatePaymentMethod(contract.id, 'card')}
-                      />
-                      {' '}Карта
-                    </label>
-                    <label style={styles.methodLabel}>
-                      <input
-                        type="radio"
-                        name={`payment-method-${obj.id}`}
-                        value="cash"
-                        checked={contract.payment_method === 'cash'}
-                        onChange={() => updatePaymentMethod(contract.id, 'cash')}
-                      />
-                      {' '}Наличные
-                    </label>
+              {/* Шапка карточки — кликабельная для сворачивания */}
+              <div style={styles.cardHeader} onClick={() => toggleExpanded(obj.id)}>
+                <div style={{ flex: 1 }}>
+                  <div style={styles.address}>
+                    {obj.address}
+                    <span style={styles.expandArrow}>{isExpanded ? '▲' : '▼'}</span>
                   </div>
-                  
-                  {contract.payment_method === 'cash' && (
-                    <div style={styles.slotsEditor}>
-                      <div style={styles.slotsList}>
-                        {(contract.cash_slots as CashSlot[] || []).map((slot: CashSlot, idx: number) => (
-                          <div key={idx} style={styles.slotItem}>
-                            <span>{DAYS_OF_WEEK[slot.day]} {slot.time_from}–{slot.time_to}</span>
-                            <button
-                              onClick={() => {
-                                const newSlots = (contract.cash_slots as CashSlot[]).filter((_: CashSlot, i: number) => i !== idx)
-                                saveCashSlots(contract.id, newSlots)
-                              }}
-                              style={styles.deleteButton}
-                            >
-                              ✕
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                      <div style={styles.addSlotForm}>
-                        <select
-                          value={newSlotDay}
-                          onChange={(e) => setNewSlotDay(Number(e.target.value))}
-                          style={styles.select}
-                        >
-                          {DAYS_OF_WEEK.map((d, i) => (
-                            <option key={i} value={i}>{d}</option>
-                          ))}
-                        </select>
-                        <input
-                          type="time"
-                          step={600}
-                          value={newSlotTimeFrom}
-                          onChange={(e) => setNewSlotTimeFrom(e.target.value)}
-                          style={styles.timeInput}
-                        />
-                        <input
-                          type="time"
-                          step={600}
-                          value={newSlotTimeTo}
-                          onChange={(e) => setNewSlotTimeTo(e.target.value)}
-                          style={styles.timeInput}
-                        />
-                        <button
-                          onClick={() => {
-                            const currentSlots = contract.cash_slots as CashSlot[] || []
-                            const newSlots = [...currentSlots, { day: newSlotDay, time_from: newSlotTimeFrom, time_to: newSlotTimeTo }]
-                            saveCashSlots(contract.id, newSlots)
-                            setNewSlotDay(0)
-                            setNewSlotTimeFrom('')
-                            setNewSlotTimeTo('')
-                          }}
-                          style={styles.addButton}
-                        >
-                          Добавить
-                        </button>
-                      </div>
+                  <div style={styles.statusRow}>
+                    <span>{getStatusIcon(obj.status)}</span>
+                    <span style={{ ...styles.statusText, color: obj.status === 'overdue' ? '#c00' : obj.status === 'paid' ? '#080' : '#a80' }}>{obj.statusDetail}</span>
+                  </div>
+                  {obj.amount > 0 && (
+                    <div style={styles.amount}>
+                      {obj.penaltyAmount && obj.penaltyAmount > 0
+                        ? `${(obj.amount - obj.penaltyAmount).toFixed(2)} + ${obj.penaltyAmount.toFixed(2)} руб штраф`
+                        : `${obj.amount.toFixed(2)} ₽`
+                      }
                     </div>
                   )}
                 </div>
-              )}
+              </div>
 
-              {/* 🤝 Оплата наличными */}
-              {contract && contract.payment_method === 'cash' && (
-                <div style={styles.subCard}>
-                  <div style={styles.subCardTitle}>🤝 Оплата наличными</div>
-                  <CashMeetingsList
-                    contractId={contract.id}
-                    tenantId={contract.tenant_id}
-                    onConfirm={confirmCashMeeting}
-                  />
-                </div>
+              {/* Содержимое карточки — только если раскрыта */}
+              {isExpanded && (
+                <>
+                  {obj.paymentId && obj.status === 'overdue' && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); confirmPayment(String(obj.id), obj.paymentId!) }}
+                      style={styles.confirmButton}
+                    >
+                      ✅ Подтвердить оплату
+                    </button>
+                  )}
+
+                  {contract && (
+                    <div style={styles.subCard}>
+                      <div style={styles.subCardTitle}>⚙️ Счётчики</div>
+                      {meterTypes.map(mt => {
+                        const om = objMeters.find(m => m.meter_type_id === mt.id)
+                        const isActive = !!om?.is_active
+                        return (
+                          <div key={mt.id} style={styles.meterRow}>
+                            <label style={styles.meterLabel}>
+                              <input
+                                type="checkbox"
+                                checked={isActive}
+                                onChange={() => toggleMeter(obj.id, mt.id)}
+                              />
+                              {' '}{mt.label} ({mt.unit})
+                            </label>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  {contract && (
+                    <div style={styles.subCard}>
+                      <div style={styles.subCardTitle}>💵 Способ оплаты</div>
+                      <div style={styles.methodRow}>
+                        <label style={styles.methodLabel}>
+                          <input
+                            type="radio"
+                            name={`payment-method-${obj.id}`}
+                            value="card"
+                            checked={contract.payment_method === 'card'}
+                            onChange={() => updatePaymentMethod(contract.id, 'card')}
+                          />
+                          {' '}Карта
+                        </label>
+                        <label style={styles.methodLabel}>
+                          <input
+                            type="radio"
+                            name={`payment-method-${obj.id}`}
+                            value="cash"
+                            checked={contract.payment_method === 'cash'}
+                            onChange={() => updatePaymentMethod(contract.id, 'cash')}
+                          />
+                          {' '}Наличные
+                        </label>
+                      </div>
+
+                      {contract.payment_method === 'cash' && (
+                        <div style={styles.slotsEditor}>
+                          <div style={styles.slotsList}>
+                            {(contract.cash_slots as CashSlot[] || []).map((slot: CashSlot, idx: number) => (
+                              <div key={idx} style={styles.slotItem}>
+                                <span>{DAYS_OF_WEEK[slot.day]} {slot.time_from}–{slot.time_to}</span>
+                                <button
+                                  onClick={() => {
+                                    const newSlots = (contract.cash_slots as CashSlot[]).filter((_: CashSlot, i: number) => i !== idx)
+                                    saveCashSlots(contract.id, newSlots)
+                                  }}
+                                  style={styles.deleteButton}
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                          <div style={styles.addSlotForm}>
+                            <select
+                              value={newSlotDay}
+                              onChange={(e) => setNewSlotDay(Number(e.target.value))}
+                              style={styles.select}
+                            >
+                              {DAYS_OF_WEEK.map((d, i) => (
+                                <option key={i} value={i}>{d}</option>
+                              ))}
+                            </select>
+                            <input
+                              type="time"
+                              step={600}
+                              value={newSlotTimeFrom}
+                              onChange={(e) => setNewSlotTimeFrom(e.target.value)}
+                              style={styles.timeInput}
+                            />
+                            <input
+                              type="time"
+                              step={600}
+                              value={newSlotTimeTo}
+                              onChange={(e) => setNewSlotTimeTo(e.target.value)}
+                              style={styles.timeInput}
+                            />
+                            <button
+                              onClick={() => {
+                                const currentSlots = contract.cash_slots as CashSlot[] || []
+                                const newSlots = [...currentSlots, { day: newSlotDay, time_from: newSlotTimeFrom, time_to: newSlotTimeTo }]
+                                saveCashSlots(contract.id, newSlots)
+                                setNewSlotDay(0)
+                                setNewSlotTimeFrom('')
+                                setNewSlotTimeTo('')
+                              }}
+                              style={styles.addButton}
+                            >
+                              Добавить
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {contract && contract.payment_method === 'cash' && (
+                    <div style={styles.subCard}>
+                      <div style={styles.subCardTitle}>🤝 Оплата наличными</div>
+                      <CashMeetingsList
+                        contractId={contract.id}
+                        tenantId={contract.tenant_id}
+                        onConfirm={confirmCashMeeting}
+                      />
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )
         })
       )}
 
-      {/* 🔔 Уведомления */}
       <div style={styles.card}>
         <div style={styles.cardTitle}>🔔 Уведомления</div>
         {notifications.length === 0 ? (
@@ -550,6 +574,15 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '16px',
     marginBottom: '12px',
     boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+  },
+  cardHeader: {
+    cursor: 'pointer',
+    userSelect: 'none',
+  },
+  expandArrow: {
+    fontSize: '12px',
+    color: '#999',
+    marginLeft: '8px',
   },
   cardTitle: {
     fontSize: '18px',
@@ -674,7 +707,6 @@ const styles: Record<string, React.CSSProperties> = {
   },
 }
 
-// Компонент списка заявок на наличную оплату
 function CashMeetingsList({ contractId, tenantId, onConfirm }: { contractId: string, tenantId: string, onConfirm: (id: string, cid: string, tid: string) => void }) {
   const [meetings, setMeetings] = useState<CashMeeting[]>([])
   const [loading, setLoading] = useState(true)
@@ -687,7 +719,7 @@ function CashMeetingsList({ contractId, tenantId, onConfirm }: { contractId: str
         .eq('contract_id', contractId)
         .eq('status', 'proposed')
         .order('created_at', { ascending: false })
-      
+
       if (data) setMeetings(data)
       setLoading(false)
     }
