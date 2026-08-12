@@ -451,6 +451,7 @@ export function LandlordDashboard() {
     }
   }
 
+// ===== КОНЕЦ ЧАСТИ 1. После Commit напишите «готово» — пришлю часть 2, её нужно будет вставить в конец файла =====
   const getStatusIcon = (color?: string) => {
     if (color === '#c00') return '🔴'
     if (color === '#a80') return '🟡'
