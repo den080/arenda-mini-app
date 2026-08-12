@@ -17,6 +17,18 @@ function formatSlotDate(d: any): string {
   return `${String(dt.getDate()).padStart(2, '0')}.${String(dt.getMonth() + 1).padStart(2, '0')}.${dt.getFullYear()} (${wd})`
 }
 
+function formatCardNumber(v: string): string {
+  const d = (v || '').replace(/\D/g, '').slice(0, 16)
+  return d.replace(/(.{4})/g, '$1 ').trim()
+}
+
+function formatPhoneDisplay(v: string): string {
+  const d = (v || '').replace(/\D/g, '')
+  const x = d.length === 11 && (d.startsWith('7') || d.startsWith('8')) ? d.slice(1) : d
+  if (x.length === 10) return `+7 ${x.slice(0, 3)} ${x.slice(3, 6)} ${x.slice(6, 8)} ${x.slice(8, 10)}`
+  return v || ''
+}
+
 export function TenantDashboard() {
   const { user, loading: userLoading } = useTelegramUser()
   const [data, setData] = useState<any>(null)
@@ -77,6 +89,13 @@ export function TenantDashboard() {
     window.addEventListener('rentflow-refresh', () => load())
     return () => clearInterval(interval)
   }, [user])
+
+  async function choosePayMethod(m: string) {
+    if (!data) return
+    const { error: e } = await supabase.from('contracts').update({ tenant_pay_method: m }).eq('id', data.contract.id)
+    if (e) setMsg('Ошибка: ' + e.message)
+    else load()
+  }
 
   async function claimPaid() {
     if (!data || !data.landlord) return
@@ -178,6 +197,10 @@ export function TenantDashboard() {
   const total = payment ? Number(payment.base_amount) + Number(payment.penalty_amount || 0) + utilities : Number(contract.rent_amount)
   const monthLabel = payment ? new Date(payment.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : ''
 
+  const effectiveMethod = contract.payment_method === 'both'
+    ? (contract.tenant_pay_method || 'card')
+    : contract.payment_method
+
   let statusIcon = '⚪'
   let statusText = 'Нет счёта'
   let statusColor = '#888'
@@ -264,7 +287,7 @@ export function TenantDashboard() {
       <h1 style={s.title}>💧 Моя аренда</h1>
       <div style={s.card}>
         <div style={s.address}>{obj?.address}</div>
-        <div style={s.small}>Арендодатель: {landlord?.full_name}{landlord?.phone ? ', ' + landlord.phone : ''}</div>
+        <div style={s.small}>Арендодатель: {landlord?.full_name}{landlord?.phone ? ', ' + formatPhoneDisplay(landlord.phone) : ''}</div>
       </div>
 
       {deferredTotal > 0 && (
@@ -299,7 +322,23 @@ export function TenantDashboard() {
           )
         )}
 
-        {(contract.payment_method === 'card' || contract.payment_method === 'both') && details.length > 0 && (
+        {contract.payment_method === 'both' && (
+          <div style={s.paySection}>
+            <div style={s.h3}>💰 Как вы будете платить</div>
+            <div style={s.methodRow}>
+              <label style={s.methodLabel}>
+                <input type="radio" checked={effectiveMethod === 'card'} onChange={() => choosePayMethod('card')} />
+                {' '}💳 Карта
+              </label>
+              <label style={s.methodLabel}>
+                <input type="radio" checked={effectiveMethod === 'cash'} onChange={() => choosePayMethod('cash')} />
+                {' '}💵 Наличные
+              </label>
+            </div>
+          </div>
+        )}
+
+        {effectiveMethod === 'card' && details.length > 0 && (
           <div style={s.paySection}>
             <div style={s.h3}>💳 Способы оплаты</div>
             {details.map((d: PayDetail, i: number) => (
@@ -308,8 +347,8 @@ export function TenantDashboard() {
                   <span style={s.payIcon}>{d.type === 'card' ? '💳' : '⚡'}</span>
                   <span style={s.payBank}>{d.type === 'card' ? d.bank : `СБП • ${d.bank}`}</span>
                 </div>
-                <div style={s.payNumber}>{d.number}</div>
-                <button onClick={() => copyToClipboard(d.number, d.type === 'card' ? 'номер карты' : 'номер СБП')} style={s.copyBtn}>
+                <div style={s.payNumber}>{d.type === 'card' ? formatCardNumber(d.number) : formatPhoneDisplay(d.number)}</div>
+                <button onClick={() => copyToClipboard(d.type === 'card' ? formatCardNumber(d.number) : d.number, d.type === 'card' ? 'номер карты' : 'номер СБП')} style={s.copyBtn}>
                   📋 Скопировать
                 </button>
               </div>
@@ -320,7 +359,7 @@ export function TenantDashboard() {
           </div>
         )}
 
-        {(contract.payment_method === 'cash' || contract.payment_method === 'both') && (
+        {effectiveMethod === 'cash' && (
           <div style={s.cashSection}>
             <div style={s.h3}>💵 Оплата наличными</div>
             {slots.length === 0 ? (
@@ -399,7 +438,7 @@ export function TenantDashboard() {
           <div style={s.small}>Нет уведомлений</div>
         ) : (
           notifications.map(n => (
-            <div key={n.id} style={s.notificationRow}>{getNotificationText(n.type)}</div>
+            <div key={n.id} style={s.notificationRow}>{(n as any).message || getNotificationText(n.type)}</div>
           ))
         )}
       </div>
@@ -426,6 +465,8 @@ const s: Record<string, React.CSSProperties> = {
   msg: { padding: 12, borderRadius: 10, backgroundColor: '#e8f5e9', color: '#2e7d32', marginBottom: 12, fontSize: 14 },
   paySection: { marginTop: 12, paddingTop: 12, borderTop: '1px solid #eee' },
   cashSection: { marginTop: 12, paddingTop: 12, borderTop: '1px solid #eee' },
+  methodRow: { display: 'flex', gap: 16, marginBottom: 8 },
+  methodLabel: { fontSize: 14, cursor: 'pointer' },
   payItem: { background: '#f9f9f9', borderRadius: 8, padding: 12, marginBottom: 8 },
   payHeader: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 },
   payIcon: { fontSize: 20 },
