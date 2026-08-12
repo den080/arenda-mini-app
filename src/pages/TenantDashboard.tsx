@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useTelegramUser } from '../hooks/useTelegramUser'
 
@@ -16,9 +16,6 @@ export function TenantDashboard() {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [cashMeetings, setCashMeetings] = useState<CashMeeting[]>([])
   const [selectedSlotIndex, setSelectedSlotIndex] = useState<number>(0)
-  vals.length // keep ref for auto-refresh stability
-  const valsRef = useRef(vals)
-  valsRef.current = vals
 
   async function load() {
     if (!user) return
@@ -34,6 +31,8 @@ export function TenantDashboard() {
       const { data: meters } = await supabase.from('object_meters').select('*').eq('object_id', contract.object_id).eq('is_active', true)
       const { data: meterTypes } = await supabase.from('meter_types').select('*')
       const { data: penaltyRules } = await supabase.from('penalty_rules').select('*').eq('contract_id', contract.id)
+      const { data: deferredDebts } = await supabase.from('deferred_debts').select('*').eq('contract_id', contract.id)
+      const { data: deferredReqs } = await supabase.from('deferred_requests').select('*').eq('contract_id', contract.id).order('created_at', { ascending: false }).limit(1)
 
       const { data: meetings } = await supabase
         .from('cash_meetings').select('*')
@@ -48,7 +47,12 @@ export function TenantDashboard() {
         .order('sent_at', { ascending: false }).limit(5)
       setNotifications(notifData || [])
 
-      setData({ contract, obj, landlord, payments: payments || [], meters: meters || [], meterTypes: meterTypes || [], penaltyRules: penaltyRules || [] })
+      setData({
+        contract, obj, landlord,
+        payments: payments || [], meters: meters || [], meterTypes: meterTypes || [],
+        penaltyRules: penaltyRules || [],
+        deferredDebts: deferredDebts || [], deferredReqs: deferredReqs || []
+      })
     } catch (e) {
       setError('Ошибка загрузки: ' + String(e))
     } finally {
@@ -73,6 +77,22 @@ export function TenantDashboard() {
     setMsg(e ? 'Ошибка: ' + e.message : '✅ Арендодатель уведомлён об оплате')
     const { data: notifData } = await supabase.from('notifications_log').select('*').eq('user_id', user!.id).order('sent_at', { ascending: false }).limit(5)
     setNotifications(notifData || [])
+  }
+
+  async function requestDeferral() {
+    if (!data || !data.landlord) return
+    const payment = data.payments[0]
+    if (!payment || Number(payment.penalty_amount) <= 0) return
+    const { error: e } = await supabase.from('deferred_requests').insert({
+      contract_id: data.contract.id, payment_id: payment.id,
+      amount: Number(payment.penalty_amount), status: 'proposed',
+    })
+    if (e) { setMsg('Ошибка: ' + e.message); return }
+    await supabase.from('notifications_log').insert({
+      user_id: data.landlord.id, type: 'deferred_proposed', related_id: data.contract.id, sent_at: new Date().toISOString(),
+    })
+    setMsg('✅ Заявка на отсрочку штрафа отправлена арендодателю')
+    load()
   }
 
   async function submitMeters() {
@@ -134,7 +154,7 @@ export function TenantDashboard() {
   if (error) return <div style={s.container}>{error}</div>
   if (!data) return <div style={s.container}>Нет данных</div>
 
-  const { contract, obj, landlord, payments, meters, meterTypes, penaltyRules } = data
+  const { contract, obj, landlord, payments, meters, meterTypes, penaltyRules, deferredDebts, deferredReqs } = data
   const payment = payments[0]
   const today = new Date()
   const isOverdue = payment && !payment.confirmed_by_landlord && today > new Date(payment.due_date)
@@ -149,13 +169,16 @@ export function TenantDashboard() {
   const paymentOverdueRule = penaltyRules.find((r: any) => r.violation_type === 'payment_overdue')
   const penaltyRate = paymentOverdueRule ? Number(paymentOverdueRule.rate) : 500
 
+  const deferredTotal = (deferredDebts || []).reduce((sum: number, d: any) => sum + Number(d.amount || 0), 0)
+  const lastDeferral = deferredReqs && deferredReqs[0] ? deferredReqs[0] : null
+  const deferralPending = !!(lastDeferral && lastDeferral.status === 'proposed' && payment && String(lastDeferral.payment_id) === String(payment.id))
+
   const lastMeeting = cashMeetings[0]
   const meetingStatus = !lastMeeting ? null : lastMeeting.status === 'proposed' ? { icon: '🟡', text: 'Заявка на рассмотрении' } : { icon: '🟢', text: 'Время подтверждено' }
 
   const dayNames = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
   const slots = contract.cash_slots || []
 
-  // Способы оплаты: список {type, bank, number}. Fallback для старых договоров.
   const details: PayDetail[] = Array.isArray(contract.payment_details) && contract.payment_details.length > 0
     ? contract.payment_details
     : (contract.card_number ? [{ type: 'card', bank: 'Банк не указан', number: contract.card_number }] : [])
@@ -167,6 +190,8 @@ export function TenantDashboard() {
       case 'meter_submitted': return '💦 Переданы новые показания'
       case 'cash_proposed': return '💵 Арендатор предложил время оплаты наличными'
       case 'cash_confirmed': return '🤝 Время оплаты наличными подтверждено'
+      case 'deferred_proposed': return '🙏 Заявка на отсрочку штрафа отправлена'
+      case 'deferred_confirmed': return '🤝 Арендодатель подтвердил отсрочку штрафа'
       default: return type
     }
   }
@@ -179,6 +204,13 @@ export function TenantDashboard() {
         <div style={s.small}>Арендодатель: {landlord?.full_name}{landlord?.phone ? ', ' + landlord.phone : ''}</div>
       </div>
 
+      {deferredTotal > 0 && (
+        <div style={s.suspendedBlock}>
+          ⚠️ Приостановленный долг: <b>{deferredTotal.toFixed(2)} ₽</b>
+          <div style={s.small}>Напоминание о недобросовестности — останется до конца срока аренды</div>
+        </div>
+      )}
+
       <div style={s.card}>
         <div style={s.h2}>🧾 Счёт за {monthLabel}</div>
         <div style={s.row}><span>Аренда</span><b>{Number(payment?.base_amount ?? contract.rent_amount).toFixed(2)} ₽</b></div>
@@ -190,15 +222,22 @@ export function TenantDashboard() {
           <div style={s.overdueNotice}>⚠️ +{penaltyRate} руб за каждый день просрочки</div>
         )}
 
-        {/* Способы оплаты: карта или оба — показываем список карт/СБП */}
+        {payment && !payment.confirmed_by_landlord && Number(payment.penalty_amount) > 0 && (
+          deferralPending ? (
+            <div style={s.meetingStatus}>🟡 Отсрочка штрафа: заявка на рассмотрении</div>
+          ) : (
+            <button onClick={requestDeferral} style={s.warnButton}>🙏 Попросить отсрочку штрафа</button>
+          )
+        )}
+
         {(contract.payment_method === 'card' || contract.payment_method === 'both') && details.length > 0 && (
           <div style={s.paySection}>
             <div style={s.h3}>💳 Способы оплаты</div>
-            {details.map((d, i) => (
+            {details.map((d: PayDetail, i: number) => (
               <div key={i} style={s.payItem}>
                 <div style={s.payHeader}>
                   <span style={s.payIcon}>{d.type === 'card' ? '💳' : '⚡'}</span>
-                  <span style={s.payBank}>{d.type === 'card' ? `${d.bank}` : `СБП • ${d.bank}`}</span>
+                  <span style={s.payBank}>{d.type === 'card' ? d.bank : `СБП • ${d.bank}`}</span>
                 </div>
                 <div style={s.payNumber}>{d.number}</div>
                 <button onClick={() => copyToClipboard(d.number, d.type === 'card' ? 'номер карты' : 'номер СБП')} style={s.copyBtn}>
@@ -212,7 +251,6 @@ export function TenantDashboard() {
           </div>
         )}
 
-        {/* Наличные или оба — блок со слотами */}
         {(contract.payment_method === 'cash' || contract.payment_method === 'both') && (
           <div style={s.cashSection}>
             <div style={s.h3}>💵 Оплата наличными</div>
@@ -296,7 +334,9 @@ const s: Record<string, React.CSSProperties> = {
   total: { fontSize: 17 },
   statusRow: { display: 'flex', gap: 8, alignItems: 'center', margin: '10px 0' },
   overdueNotice: { padding: 10, background: '#fdecea', color: '#c00', borderRadius: 8, fontSize: 14, fontWeight: 600, marginTop: 8 },
+  suspendedBlock: { padding: 12, backgroundColor: '#fff3e0', border: '1px solid #ffb74d', borderRadius: 12, marginBottom: 12, fontSize: 15, color: '#e65100' },
   button: { marginTop: 10, width: '100%', padding: 12, borderRadius: 10, border: 'none', background: '#2196f3', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer' },
+  warnButton: { marginTop: 10, width: '100%', padding: 12, borderRadius: 10, border: 'none', background: '#ff9800', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer' },
   input: { width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 15, marginBottom: 8, boxSizing: 'border-box' },
   msg: { padding: 12, borderRadius: 10, backgroundColor: '#e8f5e9', color: '#2e7d32', marginBottom: 12, fontSize: 14 },
   paySection: { marginTop: 12, paddingTop: 12, borderTop: '1px solid #eee' },
