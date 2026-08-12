@@ -2,23 +2,9 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useTelegramUser } from '../hooks/useTelegramUser'
 
-interface Notification {
-  id: string
-  user_id: string
-  type: string
-  related_id: string
-  sent_at: string
-}
-
-interface CashMeeting {
-  id: string
-  contract_id: string
-  payment_id: string
-  day: number
-  time_from: string
-  time_to: string
-  status: 'proposed' | 'confirmed'
-}
+interface PayDetail { type: 'card' | 'sbp'; bank: string; number: string }
+interface Notification { id: string; user_id: string; type: string; related_id: string; sent_at: string }
+interface CashMeeting { id: string; contract_id: string; payment_id: string; day: number; time_from: string; time_to: string; status: 'proposed' | 'confirmed' }
 
 export function TenantDashboard() {
   const { user, loading: userLoading } = useTelegramUser()
@@ -30,6 +16,7 @@ export function TenantDashboard() {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [cashMeetings, setCashMeetings] = useState<CashMeeting[]>([])
   const [selectedSlotIndex, setSelectedSlotIndex] = useState<number>(0)
+  vals.length // keep ref for auto-refresh stability
   const valsRef = useRef(vals)
   valsRef.current = vals
 
@@ -46,29 +33,22 @@ export function TenantDashboard() {
       const { data: payments } = await supabase.from('payments').select('*').eq('contract_id', contract.id).order('period', { ascending: false })
       const { data: meters } = await supabase.from('object_meters').select('*').eq('object_id', contract.object_id).eq('is_active', true)
       const { data: meterTypes } = await supabase.from('meter_types').select('*')
+      const { data: penaltyRules } = await supabase.from('penalty_rules').select('*').eq('contract_id', contract.id)
 
       const { data: meetings } = await supabase
-        .from('cash_meetings')
-        .select('*')
+        .from('cash_meetings').select('*')
         .eq('contract_id', contract.id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-
-      if (meetings && meetings.length > 0) {
-        setCashMeetings(meetings)
-      } else {
-        setCashMeetings([])
-      }
+        .order('created_at', { ascending: false }).limit(1)
+      if (meetings && meetings.length > 0) setCashMeetings(meetings)
+      else setCashMeetings([])
 
       const { data: notifData } = await supabase
-        .from('notifications_log')
-        .select('*')
+        .from('notifications_log').select('*')
         .eq('user_id', user!.id)
-        .order('sent_at', { ascending: false })
-        .limit(5)
+        .order('sent_at', { ascending: false }).limit(5)
       setNotifications(notifData || [])
 
-      setData({ contract, obj, landlord, payments: payments || [], meters: meters || [], meterTypes: meterTypes || [] })
+      setData({ contract, obj, landlord, payments: payments || [], meters: meters || [], meterTypes: meterTypes || [], penaltyRules: penaltyRules || [] })
     } catch (e) {
       setError('Ошибка загрузки: ' + String(e))
     } finally {
@@ -88,18 +68,10 @@ export function TenantDashboard() {
     const payment = data.payments[0]
     if (!payment) return
     const { error: e } = await supabase.from('notifications_log').insert({
-      user_id: data.landlord.id,
-      type: 'payment_claimed',
-      related_id: payment.id,
-      sent_at: new Date().toISOString(),
+      user_id: data.landlord.id, type: 'payment_claimed', related_id: payment.id, sent_at: new Date().toISOString(),
     })
     setMsg(e ? 'Ошибка: ' + e.message : '✅ Арендодатель уведомлён об оплате')
-    const { data: notifData } = await supabase
-      .from('notifications_log')
-      .select('*')
-      .eq('user_id', user!.id)
-      .order('sent_at', { ascending: false })
-      .limit(5)
+    const { data: notifData } = await supabase.from('notifications_log').select('*').eq('user_id', user!.id).order('sent_at', { ascending: false }).limit(5)
     setNotifications(notifData || [])
   }
 
@@ -117,17 +89,9 @@ export function TenantDashboard() {
     setVals({})
     if (!e) {
       await supabase.from('notifications_log').insert({
-        user_id: user!.id,
-        type: 'meter_submitted',
-        related_id: data.contract.id,
-        sent_at: new Date().toISOString()
+        user_id: user!.id, type: 'meter_submitted', related_id: data.contract.id, sent_at: new Date().toISOString()
       })
-      const { data: notifData } = await supabase
-        .from('notifications_log')
-        .select('*')
-        .eq('user_id', user!.id)
-        .order('sent_at', { ascending: false })
-        .limit(5)
+      const { data: notifData } = await supabase.from('notifications_log').select('*').eq('user_id', user!.id).order('sent_at', { ascending: false }).limit(5)
       setNotifications(notifData || [])
     }
   }
@@ -136,53 +100,41 @@ export function TenantDashboard() {
     if (!data || !data.contract) return
     const slots = data.contract.cash_slots || []
     if (slots.length === 0) { setMsg('Нет доступных слотов времени'); return }
-
     const slot = slots[selectedSlotIndex]
     if (!slot) return
-
     const payment = data.payments[0]
     const meetingData = {
       contract_id: data.contract.id,
       payment_id: payment ? payment.id : null,
-      day: slot.day,
-      time_from: slot.time_from,
-      time_to: slot.time_to,
+      day: slot.day, time_from: slot.time_from, time_to: slot.time_to,
       status: 'proposed' as const
     }
-
     const { error: e } = await supabase.from('cash_meetings').insert(meetingData)
-    if (e) {
-      setMsg('Ошибка: ' + e.message)
-      return
-    }
-
+    if (e) { setMsg('Ошибка: ' + e.message); return }
     await supabase.from('notifications_log').insert({
-      user_id: data.landlord.id,
-      type: 'cash_proposed',
-      related_id: data.contract.id,
-      sent_at: new Date().toISOString()
+      user_id: data.landlord.id, type: 'cash_proposed', related_id: data.contract.id, sent_at: new Date().toISOString()
     })
-
-    const { data: newMeeting } = await supabase
-      .from('cash_meetings')
-      .select('*')
-      .eq('contract_id', data.contract.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    if (newMeeting) {
-      setCashMeetings([newMeeting])
-    }
-
+    const { data: newMeeting } = await supabase.from('cash_meetings').select('*')
+      .eq('contract_id', data.contract.id).order('created_at', { ascending: false }).limit(1).maybeSingle()
+    if (newMeeting) setCashMeetings([newMeeting])
     setMsg('✅ Заявка отправлена арендодателю')
+  }
+
+  async function copyToClipboard(text: string, label: string) {
+    try {
+      await navigator.clipboard.writeText(text)
+      setMsg(`✅ Скопировано: ${label}`)
+      setTimeout(() => setMsg(null), 2000)
+    } catch {
+      setMsg('Не удалось скопировать')
+    }
   }
 
   if (userLoading || loading) return <div style={s.container}>Загрузка...</div>
   if (error) return <div style={s.container}>{error}</div>
   if (!data) return <div style={s.container}>Нет данных</div>
 
-  const { contract, obj, landlord, payments, meters, meterTypes } = data
+  const { contract, obj, landlord, payments, meters, meterTypes, penaltyRules } = data
   const payment = payments[0]
   const today = new Date()
   const isOverdue = payment && !payment.confirmed_by_landlord && today > new Date(payment.due_date)
@@ -194,17 +146,19 @@ export function TenantDashboard() {
     : { icon: '⚪', text: 'Нет счёта' }
   const monthLabel = payment ? new Date(payment.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : ''
 
+  const paymentOverdueRule = penaltyRules.find((r: any) => r.violation_type === 'payment_overdue')
+  const penaltyRate = paymentOverdueRule ? Number(paymentOverdueRule.rate) : 500
+
   const lastMeeting = cashMeetings[0]
-  const getMeetingStatus = () => {
-    if (!lastMeeting) return null
-    if (lastMeeting.status === 'proposed') return { icon: '🟡', text: 'Заявка на рассмотрении' }
-    if (lastMeeting.status === 'confirmed') return { icon: '🟢', text: 'Время подтверждено' }
-    return null
-  }
-  const meetingStatus = getMeetingStatus()
+  const meetingStatus = !lastMeeting ? null : lastMeeting.status === 'proposed' ? { icon: '🟡', text: 'Заявка на рассмотрении' } : { icon: '🟢', text: 'Время подтверждено' }
 
   const dayNames = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
   const slots = contract.cash_slots || []
+
+  // Способы оплаты: список {type, bank, number}. Fallback для старых договоров.
+  const details: PayDetail[] = Array.isArray(contract.payment_details) && contract.payment_details.length > 0
+    ? contract.payment_details
+    : (contract.card_number ? [{ type: 'card', bank: 'Банк не указан', number: contract.card_number }] : [])
 
   const getNotificationText = (type: string) => {
     switch (type) {
@@ -232,30 +186,43 @@ export function TenantDashboard() {
         <div style={s.row}><span>Итого</span><b style={s.total}>{total.toFixed(2)} ₽</b></div>
         {payment && <div style={s.small}>Оплатить до: {new Date(payment.due_date).toLocaleDateString('ru-RU')}</div>}
         <div style={s.statusRow}><span>{status.icon}</span><span>{status.text}</span></div>
+        {isOverdue && (
+          <div style={s.overdueNotice}>⚠️ +{penaltyRate} руб за каждый день просрочки</div>
+        )}
 
-        {contract.payment_method === 'card' ? (
-          <>
-            {contract.card_number && <div style={s.small}>💳 Оплата на карту: {contract.card_number}</div>}
+        {/* Способы оплаты: карта или оба — показываем список карт/СБП */}
+        {(contract.payment_method === 'card' || contract.payment_method === 'both') && details.length > 0 && (
+          <div style={s.paySection}>
+            <div style={s.h3}>💳 Способы оплаты</div>
+            {details.map((d, i) => (
+              <div key={i} style={s.payItem}>
+                <div style={s.payHeader}>
+                  <span style={s.payIcon}>{d.type === 'card' ? '💳' : '⚡'}</span>
+                  <span style={s.payBank}>{d.type === 'card' ? `${d.bank}` : `СБП • ${d.bank}`}</span>
+                </div>
+                <div style={s.payNumber}>{d.number}</div>
+                <button onClick={() => copyToClipboard(d.number, d.type === 'card' ? 'номер карты' : 'номер СБП')} style={s.copyBtn}>
+                  📋 Скопировать
+                </button>
+              </div>
+            ))}
             {!payment?.confirmed_by_landlord && (
               <button onClick={claimPaid} style={s.button}>✅ Я оплатил</button>
             )}
-          </>
-        ) : (
+          </div>
+        )}
+
+        {/* Наличные или оба — блок со слотами */}
+        {(contract.payment_method === 'cash' || contract.payment_method === 'both') && (
           <div style={s.cashSection}>
             <div style={s.h3}>💵 Оплата наличными</div>
             {slots.length === 0 ? (
               <div style={s.small}>Арендодатель ещё не указал слоты времени</div>
             ) : (
               <>
-                <select
-                  value={selectedSlotIndex}
-                  onChange={(e) => setSelectedSlotIndex(Number(e.target.value))}
-                  style={s.select}
-                >
+                <select value={selectedSlotIndex} onChange={(e) => setSelectedSlotIndex(Number(e.target.value))} style={s.select}>
                   {slots.map((slot: any, idx: number) => (
-                    <option key={idx} value={idx}>
-                      {dayNames[slot.day - 1]} {slot.time_from}–{slot.time_to}
-                    </option>
+                    <option key={idx} value={idx}>{dayNames[slot.day - 1]} {slot.time_from}–{slot.time_to}</option>
                   ))}
                 </select>
                 <button onClick={proposeCashMeeting} style={s.button}>Предложить время</button>
@@ -273,6 +240,7 @@ export function TenantDashboard() {
       {meters.length > 0 && (
         <div style={s.card}>
           <div style={s.h2}>💦 Передать показания</div>
+          <div style={s.small}>Срок подачи: до {contract.meter_deadline_day} числа</div>
           {meters.map((m: any) => {
             const t = meterTypes.find((x: any) => x.id === m.meter_type_id)
             return (
@@ -308,9 +276,7 @@ export function TenantDashboard() {
           <div style={s.small}>Нет уведомлений</div>
         ) : (
           notifications.map(n => (
-            <div key={n.id} style={s.notificationRow}>
-              {getNotificationText(n.type)}
-            </div>
+            <div key={n.id} style={s.notificationRow}>{getNotificationText(n.type)}</div>
           ))
         )}
       </div>
@@ -329,10 +295,18 @@ const s: Record<string, React.CSSProperties> = {
   row: { display: 'flex', justifyContent: 'space-between', fontSize: 14, marginBottom: 6 },
   total: { fontSize: 17 },
   statusRow: { display: 'flex', gap: 8, alignItems: 'center', margin: '10px 0' },
+  overdueNotice: { padding: 10, background: '#fdecea', color: '#c00', borderRadius: 8, fontSize: 14, fontWeight: 600, marginTop: 8 },
   button: { marginTop: 10, width: '100%', padding: 12, borderRadius: 10, border: 'none', background: '#2196f3', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer' },
   input: { width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 15, marginBottom: 8, boxSizing: 'border-box' },
   msg: { padding: 12, borderRadius: 10, backgroundColor: '#e8f5e9', color: '#2e7d32', marginBottom: 12, fontSize: 14 },
+  paySection: { marginTop: 12, paddingTop: 12, borderTop: '1px solid #eee' },
   cashSection: { marginTop: 12, paddingTop: 12, borderTop: '1px solid #eee' },
+  payItem: { background: '#f9f9f9', borderRadius: 8, padding: 12, marginBottom: 8 },
+  payHeader: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 },
+  payIcon: { fontSize: 20 },
+  payBank: { fontWeight: 600, fontSize: 14 },
+  payNumber: { fontFamily: 'monospace', fontSize: 16, fontWeight: 500, marginBottom: 8, wordBreak: 'break-all' as const },
+  copyBtn: { padding: '8px 14px', borderRadius: 8, border: '1px solid #2196f3', background: '#fff', color: '#2196f3', fontSize: 13, fontWeight: 600, cursor: 'pointer' },
   select: { width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 15, marginBottom: 8, boxSizing: 'border-box' },
   meetingStatus: { marginTop: 10, padding: 10, backgroundColor: '#fff3e0', borderRadius: 8, fontSize: 14 },
   notificationRow: { padding: '8px 0', borderBottom: '1px solid #eee', fontSize: 14, color: '#333' },
