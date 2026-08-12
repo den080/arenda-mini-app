@@ -39,7 +39,7 @@ export default function App() {
         <button style={mode === 'tenant' ? st.tabActive : st.tab} onClick={() => setMode('tenant')}>💧 Арендатор</button>
       </div>
       {mode === 'landlord' ? <LandlordDashboard /> : <TenantDashboard />}
-      <ObjectManager />
+      {mode === 'landlord' && <ObjectManager />}
     </div>
   )
 }
