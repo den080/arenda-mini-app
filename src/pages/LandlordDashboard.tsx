@@ -12,6 +12,8 @@ interface ObjectWithStatus extends PropertyObject {
   contract?: Contract & { tenant?: { full_name: string; phone: string } }
   cashMeetings?: CashMeeting[]
   payment?: Payment
+  daysOverdue?: number
+  waitingForReadings?: boolean
 }
 
 const DAYS_OF_WEEK = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
