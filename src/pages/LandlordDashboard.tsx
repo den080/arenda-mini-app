@@ -194,7 +194,7 @@ export function LandlordDashboard() {
     }
 
     fetchData()
-    window.addEventListener('rentflow-refresh', () => fetchData())
+    window.addEventListener('rentflow-refresh', () => fetchData())   ; setInterval(() => fetchData(), 30000)
   }, [user])
 
   async function confirmPayment(objId: string, paymentId: string) {
