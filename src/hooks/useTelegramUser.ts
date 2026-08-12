@@ -4,16 +4,31 @@ import type { User } from '../types/database'
 
 let cachedUser: User | null = null
 
+function normalizePhone(input: string): string {
+  let cleaned = input.replace(/[\s\-\(\)]/g, '')
+  if (cleaned.startsWith('8') && cleaned.length === 11) {
+    cleaned = '+7' + cleaned.slice(1)
+  }
+  if (!cleaned.startsWith('+')) {
+    cleaned = '+' + cleaned
+  }
+  return cleaned
+}
+
 export function useTelegramUser() {
   const [user, setUser] = useState<User | null>(cachedUser)
   const [loading, setLoading] = useState<boolean>(!cachedUser)
   const [error, setError] = useState<string | null>(null)
 
-  async function loginWithId(telegramId: string) {
+  async function loginWithId(input: string) {
     setLoading(true)
     setError(null)
+    
+    const isPhone = /\d/.test(input) && input.length >= 10
+    const searchValue = isPhone ? normalizePhone(input) : input
+
     try {
-      localStorage.setItem('rentflow_tg_id', telegramId)
+      localStorage.setItem('rentflow_tg_id', input)
     } catch {
       // ignore
     }
@@ -21,7 +36,7 @@ export function useTelegramUser() {
       const { data, error: dbError } = await supabase
         .from('users')
         .select('*')
-        .or(`telegram_id.eq."${telegramId}",phone.eq."${telegramId}"`)
+        .or(`telegram_id.eq."${searchValue}",phone.eq."${searchValue}"`)
         .limit(1)
       const found = data && data[0]
       if (dbError) setError('Ошибка базы: ' + dbError.message)
