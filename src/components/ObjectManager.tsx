@@ -51,6 +51,7 @@ export function ObjectManager() {
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [tgId, setTgId] = useState('')
+  const [startDate, setStartDate] = useState('')
   const [paymentDay, setPaymentDay] = useState('')
   const [endDate, setEndDate] = useState('')
   const [meterDay, setMeterDay] = useState('')
@@ -68,6 +69,7 @@ export function ObjectManager() {
   const [eNotes, setENotes] = useState('')
   const [eName, setEName] = useState('')
   const [ePhone, setEPhone] = useState('')
+  const [eStartDate, setEStartDate] = useState('')
   const [eRent, setERent] = useState('')
   const [ePaymentDay, setEPaymentDay] = useState('')
   const [eMeterDay, setEMeterDay] = useState('')
@@ -117,11 +119,13 @@ export function ObjectManager() {
         .insert({ landlord_id: landlordId, address, notes: notes || null }).select().single()
       if (objErr) { setMsg('Ошибка: ' + objErr.message); return }
       const firstCard = details.find(d => d.type === 'card')
+      const startISO = startDate || new Date().toISOString().slice(0, 10)
       const { data: contract, error: conErr } = await supabase.from('contracts').insert({
         object_id: obj.id, tenant_id: tenantId,
         rent_amount: Number(rent) || 0,
         payment_day: Number(paymentDay) || 1,
         meter_deadline_day: Number(meterDay) || 5,
+        start_date: startISO,
         end_date: endDate || null,
         payment_method: method,
         card_number: firstCard ? firstCard.number : null,
@@ -134,16 +138,21 @@ export function ObjectManager() {
         { contract_id: contract.id, violation_type: 'payment_overdue', rate: Number(penPay) || 500, rate_unit: 'per_day_rub', starts_after_days: 0 },
         { contract_id: contract.id, violation_type: 'readings_overdue', rate: Number(penRead) || 100, rate_unit: 'per_day_rub', starts_after_days: 0 },
       ])
+      // Первый платёж: отсчёт только с дня добавления — если день платежа в этом месяце уже прошёл,
+      // срок ставим на сегодня, чтобы старые даты не считались долгом
       const now = new Date()
+      const payDay = Number(paymentDay) || 1
+      let due = new Date(now.getFullYear(), now.getMonth(), payDay)
+      const todayMid = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      if (due < todayMid) due = todayMid
       const period = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10)
-      const due = new Date(now.getFullYear(), now.getMonth(), Number(paymentDay) || 1).toISOString().slice(0, 10)
       await supabase.from('payments').insert({
-        contract_id: contract.id, period, due_date: due,
+        contract_id: contract.id, period, due_date: due.toISOString().slice(0, 10),
         base_amount: Number(rent) || 0, penalty_amount: 0,
       })
       setMsg('✅ Объект, договор и первый платёж сохранены')
       setShowForm(false)
-      setAddress(''); setNotes(''); setName(''); setPhone(''); setTgId(''); setRent(''); setDetails([])
+      setAddress(''); setNotes(''); setName(''); setPhone(''); setTgId(''); setRent(''); setStartDate(''); setDetails([])
       load()
     } finally {
       setSaving(false)
@@ -157,6 +166,7 @@ export function ObjectManager() {
     const { data: contract } = await supabase.from('contracts').select('*').eq('object_id', o.id).eq('status', 'active').maybeSingle()
     if (contract) {
       setEditContractId(contract.id)
+      setEStartDate(contract.start_date || '')
       setERent(String(contract.rent_amount ?? ''))
       setEPaymentDay(String(contract.payment_day ?? ''))
       setEMeterDay(String(contract.meter_deadline_day ?? ''))
@@ -191,6 +201,7 @@ export function ObjectManager() {
         rent_amount: Number(eRent) || 0,
         payment_day: Number(ePaymentDay) || 1,
         meter_deadline_day: Number(eMeterDay) || 5,
+        start_date: eStartDate || null,
         end_date: eEndDate || null,
         payment_method: eMethod,
         card_number: firstCard ? firstCard.number : null,
@@ -226,6 +237,8 @@ export function ObjectManager() {
       await supabase.from('payments').delete().in('contract_id', ids)
       await supabase.from('penalty_rules').delete().in('contract_id', ids)
       await supabase.from('cash_meetings').delete().in('contract_id', ids)
+      await supabase.from('deferred_requests').delete().in('contract_id', ids)
+      await supabase.from('deferred_debts').delete().in('contract_id', ids)
       await supabase.from('contracts').delete().in('id', ids)
     }
     await supabase.from('object_meters').delete().eq('object_id', id)
@@ -262,6 +275,8 @@ export function ObjectManager() {
           <input style={s.input} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+79995553322 или 89995553322" />
           <div style={s.small}>Telegram ID контрагента</div>
           <input style={s.input} value={tgId} onChange={(e) => setTgId(e.target.value)} placeholder="Необязательно" />
+          <div style={s.small}>Начало договора</div>
+          <input style={s.input} type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
           <div style={s.small}>Сумма аренды, руб</div>
           <input style={s.input} value={rent} onChange={(e) => setRent(e.target.value)} placeholder="85000" inputMode="numeric" />
           <div style={s.small}>День платежа (число месяца)</div>
@@ -300,6 +315,8 @@ export function ObjectManager() {
               <input style={s.input} value={eName} onChange={(e) => setEName(e.target.value)} />
               <div style={s.small}>Телефон контрагента</div>
               <input style={s.input} value={ePhone} onChange={(e) => setEPhone(e.target.value)} />
+              <div style={s.small}>Начало договора</div>
+              <input style={s.input} type="date" value={eStartDate} onChange={(e) => setEStartDate(e.target.value)} />
               <div style={s.small}>Сумма аренды, руб</div>
               <input style={s.input} value={eRent} onChange={(e) => setERent(e.target.value)} inputMode="numeric" />
               <div style={s.small}>День платежа</div>
