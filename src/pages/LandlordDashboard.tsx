@@ -41,6 +41,9 @@ export function LandlordDashboard() {
   const [notifications, setNotifications] = useState<NotificationLog[]>([])
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
   const [utilInputs, setUtilInputs] = useState<Record<string, string>>({})
+  const [history, setHistory] = useState<any[]>([])
+  const [statsPeriod, setStatsPeriod] = useState<'6m' | '12m'>('6m')
+  const [statsObject, setStatsObject] = useState<string>('all')
 
   const [newSlotDay, setNewSlotDay] = useState<number>(0)
   const [newSlotTimeFrom, setNewSlotTimeFrom] = useState<string>('')
@@ -78,12 +81,14 @@ export function LandlordDashboard() {
 
         if (!objectsData) {
           setObjects([])
+          setHistory([])
           setLoading(false)
           return
         }
 
         const objectsWithStatus: ObjectWithStatus[] = []
         const allObjectMeters: Record<string, ObjectMeter[]> = {}
+        const allHistory: any[] = []
 
         const today = new Date()
         const todayMid = new Date(today.getFullYear(), today.getMonth(), today.getDate())
@@ -111,6 +116,14 @@ export function LandlordDashboard() {
 
           const readingsMode = contract.readings_mode || 'manual'
           const reminder = contract.reminder_days_before || 3
+
+          const { data: allPays } = await supabase
+            .from('payments')
+            .select('*')
+            .eq('contract_id', contract.id)
+          for (const p of allPays || []) {
+            allHistory.push({ ...p, objId: obj.id, address: obj.address })
+          }
 
           const { data: dReq } = await supabase
             .from('deferred_requests').select('*')
@@ -250,6 +263,7 @@ export function LandlordDashboard() {
         }
 
         setObjectMeters(allObjectMeters)
+        setHistory(allHistory)
 
         const sortedObjects = objectsWithStatus.sort((a, b) => {
           const order: Record<string, number> = { overdue: 0, pending: 1, no_payment: 1.5, paid: 2, no_contract: 3 }
@@ -275,6 +289,55 @@ export function LandlordDashboard() {
       clearInterval(interval)
     }
   }, [user])
+
+  async function setMeterActive(objId: string, code: string, active: boolean) {
+    const mt = meterTypes.find(t => t.code === code)
+    if (!mt) return
+    const existing = (objectMeters[objId] || []).find(om => om.meter_type_id === mt.id)
+    if (existing) {
+      if (!!existing.is_active !== active) {
+        const { error } = await supabase.from('object_meters').update({ is_active: active }).eq('id', existing.id)
+        if (!error) {
+          setObjectMeters(prev => ({
+            ...prev,
+            [objId]: (prev[objId] || []).map(om => om.id === existing.id ? { ...om, is_active: active } : om)
+          }))
+        }
+      }
+    } else if (active) {
+      const { data, error } = await supabase.from('object_meters').insert({ object_id: objId, meter_type_id: mt.id, is_active: true }).select()
+      if (!error && data) {
+        setObjectMeters(prev => ({ ...prev, [objId]: [...(prev[objId] || []), data[0]] }))
+      }
+    }
+  }
+
+  function isMeterActive(objId: string, code: string): boolean {
+    const mt = meterTypes.find(t => t.code === code)
+    if (!mt) return false
+    return !!(objectMeters[objId] || []).find(om => om.meter_type_id === mt.id && om.is_active)
+  }
+
+  function getElecMode(objId: string): string {
+    if (isMeterActive(objId, 'electricity_peak') && isMeterActive(objId, 'electricity_semipeak') && isMeterActive(objId, 'electricity_night')) return '3'
+    if (isMeterActive(objId, 'electricity_day') && isMeterActive(objId, 'electricity_night')) return '2'
+    if (isMeterActive(objId, 'electricity_single')) return '1'
+    return 'none'
+  }
+
+  async function setElecMode(objId: string, mode: string) {
+    const need: Record<string, string[]> = {
+      'none': [],
+      '1': ['electricity_single'],
+      '2': ['electricity_day', 'electricity_night'],
+      '3': ['electricity_peak', 'electricity_semipeak', 'electricity_night'],
+    }
+    const all = ['electricity_single', 'electricity_day', 'electricity_night', 'electricity_peak', 'electricity_semipeak']
+    for (const code of all) {
+      await setMeterActive(objId, code, (need[mode] || []).includes(code))
+    }
+    window.dispatchEvent(new Event('rentflow-refresh'))
+  }
 
   async function confirmPayment(_objId: string, paymentId: string) {
     const { error: updError } = await supabase
@@ -314,42 +377,6 @@ export function LandlordDashboard() {
       user_id: tenantId, type: 'deferred_confirmed', related_id: contractId, sent_at: new Date().toISOString()
     })
     window.dispatchEvent(new Event('rentflow-refresh'))
-  }
-
-  async function toggleMeter(objId: string, meterTypeId: string) {
-    const existing = objectMeters[objId]?.find(om => om.meter_type_id === meterTypeId)
-
-    if (existing) {
-      const { error } = await supabase
-        .from('object_meters')
-        .update({ is_active: !existing.is_active })
-        .eq('id', existing.id)
-
-      if (!error) {
-        setObjectMeters(prev => ({
-          ...prev,
-          [objId]: prev[objId].map(om =>
-            om.id === existing.id ? { ...om, is_active: !om.is_active } : om
-          )
-        }))
-      } else {
-        alert('Ошибка: ' + error.message)
-      }
-    } else {
-      const { data, error } = await supabase
-        .from('object_meters')
-        .insert({ object_id: objId, meter_type_id: meterTypeId, is_active: true })
-        .select()
-
-      if (!error && data) {
-        setObjectMeters(prev => ({
-          ...prev,
-          [objId]: [...(prev[objId] || []), data[0]]
-        }))
-      } else if (error) {
-        alert('Ошибка: ' + error.message)
-      }
-    }
   }
 
   async function updatePaymentMethod(contractId: string, method: 'card' | 'cash' | 'both') {
@@ -444,6 +471,23 @@ export function LandlordDashboard() {
     return parts.join(' + ')
   }
 
+  const todayNow = new Date()
+  const todayMidNow = new Date(todayNow.getFullYear(), todayNow.getMonth(), todayNow.getDate())
+  const periodStart = statsPeriod === '6m'
+    ? new Date(todayMidNow.getFullYear(), todayMidNow.getMonth() - 5, 1)
+    : new Date(todayMidNow.getFullYear() - 1, todayMidNow.getMonth(), 1)
+  const filteredHistory = history
+    .filter(h => (statsObject === 'all' || h.objId === statsObject) && parseDate(h.period) >= periodStart)
+    .sort((a, b) => parseDate(b.period).getTime() - parseDate(a.period).getTime())
+  const collected = filteredHistory
+    .filter(h => h.confirmed_by_landlord)
+    .reduce((s: number, h: any) => s + Number(h.base_amount || 0) + Number(h.penalty_amount || 0) + Number(h.utilities_amount || 0), 0)
+  const penaltiesAccrued = filteredHistory.reduce((s: number, h: any) => s + Number(h.penalty_amount || 0), 0)
+  const confirmedCount = filteredHistory.filter(h => h.confirmed_by_landlord).length
+  const onTimeCount = filteredHistory.filter(h => h.confirmed_by_landlord && h.confirmed_at && new Date(h.confirmed_at) <= parseDate(h.due_date)).length
+  const onTimePct = confirmedCount > 0 ? Math.round((onTimeCount / confirmedCount) * 100) : 0
+  const overdueNow = objects.filter(o => o.statusColor === '#c00').length
+
   if (userLoading || loading) {
     return <div style={styles.container}>Загрузка...</div>
   }
@@ -459,9 +503,9 @@ export function LandlordDashboard() {
         <p style={styles.empty}>Объектов нет</p>
       ) : (
         objects.map((obj) => {
-          const objMeters = objectMeters[obj.id] || []
           const contract = obj.contract
           const isExpanded = expandedIds.has(obj.id)
+          const elecMode = getElecMode(obj.id)
 
           return (
             <div key={obj.id} style={{ ...styles.card, backgroundColor: obj.bgColor || '#fff' }}>
@@ -541,24 +585,53 @@ export function LandlordDashboard() {
                   {contract && (
                     <div style={styles.subCard}>
                       <div style={styles.subCardTitle}>⚙️ Счётчики</div>
-                      {obj.readingsMode === 'auto' && <div style={styles.smallNote}>💡 Показания передаются автоматически</div>}
-                      {obj.readingsMode === 'self' && <div style={styles.smallNote}>💡 Арендатор платит полную квитанцию сам</div>}
-                      {meterTypes.map(mt => {
-                        const om = objMeters.find(m => m.meter_type_id === mt.id)
-                        const isActive = !!om?.is_active
-                        return (
-                          <div key={mt.id} style={styles.meterRow}>
-                            <label style={styles.meterLabel}>
-                              <input
-                                type="checkbox"
-                                checked={isActive}
-                                onChange={() => toggleMeter(obj.id, mt.id)}
-                              />
-                              {' '}{mt.label} ({mt.unit})
-                            </label>
-                          </div>
-                        )
-                      })}
+                      <div style={styles.smallNote}>⚡ Электричество</div>
+                      {[
+                        { v: 'none', l: 'Не установлено' },
+                        { v: '1', l: '1-тарифный' },
+                        { v: '2', l: '2-тарифный (день/ночь)' },
+                        { v: '3', l: '3-тарифный (пик/полупик/ночь)' },
+                      ].map(opt => (
+                        <div key={opt.v} style={styles.meterRow}>
+                          <label style={styles.meterLabel}>
+                            <input
+                              type="radio"
+                              name={`elec-${obj.id}`}
+                              checked={elecMode === opt.v}
+                              onChange={() => setElecMode(obj.id, opt.v)}
+                            />
+                            {' '}{opt.l}
+                          </label>
+                        </div>
+                      ))}
+                      <div style={styles.smallNote}>💧 Вода</div>
+                      <div style={styles.meterRow}>
+                        <label style={styles.meterLabel}>
+                          <input type="checkbox" checked={isMeterActive(obj.id, 'water_cold')} onChange={(e) => { setMeterActive(obj.id, 'water_cold', e.target.checked); window.dispatchEvent(new Event('rentflow-refresh')) }} />
+                          {' '}Холодная
+                        </label>
+                      </div>
+                      <div style={styles.meterRow}>
+                        <label style={styles.meterLabel}>
+                          <input type="checkbox" checked={isMeterActive(obj.id, 'water_hot')} onChange={(e) => { setMeterActive(obj.id, 'water_hot', e.target.checked); window.dispatchEvent(new Event('rentflow-refresh')) }} />
+                          {' '}Горячая
+                        </label>
+                      </div>
+                      <div style={styles.smallNote}>🔥 Отопление</div>
+                      <div style={styles.meterRow}>
+                        <label style={styles.meterLabel}>
+                          <input type="checkbox" checked={isMeterActive(obj.id, 'heat')} onChange={(e) => { setMeterActive(obj.id, 'heat', e.target.checked); window.dispatchEvent(new Event('rentflow-refresh')) }} />
+                          {' '}Теплосчётчик установлен
+                        </label>
+                      </div>
+                      {meterTypes.find(t => t.code === 'gas') && (
+                        <div style={styles.meterRow}>
+                          <label style={styles.meterLabel}>
+                            <input type="checkbox" checked={isMeterActive(obj.id, 'gas')} onChange={(e) => { setMeterActive(obj.id, 'gas', e.target.checked); window.dispatchEvent(new Event('rentflow-refresh')) }} />
+                            {' '}Газ
+                          </label>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -677,6 +750,56 @@ export function LandlordDashboard() {
       )}
 
       <div style={styles.card}>
+        <div style={styles.cardTitle}>📊 Статистика</div>
+        <div style={styles.filtersRow}>
+          <select value={statsObject} onChange={(e) => setStatsObject(e.target.value)} style={styles.select}>
+            <option value="all">Все объекты</option>
+            {objects.map(o => <option key={o.id} value={o.id}>{o.address}</option>)}
+          </select>
+          <select value={statsPeriod} onChange={(e) => setStatsPeriod(e.target.value as '6m' | '12m')} style={styles.select}>
+            <option value="6m">Последние 6 мес</option>
+            <option value="12m">Год</option>
+          </select>
+        </div>
+        <div style={styles.statsGrid}>
+          <div style={styles.statTile}>
+            <div style={styles.statLabel}>Собрано</div>
+            <div style={styles.statValue}>{collected.toFixed(0)} ₽</div>
+          </div>
+          <div style={styles.statTile}>
+            <div style={styles.statLabel}>Штрафов начислено</div>
+            <div style={{ ...styles.statValue, color: '#c00' }}>{penaltiesAccrued.toFixed(0)} ₽</div>
+          </div>
+          <div style={styles.statTile}>
+            <div style={styles.statLabel}>Оплата вовремя</div>
+            <div style={styles.statValue}>{onTimePct}%</div>
+          </div>
+          <div style={styles.statTile}>
+            <div style={styles.statLabel}>Сейчас просрочено</div>
+            <div style={{ ...styles.statValue, color: overdueNow > 0 ? '#c00' : '#080' }}>{overdueNow} объект(а)</div>
+          </div>
+        </div>
+        <div style={styles.subCardTitle}>История платежей</div>
+        {filteredHistory.length === 0 ? (
+          <p style={styles.empty}>Платежей за период нет</p>
+        ) : (
+          filteredHistory.slice(0, 20).map((h: any) => {
+            const late = h.confirmed_by_landlord && h.confirmed_at && new Date(h.confirmed_at) > parseDate(h.due_date)
+            const sum = Number(h.base_amount || 0) + Number(h.penalty_amount || 0) + Number(h.utilities_amount || 0)
+            return (
+              <div key={h.id} style={styles.slotItem}>
+                <span>
+                  {h.address}<br />
+                  <span style={styles.smallNote}>{parseDate(h.period).toLocaleDateString('ru-RU')} · {h.confirmed_by_landlord ? (late ? 'просрочка' : 'вовремя') : 'не подтверждён'}</span>
+                </span>
+                <b style={{ color: late ? '#c00' : '#333' }}>{sum.toFixed(0)} ₽</b>
+              </div>
+            )
+          })
+        )}
+      </div>
+
+      <div style={styles.card}>
         <div style={styles.cardTitle}>🔔 Уведомления</div>
         {notifications.length === 0 ? (
           <p style={styles.empty}>Нет уведомлений</p>
@@ -757,6 +880,32 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '8px',
     border: '1px solid #ddd',
     fontSize: '14px',
+  },
+  filtersRow: {
+    display: 'flex',
+    gap: '8px',
+    marginBottom: '12px',
+  },
+  statsGrid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '8px',
+    marginBottom: '12px',
+  },
+  statTile: {
+    backgroundColor: '#f9f9f9',
+    borderRadius: '8px',
+    padding: '10px',
+  },
+  statLabel: {
+    fontSize: '12px',
+    color: '#888',
+    marginBottom: '4px',
+  },
+  statValue: {
+    fontSize: '16px',
+    fontWeight: 700,
+    color: '#333',
   },
   cardTitle: {
     fontSize: '18px',
@@ -854,6 +1003,7 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
   },
   select: {
+    flex: 1,
     padding: '6px',
     borderRadius: '4px',
     border: '1px solid #ddd',
