@@ -14,6 +14,7 @@ interface ObjectWithStatus extends PropertyObject {
   payment?: Payment
   daysOverdue?: number
   waitingForReadings?: boolean
+  bgColor?: string
 }
 
 const DAYS_OF_WEEK = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
@@ -137,23 +138,29 @@ export function LandlordDashboard() {
 
           let status: 'paid' | 'overdue' | 'pending' | 'no_contract' = 'no_contract'
           let statusDetail = ''
+          let bgColor = '#fff'
 
           if (payment?.confirmed_by_landlord) {
             status = 'paid'
             statusDetail = 'Оплачено'
+            bgColor = '#eaf7ef'
           } else if (isOverdue) {
             status = 'overdue'
             const daysOverdue = Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24))
             statusDetail = `Просрочка ${daysOverdue} дн.`
+            bgColor = '#fdecea'
           } else if (waitingForReadings) {
             status = 'pending'
             statusDetail = 'Ждём показания'
+            bgColor = '#fdf6e3'
           } else if (daysUntilDue <= (contract.reminder_days_before || 3)) {
             status = 'pending'
             statusDetail = 'Срок приближается'
+            bgColor = '#fdf6e3'
           } else {
             status = 'pending'
             statusDetail = 'Ждём платёж'
+            bgColor = '#fdf6e3'
           }
 
           objectsWithStatus.push({ 
@@ -166,7 +173,8 @@ export function LandlordDashboard() {
             contract,
             payment,
             daysOverdue: isOverdue ? Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)) : undefined,
-            waitingForReadings
+            waitingForReadings,
+            bgColor
           })
         }
 
@@ -319,15 +327,6 @@ export function LandlordDashboard() {
     }
   }
 
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'paid': return 'Оплачено'
-      case 'overdue': return 'Просрочка'
-      case 'pending': return 'Ждём платёж'
-      case 'no_contract': return 'Нет договора'
-      default: return ''
-    }
-  }
 
   const getNotificationText = (type: string) => {
     switch (type) {
@@ -360,16 +359,21 @@ export function LandlordDashboard() {
           const contract = obj.contract
           
           return (
-            <div key={obj.id} style={styles.card}>
+            <div key={obj.id} style={{ ...styles.card, backgroundColor: obj.bgColor || '#fff' }}>
               <div style={styles.address}>{obj.address}</div>
               <div style={styles.statusRow}>
                 <span>{getStatusIcon(obj.status)}</span>
-                <span style={styles.statusText}>{getStatusText(obj.status)}</span>
+                <span style={{ ...styles.statusText, color: obj.status === 'overdue' ? '#c00' : obj.status === 'paid' ? '#080' : '#a80' }}>{obj.statusDetail}</span>
               </div>
               {obj.amount > 0 && (
-                <div style={styles.amount}>{obj.amount.toFixed(2)} ₽</div>
+                <div style={styles.amount}>
+                  {obj.penaltyAmount && obj.penaltyAmount > 0 
+                    ? `${(obj.amount - obj.penaltyAmount).toFixed(2)} + ${obj.penaltyAmount.toFixed(2)} руб штраф`
+                    : `${obj.amount.toFixed(2)} ₽`
+                  }
+                </div>
               )}
-              {obj.paymentId && (obj.status === 'overdue' || obj.status === 'pending') && (
+              {obj.paymentId && obj.status === 'overdue' && (
                 <button
                   onClick={() => confirmPayment(String(obj.id), obj.paymentId!)}
                   style={styles.confirmButton}
