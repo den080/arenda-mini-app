@@ -155,10 +155,12 @@ export function TenantDashboard() {
   if (!data) return <div style={s.container}>Нет данных</div>
 
   const { contract, obj, landlord, payments, meters, meterTypes, penaltyRules, deferredDebts, deferredReqs } = data
+  const readingsMode = contract.readings_mode || 'manual'
   const payment = payments[0]
   const today = new Date()
   const isOverdue = payment && !payment.confirmed_by_landlord && today > new Date(payment.due_date)
-  const total = payment ? Number(payment.base_amount) + Number(payment.penalty_amount || 0) : Number(contract.rent_amount)
+  const utilities = Number(payment?.utilities_amount || 0)
+  const total = payment ? Number(payment.base_amount) + Number(payment.penalty_amount || 0) + utilities : Number(contract.rent_amount)
   const status = payment
     ? payment.confirmed_by_landlord ? { icon: '🟢', text: 'Оплачено' }
       : isOverdue ? { icon: '🔴', text: 'Просрочка' }
@@ -215,6 +217,9 @@ export function TenantDashboard() {
         <div style={s.h2}>🧾 Счёт за {monthLabel}</div>
         <div style={s.row}><span>Аренда</span><b>{Number(payment?.base_amount ?? contract.rent_amount).toFixed(2)} ₽</b></div>
         <div style={s.row}><span>Штраф</span><b>{Number(payment?.penalty_amount || 0).toFixed(2)} ₽</b></div>
+        {utilities > 0 && (
+          <div style={s.row}><span>Ресурсы по квитанции</span><b>{utilities.toFixed(2)} ₽</b></div>
+        )}
         <div style={s.row}><span>Итого</span><b style={s.total}>{total.toFixed(2)} ₽</b></div>
         {payment && <div style={s.small}>Оплатить до: {new Date(payment.due_date).toLocaleDateString('ru-RU')}</div>}
         <div style={s.statusRow}><span>{status.icon}</span><span>{status.text}</span></div>
@@ -275,7 +280,7 @@ export function TenantDashboard() {
         )}
       </div>
 
-      {meters.length > 0 && (
+      {readingsMode === 'manual' && meters.length > 0 && (
         <div style={s.card}>
           <div style={s.h2}>💦 Передать показания</div>
           <div style={s.small}>Срок подачи: до {contract.meter_deadline_day} числа</div>
@@ -296,6 +301,20 @@ export function TenantDashboard() {
         </div>
       )}
 
+      {readingsMode === 'auto' && (
+        <div style={s.card}>
+          <div style={s.h2}>💦 Показания счётчиков</div>
+          <div style={s.small}>💡 Показания передаются автоматически — вам ничего подавать не нужно.</div>
+        </div>
+      )}
+
+      {readingsMode === 'self' && (
+        <div style={s.card}>
+          <div style={s.h2}>💦 Показания счётчиков</div>
+          <div style={s.small}>💡 Вы платите полную квитанцию сами — показания подавать не нужно.</div>
+        </div>
+      )}
+
       {msg && <div style={s.msg}>{msg}</div>}
 
       <div style={s.card}>
@@ -303,7 +322,7 @@ export function TenantDashboard() {
         {payments.slice(0, 5).map((p: any) => (
           <div key={p.id} style={s.row}>
             <span>{new Date(p.period).toLocaleDateString('ru-RU', { month: 'short', year: 'numeric' })} {p.confirmed_by_landlord ? '🟢' : '🟡'}</span>
-            <b>{(Number(p.base_amount) + Number(p.penalty_amount || 0)).toFixed(2)} ₽</b>
+            <b>{(Number(p.base_amount) + Number(p.penalty_amount || 0) + Number(p.utilities_amount || 0)).toFixed(2)} ₽</b>
           </div>
         ))}
       </div>
