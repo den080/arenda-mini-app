@@ -31,6 +31,12 @@ function parseDate(d: any): Date {
   return new Date(y, (m || 1) - 1, dd || 1)
 }
 
+function formatSlotDate(d: any): string {
+  const dt = parseDate(d)
+  const wd = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'][dt.getDay()]
+  return `${String(dt.getDate()).padStart(2, '0')}.${String(dt.getMonth() + 1).padStart(2, '0')}.${dt.getFullYear()} (${wd})`
+}
+
 export function LandlordDashboard() {
   const { user, loading: userLoading } = useTelegramUser()
   const [objects, setObjects] = useState<ObjectWithStatus[]>([])
@@ -46,6 +52,7 @@ export function LandlordDashboard() {
   const [statsObject, setStatsObject] = useState<string>('all')
 
   const [newSlotDay, setNewSlotDay] = useState<number>(0)
+  const [newSlotDate, setNewSlotDate] = useState<string>('')
   const [newSlotTimeFrom, setNewSlotTimeFrom] = useState<string>('')
   const [newSlotTimeTo, setNewSlotTimeTo] = useState<string>('')
 
@@ -676,7 +683,7 @@ export function LandlordDashboard() {
                           <div style={styles.slotsList}>
                             {(contract.cash_slots as CashSlot[] || []).map((slot: CashSlot, idx: number) => (
                               <div key={idx} style={styles.slotItem}>
-                                <span>{DAYS_OF_WEEK[slot.day]} {slot.time_from}–{slot.time_to}</span>
+                                <span>{(slot as any).date ? formatSlotDate((slot as any).date) : DAYS_OF_WEEK[slot.day]} {slot.time_from}–{slot.time_to}</span>
                                 <button
                                   onClick={() => {
                                     const newSlots = (contract.cash_slots as CashSlot[]).filter((_: CashSlot, i: number) => i !== idx)
@@ -700,6 +707,13 @@ export function LandlordDashboard() {
                               ))}
                             </select>
                             <input
+                              type="date"
+                              value={newSlotDate}
+                              onChange={(e) => setNewSlotDate(e.target.value)}
+                              style={styles.select}
+                              title="Или укажите конкретную дату"
+                            />
+                            <input
                               type="time"
                               step={600}
                               value={newSlotTimeFrom}
@@ -716,9 +730,10 @@ export function LandlordDashboard() {
                             <button
                               onClick={() => {
                                 const currentSlots = contract.cash_slots as CashSlot[] || []
-                                const newSlots = [...currentSlots, { day: newSlotDay, time_from: newSlotTimeFrom, time_to: newSlotTimeTo }]
+                                const newSlots = [...currentSlots, { day: newSlotDay, date: newSlotDate || null, time_from: newSlotTimeFrom, time_to: newSlotTimeTo } as any]
                                 saveCashSlots(contract.id, newSlots)
                                 setNewSlotDay(0)
+                                setNewSlotDate('')
                                 setNewSlotTimeFrom('')
                                 setNewSlotTimeTo('')
                               }}
@@ -727,6 +742,7 @@ export function LandlordDashboard() {
                               Добавить
                             </button>
                           </div>
+                          <div style={styles.smallNote}>День недели — для регулярных слотов; дата — для конкретной встречи. Если указана дата, она показывается вместо дня недели.</div>
                         </div>
                       )}
                     </div>
@@ -1058,7 +1074,7 @@ function CashMeetingsList({ contractId, tenantId, onConfirm }: { contractId: str
     <div>
       {meetings.map(m => (
         <div key={m.id} style={styles.slotItem}>
-          <span>{DAYS_OF_WEEK[m.day]} {m.time_from}–{m.time_to}</span>
+          <span>{(m as any).meeting_date ? formatSlotDate((m as any).meeting_date) : DAYS_OF_WEEK[m.day]} {m.time_from}–{m.time_to}</span>
           <button
             onClick={() => onConfirm(m.id, contractId, tenantId)}
             style={{ ...styles.confirmButton, marginTop: 0, width: 'auto', padding: '6px 12px', fontSize: '13px' }}
