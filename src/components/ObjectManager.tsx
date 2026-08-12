@@ -42,6 +42,7 @@ export function ObjectManager() {
     if (!user) return
     const { data } = await supabase.from('objects').select('*').eq('landlord_id', user.id)
     setObjects(data || [])
+    window.dispatchEvent(new Event('rentflow-refresh'))
   }
 
   useEffect(() => {
