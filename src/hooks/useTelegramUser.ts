@@ -36,6 +36,18 @@ export function useTelegramUser() {
     }
   }
 
+  function logout() {
+    try {
+      localStorage.removeItem('rentflow_tg_id')
+    } catch {
+      // ignore
+    }
+    cachedUser = null
+    setUser(null)
+    setError(null)
+    setLoading(false)
+  }
+
   useEffect(() => {
     if (cachedUser) return
     let autoId: string | undefined
@@ -67,5 +79,5 @@ export function useTelegramUser() {
     }
   }, [])
 
-  return { user, loading, error, loginWithId }
+  return { user, loading, error, loginWithId, logout }
 }
