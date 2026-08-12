@@ -6,6 +6,11 @@ interface PayDetail { type: 'card' | 'sbp'; bank: string; number: string }
 interface Notification { id: string; user_id: string; type: string; related_id: string; sent_at: string }
 interface CashMeeting { id: string; contract_id: string; payment_id: string; day: number; time_from: string; time_to: string; status: 'proposed' | 'confirmed' }
 
+function parseDate(d: any): Date {
+  const [y, m, dd] = String(d).slice(0, 10).split('-').map(Number)
+  return new Date(y, (m || 1) - 1, dd || 1)
+}
+
 export function TenantDashboard() {
   const { user, loading: userLoading } = useTelegramUser()
   const [data, setData] = useState<any>(null)
@@ -156,17 +161,64 @@ export function TenantDashboard() {
 
   const { contract, obj, landlord, payments, meters, meterTypes, penaltyRules, deferredDebts, deferredReqs } = data
   const readingsMode = contract.readings_mode || 'manual'
+  const reminder = contract.reminder_days_before || 3
   const payment = payments[0]
   const today = new Date()
-  const isOverdue = payment && !payment.confirmed_by_landlord && today > new Date(payment.due_date)
+  const todayMid = new Date(today.getFullYear(), today.getMonth(), today.getDate())
   const utilities = Number(payment?.utilities_amount || 0)
   const total = payment ? Number(payment.base_amount) + Number(payment.penalty_amount || 0) + utilities : Number(contract.rent_amount)
-  const status = payment
-    ? payment.confirmed_by_landlord ? { icon: '🟢', text: 'Оплачено' }
-      : isOverdue ? { icon: '🔴', text: 'Просрочка' }
-      : { icon: '🟡', text: 'Ожидает оплаты' }
-    : { icon: '⚪', text: 'Нет счёта' }
   const monthLabel = payment ? new Date(payment.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : ''
+
+  let statusIcon = '⚪'
+  let statusText = 'Нет счёта'
+  let statusColor = '#888'
+  let isOverdue = false
+
+  if (payment) {
+    if (!payment.confirmed_by_landlord) {
+      const dueMid = parseDate(payment.due_date)
+      const daysUntilDue = Math.round((dueMid.getTime() - todayMid.getTime()) / 86400000)
+      if (todayMid > dueMid) {
+        isOverdue = true
+        statusIcon = '🔴'
+        statusColor = '#c00'
+        statusText = `Просрочка ${-daysUntilDue} дн.`
+      } else if (daysUntilDue === 0) {
+        statusIcon = '🟡'
+        statusColor = '#a80'
+        statusText = 'Сегодня последний день оплаты'
+      } else if (daysUntilDue <= reminder) {
+        statusIcon = '🟡'
+        statusColor = '#a80'
+        statusText = `До оплаты ${daysUntilDue} дн.`
+      } else {
+        statusIcon = '🟢'
+        statusColor = '#080'
+        statusText = `До оплаты ${daysUntilDue} дн.`
+      }
+    } else {
+      const periodDate = parseDate(payment.period)
+      const nextDue = new Date(periodDate.getFullYear(), periodDate.getMonth() + 1, contract.payment_day || 1)
+      const daysLeft = Math.round((nextDue.getTime() - todayMid.getTime()) / 86400000)
+      if (daysLeft < 0) {
+        statusIcon = '🔴'
+        statusColor = '#c00'
+        statusText = `Следующий платёж просрочен на ${-daysLeft} дн.`
+      } else if (daysLeft === 0) {
+        statusIcon = '🟡'
+        statusColor = '#a80'
+        statusText = 'Следующая оплата: сегодня последний день'
+      } else if (daysLeft <= reminder) {
+        statusIcon = '🟡'
+        statusColor = '#a80'
+        statusText = `${daysLeft} дн. до следующей оплаты`
+      } else {
+        statusIcon = '🟢'
+        statusColor = '#080'
+        statusText = `${daysLeft} дн. до следующей оплаты`
+      }
+    }
+  }
 
   const paymentOverdueRule = penaltyRules.find((r: any) => r.violation_type === 'payment_overdue')
   const penaltyRate = paymentOverdueRule ? Number(paymentOverdueRule.rate) : 500
@@ -221,8 +273,11 @@ export function TenantDashboard() {
           <div style={s.row}><span>Ресурсы по квитанции</span><b>{utilities.toFixed(2)} ₽</b></div>
         )}
         <div style={s.row}><span>Итого</span><b style={s.total}>{total.toFixed(2)} ₽</b></div>
-        {payment && <div style={s.small}>Оплатить до: {new Date(payment.due_date).toLocaleDateString('ru-RU')}</div>}
-        <div style={s.statusRow}><span>{status.icon}</span><span>{status.text}</span></div>
+        {payment && <div style={s.small}>Оплатить до: {parseDate(payment.due_date).toLocaleDateString('ru-RU')}</div>}
+        <div style={s.statusRow}>
+          <span>{statusIcon}</span>
+          <span style={{ color: statusColor, fontWeight: 600 }}>{statusText}</span>
+        </div>
         {isOverdue && (
           <div style={s.overdueNotice}>⚠️ +{penaltyRate} руб за каждый день просрочки</div>
         )}
