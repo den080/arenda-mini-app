@@ -24,7 +24,7 @@ export function LandlordDashboard() {
   const [objects, setObjects] = useState<ObjectWithStatus[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const meterTypes: MeterType[] = []
+  const [meterTypes, setMeterTypes] = useState<MeterType[]>([])
   const [objectMeters, setObjectMeters] = useState<Record<string, ObjectMeter[]>>({})
   const [notifications, setNotifications] = useState<NotificationLog[]>([])
   
@@ -39,6 +39,8 @@ export function LandlordDashboard() {
 
     async function fetchData() {
       try {
+        // Загружаем типы счётчиков
+        const { data: mtData } = await supabase.from('meter_types').select('*')
         if (mtData) setMeterTypes(mtData)
 
         // Загружаем уведомления
@@ -210,6 +212,41 @@ export function LandlordDashboard() {
 
   async function toggleMeter(objId: string, meterTypeId: string) {
     const existing = objectMeters[objId]?.find(om => om.meter_type_id === meterTypeId)
+    
+    if (existing) {
+      const { error } = await supabase
+        .from('object_meters')
+        .update({ is_active: !existing.is_active })
+        .eq('id', existing.id)
+      
+      if (!error) {
+        setObjectMeters(prev => ({
+          ...prev,
+          [objId]: prev[objId].map(om => 
+            om.id === existing.id ? { ...om, is_active: !om.is_active } : om
+          )
+        }))
+      } else {
+        alert('Ошибка: ' + error.message)
+      }
+    } else {
+      const { data, error } = await supabase
+        .from('object_meters')
+        .insert({ object_id: objId, meter_type_id: meterTypeId, is_active: true })
+        .select()
+      
+      if (!error && data) {
+        setObjectMeters(prev => ({
+          ...prev,
+          [objId]: [...(prev[objId] || []), data[0]]
+        }))
+      } else if (error) {
+        alert('Ошибка: ' + error.message)
+      }
+    }
+  }
+
+  async function updatePaymentMethod(contractId: string, method: 'card' | 'cash') {
     const updateData: any = { payment_method: method }
     if (method === 'cash') {
       updateData.cash_slots = []
@@ -346,127 +383,27 @@ export function LandlordDashboard() {
               )}
 
               {/* ⚙️ Счётчики */}
-              {contract && (() => {
-                const objMetersList = objectMeters[obj.id] || []
-                
-                // Определяем текущее состояние электричества
-                const hasSingle = !!objMetersList.find(m => m.meter_type_id === 'electricity_single' && m.is_active)
-                const hasDay = !!objMetersList.find(m => m.meter_type_id === 'electricity_day' && m.is_active)
-                const hasNight = !!objMetersList.find(m => m.meter_type_id === 'electricity_night' && m.is_active)
-                const hasPeak = !!objMetersList.find(m => m.meter_type_id === 'electricity_peak' && m.is_active)
-                const hasSemipeak = !!objMetersList.find(m => m.meter_type_id === 'electricity_semipeak' && m.is_active)
-                
-                let elecMode: 0 | 1 | 2 | 3 = 0
-                if (hasPeak && hasSemipeak && hasNight) elecMode = 3
-                else if (hasDay && hasNight) elecMode = 2
-                else if (hasSingle) elecMode = 1
-                
-                const hasColdWater = !!objMetersList.find(m => m.meter_type_id === 'water_cold' && m.is_active)
-                const hasHotWater = !!objMetersList.find(m => m.meter_type_id === 'water_hot' && m.is_active)
-                const hasHeating = !!objMetersList.find(m => m.meter_type_id === 'heating' && m.is_active)
-                const hasGas = !!objMetersList.find(m => m.meter_type_id === 'gas' && m.is_active)
-                
-                async function setElecMode(mode: 0 | 1 | 2 | 3) {
-                  // Деактивируем все electricity_*
-                  const elecTypes = ['electricity_single', 'electricity_day', 'electricity_night', 'electricity_peak', 'electricity_semipeak']
-                  for (const mt of elecTypes) {
-                    const existing = objMetersList.find(m => m.meter_type_id === mt)
-                    if (existing) {
-                      await supabase.from('object_meters').update({ is_active: false }).eq('id', existing.id)
-                    }
-                  }
-                  // Активируем нужные
-                  if (mode === 1) {
-                    const { data } = await supabase.from('object_meters').insert({ object_id: obj.id, meter_type_id: 'electricity_single', is_active: true }).select()
-                    if (data) objMetersList.push(data[0])
-                  } else if (mode === 2) {
-                    for (const mt of ['electricity_day', 'electricity_night']) {
-                      const existing = objMetersList.find(m => m.meter_type_id === mt)
-                      if (existing) {
-                        await supabase.from('object_meters').update({ is_active: true }).eq('id', existing.id)
-                      } else {
-                        const { data } = await supabase.from('object_meters').insert({ object_id: obj.id, meter_type_id: mt, is_active: true }).select()
-                        if (data) objMetersList.push(data[0])
-                      }
-                    }
-                  } else if (mode === 3) {
-                    for (const mt of ['electricity_peak', 'electricity_semipeak', 'electricity_night']) {
-                      const existing = objMetersList.find(m => m.meter_type_id === mt)
-                      if (existing) {
-                        await supabase.from('object_meters').update({ is_active: true }).eq('id', existing.id)
-                      } else {
-                        const { data } = await supabase.from('object_meters').insert({ object_id: obj.id, meter_type_id: mt, is_active: true }).select()
-                        if (data) objMetersList.push(data[0])
-                      }
-                    }
-                  }
-                  setObjectMeters(prev => ({ ...prev, [obj.id]: [...objMetersList] }))
-                }
-                
-                async function toggleCheck(meterTypeId: string, checked: boolean) {
-                  const existing = objMetersList.find(m => m.meter_type_id === meterTypeId)
-                  if (existing) {
-                    await supabase.from('object_meters').update({ is_active: checked }).eq('id', existing.id)
-                    setObjectMeters(prev => ({
-                      ...prev,
-                      [obj.id]: prev[obj.id].map(om => om.id === existing.id ? { ...om, is_active: checked } : om)
-                    }))
-                  } else if (checked) {
-                    const { data } = await supabase.from('object_meters').insert({ object_id: obj.id, meter_type_id: meterTypeId, is_active: true }).select()
-                    if (data) {
-                      setObjectMeters(prev => ({ ...prev, [obj.id]: [...(prev[obj.id] || []), data[0]] }))
-                    }
-                  }
-                }
-                
-                return (
-                  <div style={styles.subCard}>
-                    <div style={styles.subCardTitle}>⚙️ Счётчики</div>
-                    
-                    <div style={styles.meterGroup}>
-                      <div style={styles.meterGroupTitle}>⚡ Электричество</div>
-                      <label style={styles.radioLabel}>
-                        <input type="radio" checked={elecMode === 0} onChange={() => setElecMode(0)} /> Не установлено
-                      </label>
-                      <label style={styles.radioLabel}>
-                        <input type="radio" checked={elecMode === 1} onChange={() => setElecMode(1)} /> 1-тарифный
-                      </label>
-                      <label style={styles.radioLabel}>
-                        <input type="radio" checked={elecMode === 2} onChange={() => setElecMode(2)} /> 2-тарифный (день/ночь)
-                      </label>
-                      <label style={styles.radioLabel}>
-                        <input type="radio" checked={elecMode === 3} onChange={() => setElecMode(3)} /> 3-тарифный (пик/полупик/ночь)
-                      </label>
-                    </div>
-                    
-                    <div style={styles.meterGroup}>
-                      <div style={styles.meterGroupTitle}>💧 Вода</div>
-                      <label style={styles.checkboxLabel}>
-                        <input type="checkbox" checked={hasColdWater} onChange={(e) => toggleCheck('water_cold', e.target.checked)} /> Холодная
-                      </label>
-                      <label style={styles.checkboxLabel}>
-                        <input type="checkbox" checked={hasHotWater} onChange={(e) => toggleCheck('water_hot', e.target.checked)} /> Горячая
-                      </label>
-                    </div>
-                    
-                    <div style={styles.meterGroup}>
-                      <div style={styles.meterGroupTitle}>🔥 Отопление</div>
-                      <label style={styles.checkboxLabel}>
-                        <input type="checkbox" checked={hasHeating} onChange={(e) => toggleCheck('heating', e.target.checked)} /> Теплосчётчик установлен
-                      </label>
-                    </div>
-                    
-                    {hasGas && (
-                      <div style={styles.meterGroup}>
-                        <div style={styles.meterGroupTitle}>🔵 Газ</div>
-                        <label style={styles.checkboxLabel}>
-                          <input type="checkbox" checked={hasGas} onChange={(e) => toggleCheck('gas', e.target.checked)} /> Газ
+              {contract && (
+                <div style={styles.subCard}>
+                  <div style={styles.subCardTitle}>⚙️ Счётчики</div>
+                  {meterTypes.map(mt => {
+                    const om = objMeters.find(m => m.meter_type_id === mt.id)
+                    const isActive = !!om?.is_active
+                    return (
+                      <div key={mt.id} style={styles.meterRow}>
+                        <label style={styles.meterLabel}>
+                          <input
+                            type="checkbox"
+                            checked={isActive}
+                            onChange={() => toggleMeter(obj.id, mt.id)}
+                          />
+                          {' '}{mt.label} ({mt.unit})
                         </label>
                       </div>
-                    )}
-                  </div>
-                )
-              })()}
+                    )
+                  })}
+                </div>
+              )}
 
               {/* 💵 Способ оплаты */}
               {contract && (
