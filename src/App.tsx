@@ -5,6 +5,12 @@ import LandlordDashboard from './pages/LandlordDashboard'
 import TenantDashboard from './pages/TenantDashboard'
 import ObjectManager from './components/ObjectManager'
 
+const GLOBAL_CSS = `
+  button:active { opacity: 0.55; }
+  select { min-width: 0; }
+  button:disabled { opacity: 0.6; }
+`
+
 export default function App() {
   const { user, loading, error, loginWithId, logout } = useTelegramUser()
   const [value, setValue] = useState('')
@@ -23,6 +29,7 @@ export default function App() {
   if (!user) {
     return (
       <div style={st.wrap}>
+        <style>{GLOBAL_CSS}</style>
         <h2 style={st.h2}>🔑 Вход</h2>
         <p style={st.p}>{error}</p>
         <input style={st.input} value={value} onChange={(e) => setValue(e.target.value)} placeholder="Telegram ID или телефон" />
@@ -33,6 +40,7 @@ export default function App() {
 
   return (
     <div>
+      <style>{GLOBAL_CSS}</style>
       <div style={st.topbar}>
         <button style={st.logout} onClick={logout}>🚪 Выйти</button>
         <button style={mode === 'landlord' ? st.tabActive : st.tab} onClick={() => setMode('landlord')}>🏠 Арендодатель</button>
