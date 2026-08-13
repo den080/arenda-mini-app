@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useTelegramUser } from '../hooks/useTelegramUser'
 import CashNegotiation from '../components/CashNegotiation'
+import MetersEditor from '../components/MetersEditor'
+import ReadingsReview from '../components/ReadingsReview'
 import type { Object as PropertyObject, Contract, MeterType, ObjectMeter, NotificationLog, User } from '../types/database'
 
 interface ObjectWithStatus extends PropertyObject {
@@ -374,7 +376,6 @@ export function LandlordDashboard() {
     }
   }
 
-  // Подтверждение отсрочки: штраф месяца уходит в книгу замороженных штрафов
   async function confirmDeferral(requestId: string, contractId: string, paymentId: string, amount: number, tenantId: string) {
     const { data: pay } = await supabase.from('payments').select('*').eq('id', paymentId).maybeSingle()
     const { error: e1 } = await supabase.from('frozen_penalties').insert({
@@ -399,7 +400,6 @@ export function LandlordDashboard() {
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
 
-  // Заморозить текущий штраф месяца вручную
   async function freezePenalty(paymentId: string) {
     const { data: pay } = await supabase.from('payments').select('*').eq('id', paymentId).maybeSingle()
     if (!pay) return
@@ -426,7 +426,6 @@ export function LandlordDashboard() {
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
 
-  // Изменить сумму замороженного штрафа или обнулить (только с примечанием)
   async function adjustFrozen(id: string, contractId: string, tenantId: string, zero: boolean) {
     const { data: row } = await supabase.from('frozen_penalties').select('*').eq('id', id).maybeSingle()
     if (!row) return
@@ -480,8 +479,6 @@ export function LandlordDashboard() {
     }
   }
 
-  // Подтверждение конкретного канала оплаты.
-  // close=true — закрыть канал без подтверждения (например, «нал закрыт, оплатили всё картой»)
   async function confirmChannel(paymentId: string, channel: 'card' | 'cash', close: boolean = false) {
     const { data: pay } = await supabase.from('payments').select('*').eq('id', paymentId).maybeSingle()
     if (!pay) { alert('Платёж не найден'); return }
@@ -598,7 +595,6 @@ export function LandlordDashboard() {
         objects.map((obj) => {
           const contract = obj.contract
           const isExpanded = expandedIds.has(obj.id)
-          const elecMode = getElecMode(obj.id)
           const tenantChoseCash = contract && (contract.payment_method === 'cash' || (contract.payment_method === 'both' && (contract as any).tenant_pay_method === 'cash'))
           const deposit = Number((contract as any)?.deposit_amount || 0)
           const frozenOpen = expandedFrozen.has(obj.id)
@@ -758,53 +754,14 @@ export function LandlordDashboard() {
                   {contract && (
                     <div style={styles.subCard}>
                       <div style={styles.subCardTitle}>⚙️ Счётчики</div>
-                      <div style={styles.smallNote}>⚡ Электричество</div>
-                      {[
-                        { v: 'none', l: 'Не установлено' },
-                        { v: '1', l: '1-тарифный' },
-                        { v: '2', l: '2-тарифный (день/ночь)' },
-                        { v: '3', l: '3-тарифный (пик/полупик/ночь)' },
-                      ].map(opt => (
-                        <div key={opt.v} style={styles.meterRow}>
-                          <label style={styles.meterLabel}>
-                            <input
-                              type="radio"
-                              name={`elec-${obj.id}`}
-                              checked={elecMode === opt.v}
-                              onChange={() => setElecMode(obj.id, opt.v)}
-                            />
-                            {' '}{opt.l}
-                          </label>
-                        </div>
-                      ))}
-                      <div style={styles.smallNote}>💧 Вода</div>
-                      <div style={styles.meterRow}>
-                        <label style={styles.meterLabel}>
-                          <input type="checkbox" checked={isMeterActive(obj.id, 'water_cold')} onChange={(e) => { setMeterActive(obj.id, 'water_cold', e.target.checked); window.dispatchEvent(new Event('rentflow-refresh')) }} />
-                          {' '}Холодная
-                        </label>
-                      </div>
-                      <div style={styles.meterRow}>
-                        <label style={styles.meterLabel}>
-                          <input type="checkbox" checked={isMeterActive(obj.id, 'water_hot')} onChange={(e) => { setMeterActive(obj.id, 'water_hot', e.target.checked); window.dispatchEvent(new Event('rentflow-refresh')) }} />
-                          {' '}Горячая
-                        </label>
-                      </div>
-                      <div style={styles.smallNote}>🔥 Отопление</div>
-                      <div style={styles.meterRow}>
-                        <label style={styles.meterLabel}>
-                          <input type="checkbox" checked={isMeterActive(obj.id, 'heat')} onChange={(e) => { setMeterActive(obj.id, 'heat', e.target.checked); window.dispatchEvent(new Event('rentflow-refresh')) }} />
-                          {' '}Теплосчётчик установлен
-                        </label>
-                      </div>
-                      {meterTypes.find(t => t.code === 'gas') && (
-                        <div style={styles.meterRow}>
-                          <label style={styles.meterLabel}>
-                            <input type="checkbox" checked={isMeterActive(obj.id, 'gas')} onChange={(e) => { setMeterActive(obj.id, 'gas', e.target.checked); window.dispatchEvent(new Event('rentflow-refresh')) }} />
-                            {' '}Газ
-                          </label>
-                        </div>
-                      )}
+                      <MetersEditor objId={obj.id} />
+                    </div>
+                  )}
+
+                  {contract && obj.readingsMode === 'manual' && (
+                    <div style={styles.subCard}>
+                      <div style={styles.subCardTitle}>💦 Показания за текущий месяц</div>
+                      <ReadingsReview contractId={contract.id} tenantId={contract.tenant_id} />
                     </div>
                   )}
 
@@ -1078,13 +1035,6 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '16px',
     fontWeight: '600',
     marginBottom: '12px',
-  },
-  meterRow: {
-    marginBottom: '8px',
-  },
-  meterLabel: {
-    fontSize: '14px',
-    cursor: 'pointer',
   },
   methodRow: {
     display: 'flex',
