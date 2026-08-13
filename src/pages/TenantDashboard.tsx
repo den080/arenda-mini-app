@@ -86,12 +86,13 @@ export function TenantDashboard() {
     if (!data || !data.landlord) return
     const payment = data.payments[0]
     if (!payment) return
-    const { error: e } = await supabase.from('notifications_log').insert({
+    const { error: e } = await supabase.from('payments').update({ card_claimed: true }).eq('id', payment.id)
+    if (e) { setMsg('Ошибка: ' + e.message); return }
+    await supabase.from('notifications_log').insert({
       user_id: data.landlord.id, type: 'payment_claimed', related_id: payment.id, sent_at: new Date().toISOString(),
     })
-    setMsg(e ? 'Ошибка: ' + e.message : '✅ Арендодатель уведомлён об оплате')
-    const { data: notifData } = await supabase.from('notifications_log').select('*').eq('user_id', user!.id).order('sent_at', { ascending: false }).limit(5)
-    setNotifications(notifData || [])
+    setMsg('✅ Арендодатель уведомлён: безнал заявлен, ждёт подтверждения')
+    load()
   }
 
   async function requestDeferral() {
@@ -313,7 +314,11 @@ export function TenantDashboard() {
               ))
             )}
             {!payment?.confirmed_by_landlord && details.length > 0 && (
-              <button onClick={claimPaid} style={s.button}>✅ Я оплатил</button>
+              payment.card_claimed ? (
+                <div style={s.meetingStatus}>💳 Безнал заявлен: ждёт подтверждения арендодателем</div>
+              ) : (
+                <button onClick={claimPaid} style={s.button}>✅ Я оплатил</button>
+              )
             )}
           </div>
         )}
