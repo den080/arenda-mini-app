@@ -169,8 +169,10 @@ export function LandlordDashboard() {
           }
 
           const dueMid = parseDate(payment.due_date)
-          const isOverdue = todayMid > dueMid
-          const daysUntilDue = Math.round((dueMid.getTime() - todayMid.getTime()) / 86400000)
+          const sd = contract.start_date ? parseDate(contract.start_date) : null
+          const firstMonthGrace = !!sd && dueMid.getMonth() === sd.getMonth() && dueMid.getFullYear() === sd.getFullYear() && todayMid < new Date(sd.getFullYear(), sd.getMonth() + 1, 1)
+          const isOverdue = todayMid > dueMid && !firstMonthGrace
+          const daysUntilDue = firstMonthGrace && todayMid > dueMid ? 0 : Math.round((dueMid.getTime() - todayMid.getTime()) / 86400000)
 
           const baseAmount = payment.base_amount || contract.rent_amount
           const penaltyAmount = payment.penalty_amount || 0
@@ -211,7 +213,7 @@ export function LandlordDashboard() {
               statusColor = '#a80'
               bgColor = '#fdf6e3'
             } else if (daysUntilDue === 0) {
-              statusDetail = 'Сегодня последний день оплаты'
+              statusDetail = firstMonthGrace ? 'Первый месяц — просрочка не начисляется' : 'Сегодня последний день оплаты'
               statusColor = '#a80'
               bgColor = '#fdf6e3'
             } else if (daysUntilDue <= reminder) {
@@ -451,7 +453,7 @@ export function LandlordDashboard() {
     }
   }
 
-// ===== КОНЕЦ ЧАСТИ 1. После Commit напишите «готово» — пришлю часть 2, её нужно будет вставить в конец файла =====
+// ===== КОНЕЦ ЧАСТИ 1. После Commit напишите «готово» — пришлю часть 2, её нужно доклеить в конец файла =====
   const getStatusIcon = (color?: string) => {
     if (color === '#c00') return '🔴'
     if (color === '#a80') return '🟡'
@@ -521,9 +523,11 @@ export function LandlordDashboard() {
               <div style={styles.cardHeader} onClick={() => toggleExpanded(obj.id)}>
                 <div style={{ flex: 1 }}>
                   <div style={styles.address}>
-                    {(obj.contract as any)?.deposit_amount > 0 && <span style={{ float: 'right', fontSize: 11, color: 'rgba(0,0,0,0.4)' }}>депозит: {Number((obj.contract as any).deposit_amount).toFixed(0)} ₽</span>}{obj.address}
+                    {(obj.contract as any)?.deposit_amount > 0 && <span style={{ float: 'right', fontSize: 11, color: 'rgba(0,0,0,0.4)' }}>депозит: {Number((obj.contract as any).deposit_amount).toFixed(0)} ₽</span>}
+                    {obj.address}
                     <span style={styles.expandArrow}>{isExpanded ? '▲' : '▼'}</span>
                   </div>
+                  {contract && contract.start_date && contract.end_date && <div style={{ fontSize: 11, color: 'rgba(0,0,0,0.4)', marginBottom: 6 }}>Срок аренды: с {parseDate(contract.start_date).toLocaleDateString('ru-RU')} по {parseDate(contract.end_date).toLocaleDateString('ru-RU')} ({Math.max(1, Math.round((parseDate(contract.end_date).getTime() - parseDate(contract.start_date).getTime()) / 2629800000))} мес.)</div>}
                   <div style={styles.statusRow}>
                     <span>{getStatusIcon(obj.statusColor)}</span>
                     <span style={{ ...styles.statusText, color: obj.statusColor || '#666' }}>{obj.statusDetail}</span>
@@ -809,7 +813,7 @@ export function LandlordDashboard() {
             const sum = Number(h.base_amount || 0) + Number(h.penalty_amount || 0) + Number(h.utilities_amount || 0)
             return (
               <div key={h.id} style={styles.slotItem}>
-               <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ flex: 1, minWidth: 0 }}>
                   {h.address}<br />
                   <span style={styles.smallNote}>{parseDate(h.period).toLocaleDateString('ru-RU')} · {h.confirmed_by_landlord ? (late ? 'просрочка' : 'вовремя') : 'не подтверждён'}</span>
                 </span>
