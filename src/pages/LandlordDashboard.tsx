@@ -537,3 +537,599 @@ export function LandlordDashboard() {
     }
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
+  const getStatusIcon = (color?: string) => {
+    if (color === '#c00') return '🔴'
+    if (color === '#a80') return '🟡'
+    if (color === '#080') return '🟢'
+    return '⚪'
+  }
+
+  const getNotificationText = (type: string) => {
+    switch (type) {
+      case 'payment_claimed': return '✅ Арендатор сообщил об оплате'
+      case 'payment_confirmed': return '🟢 Арендодатель подтвердил оплату'
+      case 'meter_submitted': return '💦 Переданы новые показания'
+      case 'cash_proposed': return '💵 Предложено время встречи наличными'
+      case 'cash_confirmed': return '🤝 Время встречи наличными подтверждено'
+      case 'deferred_proposed': return '🙏 Арендатор попросил отсрочку штрафа'
+      case 'deferred_confirmed': return '🧊 Замороженный штраф обновлён'
+      default: return type
+    }
+  }
+
+  function amountBreakdown(obj: ObjectWithStatus): string {
+    const parts: string[] = [`${(obj.baseAmount ?? obj.amount).toFixed(2)}`]
+    if (obj.penaltyAmount && obj.penaltyAmount > 0) parts.push(`${obj.penaltyAmount.toFixed(2)} руб штраф`)
+    if (obj.utilitiesAmount && obj.utilitiesAmount > 0) parts.push(`${obj.utilitiesAmount.toFixed(2)} руб ресурсы`)
+    return parts.join(' + ')
+  }
+
+  const todayNow = new Date()
+  const todayMidNow = new Date(todayNow.getFullYear(), todayNow.getMonth(), todayNow.getDate())
+  const periodStart = statsPeriod === '6m'
+    ? new Date(todayMidNow.getFullYear(), todayMidNow.getMonth() - 5, 1)
+    : new Date(todayMidNow.getFullYear() - 1, todayMidNow.getMonth(), 1)
+  const filteredHistory = history
+    .filter(h => (statsObject === 'all' || h.objId === statsObject) && parseDate(h.period) >= periodStart)
+    .sort((a, b) => parseDate(b.period).getTime() - parseDate(a.period).getTime())
+  const collected = filteredHistory
+    .filter(h => h.confirmed_by_landlord)
+    .reduce((s: number, h: any) => s + Number(h.base_amount || 0) + Number(h.penalty_amount || 0) + Number(h.utilities_amount || 0), 0)
+  const penaltiesAccrued = filteredHistory.reduce((s: number, h: any) => s + Number(h.penalty_amount || 0), 0)
+  const confirmedCount = filteredHistory.filter(h => h.confirmed_by_landlord).length
+  const onTimeCount = filteredHistory.filter(h => h.confirmed_by_landlord && h.confirmed_at && new Date(h.confirmed_at) <= parseDate(h.due_date)).length
+  const onTimePct = confirmedCount > 0 ? Math.round((onTimeCount / confirmedCount) * 100) : 0
+  const overdueNow = objects.filter(o => o.statusColor === '#c00').length
+
+  if (userLoading || loading) {
+    return <div style={styles.container}>Загрузка...</div>
+  }
+
+  if (error) {
+    return <div style={styles.container}>{error}</div>
+  }
+
+  return (
+    <div style={styles.container}>
+      <h1 style={styles.title}>🏠 Мои объекты</h1>
+      {objects.length === 0 ? (
+        <p style={styles.empty}>Объектов нет</p>
+      ) : (
+        objects.map((obj) => {
+          const contract = obj.contract
+          const isExpanded = expandedIds.has(obj.id)
+          const elecMode = getElecMode(obj.id)
+          const tenantChoseCash = contract && (contract.payment_method === 'cash' || (contract.payment_method === 'both' && (contract as any).tenant_pay_method === 'cash'))
+          const deposit = Number((contract as any)?.deposit_amount || 0)
+          const frozenOpen = expandedFrozen.has(obj.id)
+
+          return (
+            <div key={obj.id} style={{ ...styles.card, backgroundColor: obj.bgColor || '#fff' }}>
+              <div style={styles.cardHeader} onClick={() => toggleExpanded(obj.id)}>
+                <div style={{ flex: 1 }}>
+                  <div style={styles.address}>
+                    {deposit > 0 && <span style={{ float: 'right', fontSize: 11, color: 'rgba(0,0,0,0.4)' }}>депозит: {deposit.toFixed(0)} ₽</span>}
+                    {obj.address}
+                    <span style={styles.expandArrow}>{isExpanded ? '▲' : '▼'}</span>
+                  </div>
+                  {contract && (contract as any).start_date && (contract as any).end_date && <div style={{ fontSize: 11, color: 'rgba(0,0,0,0.4)', marginBottom: 6 }}>Срок аренды: с {parseDate((contract as any).start_date).toLocaleDateString('ru-RU')} по {parseDate((contract as any).end_date).toLocaleDateString('ru-RU')} ({Math.max(1, Math.round((parseDate((contract as any).end_date).getTime() - parseDate((contract as any).start_date).getTime()) / 2629800000))} мес.)</div>}
+                  <div style={styles.statusRow}>
+                    <span>{getStatusIcon(obj.statusColor)}</span>
+                    <span style={{ ...styles.statusText, color: obj.statusColor || '#666' }}>{obj.statusDetail}</span>
+                  </div>
+                  {obj.amount > 0 && (
+                    <div style={styles.amount}>{amountBreakdown(obj)}</div>
+                  )}
+                  {!!obj.frozenTotal && obj.frozenTotal > 0 && (
+                    <div style={styles.frozenNote} onClick={(e) => { e.stopPropagation(); toggleFrozen(obj.id) }}>
+                      🧊 Замороженные штрафы: {obj.frozenTotal.toFixed(0)} ₽ {frozenOpen ? '▲' : '▼'}
+                      {frozenOpen && (
+                        <div style={{ marginTop: 6 }}>
+                          {(obj.frozenRows || []).map((f: any) => (
+                            <div key={f.id} style={{ fontSize: 11, color: 'rgba(0,0,0,0.5)', marginBottom: 2 }}>
+                              {f.period ? parseDate(f.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : 'без месяца'} — {Number(f.amount).toFixed(0)} ₽{f.adjusted_note ? ` (${f.adjusted_note})` : ''}
+                            </div>
+                          ))}
+                          {deposit > 0
+                            ? (deposit >= (obj.frozenTotal || 0)
+                              ? <div style={{ fontSize: 11, color: 'rgba(0,0,0,0.5)' }}>будет удержано из депозита; остаток депозита: {(deposit - (obj.frozenTotal || 0)).toFixed(0)} ₽</div>
+                              : <div style={{ fontSize: 11, color: '#c00' }}>сверх депозита долг: {((obj.frozenTotal || 0) - deposit).toFixed(0)} ₽</div>)
+                            : <div style={{ fontSize: 11, color: '#c00' }}>долг арендатора (депозита нет)</div>}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {isExpanded && (
+                <>
+                  {contract && obj.paymentId && !obj.payment?.confirmed_by_landlord && (
+                    <div style={styles.subCard}>
+                      <div style={styles.subCardTitle}>💰 Подтверждение оплаты по каналам</div>
+                      <div style={styles.slotItem}>
+                        <span>💳 Безнал: {obj.payment?.confirmed_card ? '🟢 получен' : obj.payment?.card_claimed ? '🟡 заявлен арендатором' : '⚪ не заявлен'}</span>
+                        {obj.payment?.card_claimed && !obj.payment?.confirmed_card && (
+                          <button
+                            style={{ ...styles.confirmButton, marginTop: 0, width: 'auto', padding: '6px 12px', fontSize: '13px' }}
+                            onClick={() => confirmChannel(obj.paymentId!, 'card')}
+                          >
+                            Подтвердить
+                          </button>
+                        )}
+                      </div>
+                      <div style={styles.slotItem}>
+                        <span>💵 Нал: {obj.payment?.confirmed_cash ? '🟢 получен' : obj.payment?.cash_closed ? '⚪ канал закрыт' : obj.hasConfirmedCashMeeting ? '🟡 ждёт встречи' : '⚪ не заявлен'}</span>
+                        {obj.hasConfirmedCashMeeting && !obj.payment?.cash_closed && !obj.payment?.confirmed_cash && (
+                          <span>
+                            <button
+                              style={{ ...styles.confirmButton, marginTop: 0, width: 'auto', padding: '6px 12px', fontSize: '13px', marginRight: 6 }}
+                              onClick={() => confirmChannel(obj.paymentId!, 'cash')}
+                            >
+                              Подтвердить
+                            </button>
+                            <button
+                              style={styles.deleteButton}
+                              onClick={() => confirmChannel(obj.paymentId!, 'cash', true)}
+                            >
+                              закрыть канал
+                            </button>
+                          </span>
+                        )}
+                      </div>
+                      {!obj.payment?.card_claimed && !obj.hasConfirmedCashMeeting && (
+                        <button style={styles.confirmButton} onClick={() => confirmChannel(obj.paymentId!, 'card')}>
+                          ✅ Подтвердить оплату полностью
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {contract && ((obj.frozenRows || []).length > 0 || ((obj.penaltyAmount || 0) > 0 && !obj.payment?.confirmed_by_landlord)) && (
+                    <div style={styles.subCard}>
+                      <div style={styles.subCardTitle}>🧊 Замороженные штрафы — управление</div>
+                      {(obj.penaltyAmount || 0) > 0 && !obj.payment?.confirmed_by_landlord && (
+                        <button
+                          style={{ ...styles.confirmButton, marginTop: 0, background: '#26a69a' }}
+                          onClick={() => freezePenalty(obj.paymentId!)}
+                        >
+                          🧊 Заморозить текущий штраф ({(obj.penaltyAmount || 0).toFixed(0)} ₽)
+                        </button>
+                      )}
+                      {(obj.frozenRows || []).map((f: any) => (
+                        <div key={f.id} style={styles.slotItem}>
+                          <span>
+                            {f.period ? parseDate(f.period).toLocaleDateString('ru-RU', { month: 'short', year: 'numeric' }) : '—'} · {Number(f.amount).toFixed(0)} ₽
+                            {f.adjusted_note && <span style={styles.smallNote}><br />{f.adjusted_note}</span>}
+                          </span>
+                          <span>
+                            <button style={{ ...styles.addButton, marginRight: 6 }} onClick={() => adjustFrozen(f.id, contract.id, contract.tenant_id, false)}>изменить</button>
+                            <button style={styles.deleteButton} onClick={() => adjustFrozen(f.id, contract.id, contract.tenant_id, true)}>обнулить</button>
+                          </span>
+                        </div>
+                      ))}
+                      <div style={styles.smallNote}>Записи не удаляются до конца договора; каждое изменение сохраняется с примечанием и датой.</div>
+                    </div>
+                  )}
+
+                  {contract && obj.paymentId && !obj.payment?.confirmed_by_landlord && obj.readingsMode !== 'self' && (
+                    <div style={styles.subCard}>
+                      <div style={styles.subCardTitle}>🧮 Ресурсы по квитанции</div>
+                      {obj.needUtilitiesReminder && (
+                        <div style={styles.reminderNote}>⏳ Посчитайте ресурсы с квитанции и добавьте сумму к платежу</div>
+                      )}
+                      <div style={styles.utilRow}>
+                        <input
+                          type="number"
+                          value={utilInputs[obj.id] ?? String(obj.utilitiesAmount || '')}
+                          onChange={(e) => setUtilInputs({ ...utilInputs, [obj.id]: e.target.value })}
+                          placeholder="Сумма по квитанции, ₽"
+                          style={styles.utilInput}
+                          inputMode="numeric"
+                        />
+                        <button
+                          onClick={() => saveUtilities(obj.paymentId!, utilInputs[obj.id] ?? String(obj.utilitiesAmount || 0))}
+                          style={styles.addButton}
+                        >
+                          Включить в платёж
+                        </button>
+                      </div>
+                      <div style={styles.smallNote}>Сумма добавляется к платежу отдельно, не растёт при просрочке и не входит в штрафы</div>
+                    </div>
+                  )}
+
+                  {contract && (obj.deferredRequests || []).length > 0 && (
+                    <div style={styles.subCard}>
+                      <div style={styles.subCardTitle}>🙏 Отсрочка штрафа</div>
+                      {(obj.deferredRequests || []).map((r: any) => (
+                        <div key={r.id} style={styles.slotItem}>
+                          <span>Арендатор просит отсрочить {Number(r.amount).toFixed(2)} ₽</span>
+                          <button
+                            onClick={() => confirmDeferral(r.id, contract.id, r.payment_id, Number(r.amount), contract.tenant_id)}
+                            style={{ ...styles.confirmButton, marginTop: 0, width: 'auto', padding: '6px 12px', fontSize: '13px', background: '#ff9800' }}
+                          >
+                            Подтвердить
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {contract && (
+                    <div style={styles.subCard}>
+                      <div style={styles.subCardTitle}>⚙️ Счётчики</div>
+                      <div style={styles.smallNote}>⚡ Электричество</div>
+                      {[
+                        { v: 'none', l: 'Не установлено' },
+                        { v: '1', l: '1-тарифный' },
+                        { v: '2', l: '2-тарифный (день/ночь)' },
+                        { v: '3', l: '3-тарифный (пик/полупик/ночь)' },
+                      ].map(opt => (
+                        <div key={opt.v} style={styles.meterRow}>
+                          <label style={styles.meterLabel}>
+                            <input
+                              type="radio"
+                              name={`elec-${obj.id}`}
+                              checked={elecMode === opt.v}
+                              onChange={() => setElecMode(obj.id, opt.v)}
+                            />
+                            {' '}{opt.l}
+                          </label>
+                        </div>
+                      ))}
+                      <div style={styles.smallNote}>💧 Вода</div>
+                      <div style={styles.meterRow}>
+                        <label style={styles.meterLabel}>
+                          <input type="checkbox" checked={isMeterActive(obj.id, 'water_cold')} onChange={(e) => { setMeterActive(obj.id, 'water_cold', e.target.checked); window.dispatchEvent(new Event('rentflow-refresh')) }} />
+                          {' '}Холодная
+                        </label>
+                      </div>
+                      <div style={styles.meterRow}>
+                        <label style={styles.meterLabel}>
+                          <input type="checkbox" checked={isMeterActive(obj.id, 'water_hot')} onChange={(e) => { setMeterActive(obj.id, 'water_hot', e.target.checked); window.dispatchEvent(new Event('rentflow-refresh')) }} />
+                          {' '}Горячая
+                        </label>
+                      </div>
+                      <div style={styles.smallNote}>🔥 Отопление</div>
+                      <div style={styles.meterRow}>
+                        <label style={styles.meterLabel}>
+                          <input type="checkbox" checked={isMeterActive(obj.id, 'heat')} onChange={(e) => { setMeterActive(obj.id, 'heat', e.target.checked); window.dispatchEvent(new Event('rentflow-refresh')) }} />
+                          {' '}Теплосчётчик установлен
+                        </label>
+                      </div>
+                      {meterTypes.find(t => t.code === 'gas') && (
+                        <div style={styles.meterRow}>
+                          <label style={styles.meterLabel}>
+                            <input type="checkbox" checked={isMeterActive(obj.id, 'gas')} onChange={(e) => { setMeterActive(obj.id, 'gas', e.target.checked); window.dispatchEvent(new Event('rentflow-refresh')) }} />
+                            {' '}Газ
+                          </label>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {contract && (
+                    <div style={styles.subCard}>
+                      <div style={styles.subCardTitle}>💵 Способ оплаты</div>
+                      <div style={styles.methodRow}>
+                        <label style={styles.methodLabel}>
+                          <input
+                            type="radio"
+                            name={`payment-method-${obj.id}`}
+                            value="card"
+                            checked={contract.payment_method === 'card'}
+                            onChange={() => updatePaymentMethod(contract.id, 'card')}
+                          />
+                          {' '}Безналичный расчёт
+                        </label>
+                        <label style={styles.methodLabel}>
+                          <input
+                            type="radio"
+                            name={`payment-method-${obj.id}`}
+                            value="cash"
+                            checked={contract.payment_method === 'cash'}
+                            onChange={() => updatePaymentMethod(contract.id, 'cash')}
+                          />
+                          {' '}Наличные
+                        </label>
+                        <label style={styles.methodLabel}>
+                          <input
+                            type="radio"
+                            name={`payment-method-${obj.id}`}
+                            value="both"
+                            checked={contract.payment_method === 'both'}
+                            onChange={() => updatePaymentMethod(contract.id, 'both')}
+                          />
+                          {' '}Наличный и безналичный расчёт
+                        </label>
+                      </div>
+                      {contract.payment_method === 'both' && (
+                        <div style={styles.smallNote}>💡 Способ оплаты выбирает арендатор: карта или наличные.</div>
+                      )}
+                    </div>
+                  )}
+
+                  {contract && tenantChoseCash && (
+                    <div style={styles.subCard}>
+                      <div style={styles.subCardTitle}>🤝 Оплата наличными — договорённость о времени</div>
+                      <CashNegotiation
+                        contractId={contract.id}
+                        myRole="landlord"
+                        tenantId={contract.tenant_id}
+                        landlordId={obj.landlord_id}
+                      />
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )
+        })
+      )}
+
+      <div style={styles.card}>
+        <div style={styles.cardTitle}>📊 Статистика</div>
+        <div style={styles.filtersRow}>
+          <select value={statsObject} onChange={(e) => setStatsObject(e.target.value)} style={styles.select}>
+            <option value="all">Все объекты</option>
+            {objects.map(o => <option key={o.id} value={o.id}>{o.address}</option>)}
+          </select>
+          <select value={statsPeriod} onChange={(e) => setStatsPeriod(e.target.value as '6m' | '12m')} style={styles.select}>
+            <option value="6m">Последние 6 мес</option>
+            <option value="12m">Год</option>
+          </select>
+        </div>
+        <div style={styles.statsGrid}>
+          <div style={styles.statTile}>
+            <div style={styles.statLabel}>Собрано</div>
+            <div style={styles.statValue}>{collected.toFixed(0)} ₽</div>
+          </div>
+          <div style={styles.statTile}>
+            <div style={styles.statLabel}>Штрафов начислено</div>
+            <div style={{ ...styles.statValue, color: '#c00' }}>{penaltiesAccrued.toFixed(0)} ₽</div>
+          </div>
+          <div style={styles.statTile}>
+            <div style={styles.statLabel}>Оплата вовремя</div>
+            <div style={styles.statValue}>{onTimePct}%</div>
+          </div>
+          <div style={styles.statTile}>
+            <div style={styles.statLabel}>Сейчас просрочено</div>
+            <div style={{ ...styles.statValue, color: overdueNow > 0 ? '#c00' : '#080' }}>{overdueNow} объект(а)</div>
+          </div>
+        </div>
+        <div style={styles.subCardTitle}>История платежей</div>
+        {filteredHistory.length === 0 ? (
+          <p style={styles.empty}>Платежей за период нет</p>
+        ) : (
+          filteredHistory.slice(0, 20).map((h: any) => {
+            const late = h.confirmed_by_landlord && h.confirmed_at && new Date(h.confirmed_at) > parseDate(h.due_date)
+            const sum = Number(h.base_amount || 0) + Number(h.penalty_amount || 0) + Number(h.utilities_amount || 0)
+            return (
+              <div key={h.id} style={styles.slotItem}>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  {h.address}<br />
+                  <span style={styles.smallNote}>{parseDate(h.period).toLocaleDateString('ru-RU')} · {h.confirmed_by_landlord ? (late ? 'просрочка' : 'вовремя') : 'не подтверждён'}</span>
+                </span>
+                <b style={{ color: late ? '#c00' : '#333', whiteSpace: 'nowrap', marginLeft: 8 }}>{sum.toFixed(0)} ₽</b>
+              </div>
+            )
+          })
+        )}
+      </div>
+
+      <div style={styles.card}>
+        <div style={styles.cardTitle}>🔔 Уведомления</div>
+        {notifications.length === 0 ? (
+          <p style={styles.empty}>Нет уведомлений</p>
+        ) : (
+          notifications.map(n => (
+            <div key={n.id} style={styles.notificationItem}>
+              {(n as any).message || getNotificationText(n.type)}
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  )
+}
+
+const styles: Record<string, React.CSSProperties> = {
+  container: {
+    fontFamily: 'system-ui, -apple-system, sans-serif',
+    maxWidth: '600px',
+    margin: '0 auto',
+    padding: '16px',
+    backgroundColor: '#f5f5f5',
+  },
+  title: {
+    fontSize: '24px',
+    fontWeight: 'bold',
+    marginBottom: '16px',
+  },
+  empty: {
+    color: '#888',
+    textAlign: 'center',
+  },
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: '12px',
+    padding: '16px',
+    marginBottom: '12px',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+  },
+  cardHeader: {
+    cursor: 'pointer',
+    userSelect: 'none',
+  },
+  expandArrow: {
+    fontSize: '12px',
+    color: '#999',
+    marginLeft: '8px',
+  },
+  frozenNote: {
+    fontSize: '13px',
+    color: '#00695c',
+    marginTop: '6px',
+    fontWeight: 600,
+    cursor: 'pointer',
+  },
+  deferredNote: {
+    fontSize: '13px',
+    color: '#e65100',
+    marginTop: '6px',
+    fontWeight: 600,
+  },
+  reminderNote: {
+    padding: '8px 10px',
+    backgroundColor: '#fff3e0',
+    border: '1px solid #ffb74d',
+    borderRadius: '8px',
+    color: '#e65100',
+    fontSize: '13px',
+    fontWeight: 600,
+    marginBottom: '8px',
+  },
+  smallNote: {
+    fontSize: '12px',
+    color: '#888',
+    marginTop: '6px',
+  },
+  utilRow: {
+    display: 'flex',
+    gap: '8px',
+    alignItems: 'center',
+  },
+  utilInput: {
+    flex: 1,
+    padding: '8px 10px',
+    borderRadius: '8px',
+    border: '1px solid #ddd',
+    fontSize: '14px',
+  },
+  filtersRow: {
+    display: 'flex',
+    gap: '8px',
+    marginBottom: '12px',
+  },
+  statsGrid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '8px',
+    marginBottom: '12px',
+  },
+  statTile: {
+    backgroundColor: '#f9f9f9',
+    borderRadius: '8px',
+    padding: '10px',
+  },
+  statLabel: {
+    fontSize: '12px',
+    color: '#888',
+    marginBottom: '4px',
+  },
+  statValue: {
+    fontSize: '16px',
+    fontWeight: 700,
+    color: '#333',
+  },
+  cardTitle: {
+    fontSize: '18px',
+    fontWeight: 'bold',
+    marginBottom: '12px',
+  },
+  address: {
+    fontSize: '16px',
+    fontWeight: '600',
+    marginBottom: '8px',
+  },
+  statusRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    marginBottom: '8px',
+  },
+  statusText: {
+    fontSize: '14px',
+    fontWeight: 600,
+  },
+  amount: {
+    fontSize: '18px',
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  confirmButton: {
+    marginTop: '12px',
+    width: '100%',
+    padding: '12px',
+    borderRadius: '10px',
+    border: 'none',
+    background: '#4caf50',
+    color: '#fff',
+    fontSize: '15px',
+    fontWeight: 700,
+    cursor: 'pointer',
+  },
+  subCard: {
+    marginTop: '16px',
+    paddingTop: '16px',
+    borderTop: '1px solid #eee',
+  },
+  subCardTitle: {
+    fontSize: '16px',
+    fontWeight: '600',
+    marginBottom: '12px',
+  },
+  meterRow: {
+    marginBottom: '8px',
+  },
+  meterLabel: {
+    fontSize: '14px',
+    cursor: 'pointer',
+  },
+  methodRow: {
+    display: 'flex',
+    gap: '12px',
+    marginBottom: '12px',
+    flexWrap: 'wrap' as const,
+  },
+  methodLabel: {
+    fontSize: '14px',
+    cursor: 'pointer',
+  },
+  slotItem: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '8px',
+    backgroundColor: '#f9f9f9',
+    borderRadius: '6px',
+    marginBottom: '6px',
+    fontSize: '14px',
+  },
+  deleteButton: {
+    background: '#ff5252',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '4px',
+    padding: '4px 8px',
+    cursor: 'pointer',
+    fontSize: '12px',
+  },
+  addButton: {
+    padding: '6px 12px',
+    borderRadius: '4px',
+    border: 'none',
+    background: '#2196f3',
+    color: '#fff',
+    cursor: 'pointer',
+    fontSize: '14px',
+  },
+  notificationItem: {
+    padding: '8px',
+    borderBottom: '1px solid #eee',
+    fontSize: '14px',
+    color: '#555',
+  },
+}
+
+export default LandlordDashboard
