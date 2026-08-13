@@ -180,11 +180,13 @@ export function ObjectManager() {
         { contract_id: contract.id, violation_type: 'payment_overdue', rate: Number(penPay) || 500, rate_unit: 'per_day_rub', starts_after_days: 0 },
         { contract_id: contract.id, violation_type: 'readings_overdue', rate: Number(penRead) || 100, rate_unit: 'per_day_rub', starts_after_days: 0 },
       ])
+      // Первый платёж: если день платежа в этом месяце уже прошёл — ставим его на следующий месяц,
+      // чтобы первый месяц договора был без просрочки
       const now = new Date()
       const payDay = Number(paymentDay) || 1
       let due = new Date(now.getFullYear(), now.getMonth(), payDay)
       const todayMid = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-      if (due < todayMid) due = todayMid
+      if (due < todayMid) due = new Date(now.getFullYear(), now.getMonth() + 1, payDay)
       const period = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10)
       await supabase.from('payments').insert({
         contract_id: contract.id, period, due_date: due.toISOString().slice(0, 10),
