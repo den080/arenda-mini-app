@@ -526,7 +526,7 @@ export function LandlordDashboard() {
                     {obj.address}
                     <span style={styles.expandArrow}>{isExpanded ? '▲' : '▼'}</span>
                   </div>
-                  {contract && contract.start_date && contract.end_date && <div style={{ fontSize: 11, color: 'rgba(0,0,0,0.4)', marginBottom: 6 }}>Срок аренды: с {parseDate(contract.start_date).toLocaleDateString('ru-RU')} по {parseDate(contract.end_date).toLocaleDateString('ru-RU')} ({Math.max(1, Math.round((parseDate(contract.end_date).getTime() - parseDate(contract.start_date).getTime()) / 2629800000))} мес.)</div>}
+                                    {contract && (contract as any).start_date && (contract as any).end_date && <div style={{ fontSize: 11, color: 'rgba(0,0,0,0.4)', marginBottom: 6 }}>Срок аренды: с {parseDate((contract as any).start_date).toLocaleDateString('ru-RU')} по {parseDate((contract as any).end_date).toLocaleDateString('ru-RU')} ({Math.max(1, Math.round((parseDate((contract as any).end_date).getTime() - parseDate((contract as any).start_date).getTime()) / 2629800000))} мес.)</div>}
                   <div style={styles.statusRow}>
                     <span>{getStatusIcon(obj.statusColor)}</span>
                     <span style={{ ...styles.statusText, color: obj.statusColor || '#666' }}>{obj.statusDetail}</span>
