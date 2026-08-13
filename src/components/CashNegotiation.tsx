@@ -43,6 +43,7 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [sub, setSub] = useState<Record<string, { from: string; to: string }>>({})
+  const [resched, setResched] = useState(false)
 
   async function load() {
     const { data } = await supabase
@@ -64,9 +65,19 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
   const myWindows = windows.filter(w => w.proposer === myRole)
   const theirWindows = windows.filter(w => w.proposer !== myRole)
   const meetings = rows.filter(r => (r.kind || 'meeting') === 'meeting')
-  const incoming = meetings.filter(m => m.status === 'proposed' && m.proposer !== myRole && windows.some(w => w.id === m.parent_id && w.proposer === myRole))
+  const incoming = meetings.filter(m => m.status === 'proposed' && m.proposer !== myRole)
   const myProposals = meetings.filter(m => m.status === 'proposed' && m.proposer === myRole)
   const confirmed = meetings.find(m => m.status === 'confirmed')
+
+  const meetMs = confirmed && confirmed.meeting_date ? new Date(`${confirmed.meeting_date}T${confirmed.time_from}`).getTime() : 0
+  const canResched = !!confirmed && (meetMs - Date.now()) > 24 * 3600 * 1000
+
+  async function notifyOther() {
+    const other = myRole === 'landlord' ? tenantId : landlordId
+    await supabase.from('notifications_log').insert({
+      user_id: other, type: 'cash_proposed', related_id: contractId, sent_at: new Date().toISOString(),
+    })
+  }
 
   async function addWindow() {
     if (!date || !from || !to || from >= to) {
@@ -87,7 +98,7 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
 
-  async function propose(w: Meeting) {
+  async function propose(w: Meeting, cancelConfirmedId?: string) {
     const s = sub[w.id] || { from: '', to: '' }
     if (!s.from || !s.to || s.from >= s.to) {
       alert('Выберите время начала и окончания внутри окна')
@@ -97,14 +108,15 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
       alert(`Время должно быть внутри окна ${w.time_from}–${w.time_to}`)
       return
     }
-    const other = myRole === 'landlord' ? tenantId : landlordId
+    if (cancelConfirmedId) {
+      await supabase.from('cash_meetings').update({ status: 'cancelled' }).eq('id', cancelConfirmedId)
+    }
     await supabase.from('cash_meetings').insert({
       contract_id: contractId, proposer: myRole, kind: 'meeting', status: 'proposed',
       parent_id: w.id, meeting_date: w.meeting_date, day: w.day, time_from: s.from, time_to: s.to,
     })
-    await supabase.from('notifications_log').insert({
-      user_id: other, type: 'cash_proposed', related_id: contractId, sent_at: new Date().toISOString(),
-    })
+    await notifyOther()
+    setResched(false)
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
 
@@ -123,57 +135,80 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
 
+  const windowPicker = (list: Meeting[]) => list.map(w => {
+    const opts = TIME_OPTIONS.filter(t => t >= w.time_from && t <= w.time_to)
+    const s = sub[w.id] || { from: '', to: '' }
+    return (
+      <div key={w.id} style={st.box}>
+        <div style={st.boxTitle}>{fmtDate(w.meeting_date)} · {w.time_from}–{w.time_to}{w.proposer === myRole ? ' (моё окно)' : ''}</div>
+        <div style={st.form}>
+          <select value={s.from} onChange={(e) => setSub({ ...sub, [w.id]: { ...s, from: e.target.value } })} style={st.input}>
+            <option value="">с --:--</option>
+            {opts.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+          <select value={s.to} onChange={(e) => setSub({ ...sub, [w.id]: { ...s, to: e.target.value } })} style={st.input}>
+            <option value="">по --:--</option>
+            {opts.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+          <button style={st.btn} onClick={() => propose(w, resched && confirmed ? confirmed.id : undefined)}>{resched ? 'Перенести' : 'Предложить'}</button>
+        </div>
+      </div>
+    )
+  })
+
   return (
     <div>
       <div style={st.note}>Место встречи по умолчанию — арендуемый объект, если не обсуждалось иное.</div>
 
       {confirmed && (
-        <div style={st.ok}>✅ Встреча согласована: {fmtDate(confirmed.meeting_date)}, {confirmed.time_from}–{confirmed.time_to}</div>
+        <div style={st.ok}>
+          ✅ Встреча согласована: {fmtDate(confirmed.meeting_date)}, {confirmed.time_from}–{confirmed.time_to}
+          <div style={{ marginTop: 8 }}>
+            {canResched ? (
+              <button style={st.btn} onClick={() => setResched(!resched)}>{resched ? 'Отменить перенос' : 'Изменить время'}</button>
+            ) : (
+              <div style={st.note}>Перенос возможен не позже чем за 24 ч до встречи — дальше только по договорённости по телефону.</div>
+            )}
+          </div>
+        </div>
       )}
 
-      <div style={st.h}>🕐 Мои окна, когда я могу</div>
-      {myWindows.length === 0 && <div style={st.note}>Пока нет. Добавьте окно ниже — вторая сторона выберет внутри него точное время.</div>}
-      {myWindows.map(w => (
-        <div key={w.id} style={st.row}>
-          <span>{fmtDate(w.meeting_date)} · {w.time_from}–{w.time_to}</span>
-          <button style={st.del} onClick={() => removeWindow(w.id)}>✕</button>
-        </div>
-      ))}
-      <div style={st.form}>
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={st.input} />
-        <select value={from} onChange={(e) => setFrom(e.target.value)} style={st.input}>
-          <option value="">с --:--</option>
-          {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-        </select>
-        <select value={to} onChange={(e) => setTo(e.target.value)} style={st.input}>
-          <option value="">по --:--</option>
-          {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-        </select>
-        <button style={st.btn} onClick={addWindow}>Добавить окно</button>
-      </div>
+      {resched && (
+        <>
+          <div style={st.h}>🔁 Выберите новое время (внутри любого открытого окна)</div>
+          {windows.length === 0 && <div style={st.note}>Нет открытых окон — добавьте новое ниже.</div>}
+          {windowPicker(windows)}
+        </>
+      )}
 
-      <div style={st.h}>🕐 Окна второй стороны — выберите время внутри</div>
-      {theirWindows.length === 0 && <div style={st.note}>Вторая сторона ещё не добавила окна.</div>}
-      {theirWindows.map(w => {
-        const opts = TIME_OPTIONS.filter(t => t >= w.time_from && t <= w.time_to)
-        const s = sub[w.id] || { from: '', to: '' }
-        return (
-          <div key={w.id} style={st.box}>
-            <div style={st.boxTitle}>{fmtDate(w.meeting_date)} · {w.time_from}–{w.time_to}</div>
-            <div style={st.form}>
-              <select value={s.from} onChange={(e) => setSub({ ...sub, [w.id]: { ...s, from: e.target.value } })} style={st.input}>
-                <option value="">с --:--</option>
-                {opts.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
-              <select value={s.to} onChange={(e) => setSub({ ...sub, [w.id]: { ...s, to: e.target.value } })} style={st.input}>
-                <option value="">по --:--</option>
-                {opts.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
-              <button style={st.btn} onClick={() => propose(w)}>Предложить</button>
+      {!resched && (
+        <>
+          <div style={st.h}>🕐 Мои окна, когда я могу</div>
+          {myWindows.length === 0 && <div style={st.note}>Пока нет. Добавьте окно ниже — вторая сторона выберет внутри него точное время.</div>}
+          {myWindows.map(w => (
+            <div key={w.id} style={st.row}>
+              <span>{fmtDate(w.meeting_date)} · {w.time_from}–{w.time_to}</span>
+              <button style={st.del} onClick={() => removeWindow(w.id)}>✕</button>
             </div>
+          ))}
+          <div style={st.form}>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={st.input} />
+            <select value={from} onChange={(e) => setFrom(e.target.value)} style={st.input}>
+              <option value="">с --:--</option>
+              {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+            <select value={to} onChange={(e) => setTo(e.target.value)} style={st.input}>
+              <option value="">по --:--</option>
+              {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+            <button style={st.btn} onClick={addWindow}>Добавить окно</button>
           </div>
-        )
-      })}
+
+          <div style={st.h}>🕐 Окна второй стороны — выберите время внутри</div>
+          {theirWindows.length === 0 && <div style={st.note}>Вторая сторона ещё не добавила окна.</div>}
+          {windowPicker(theirWindows)}
+        </>
+      )}
 
       {incoming.length > 0 && (
         <>
