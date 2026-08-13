@@ -209,8 +209,10 @@ export function TenantDashboard() {
   if (payment) {
     if (!payment.confirmed_by_landlord) {
       const dueMid = parseDate(payment.due_date)
-      const daysUntilDue = Math.round((dueMid.getTime() - todayMid.getTime()) / 86400000)
-      if (todayMid > dueMid) {
+      const sd = contract.start_date ? parseDate(contract.start_date) : null
+      const firstMonthGrace = !!sd && dueMid.getMonth() === sd.getMonth() && dueMid.getFullYear() === sd.getFullYear() && todayMid < new Date(sd.getFullYear(), sd.getMonth() + 1, 1)
+      const daysUntilDue = firstMonthGrace && todayMid > dueMid ? 0 : Math.round((dueMid.getTime() - todayMid.getTime()) / 86400000)
+      if (todayMid > dueMid && !firstMonthGrace) {
         isOverdue = true
         statusIcon = '🔴'
         statusColor = '#c00'
@@ -218,7 +220,7 @@ export function TenantDashboard() {
       } else if (daysUntilDue === 0) {
         statusIcon = '🟡'
         statusColor = '#a80'
-        statusText = 'Сегодня последний день оплаты'
+        statusText = firstMonthGrace ? 'Первый месяц — просрочка не начисляется' : 'Сегодня последний день оплаты'
       } else if (daysUntilDue <= reminder) {
         statusIcon = '🟡'
         statusColor = '#a80'
@@ -288,6 +290,7 @@ export function TenantDashboard() {
       <div style={s.card}>
         <div style={s.address}>{obj?.address}</div>
         <div style={s.small}>Арендодатель: {landlord?.full_name}{landlord?.phone ? ', ' + formatPhoneDisplay(landlord.phone) : ''}</div>
+        {contract.start_date && contract.end_date && <div style={{ fontSize: 11, color: 'rgba(0,0,0,0.4)', marginTop: 4 }}>Срок аренды: с {parseDate(contract.start_date).toLocaleDateString('ru-RU')} по {parseDate(contract.end_date).toLocaleDateString('ru-RU')} ({Math.max(1, Math.round((parseDate(contract.end_date).getTime() - parseDate(contract.start_date).getTime()) / 2629800000))} мес.)</div>}
       </div>
 
       {deferredTotal > 0 && (
