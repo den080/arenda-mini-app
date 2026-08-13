@@ -32,6 +32,7 @@ export function TenantDashboard() {
   const [msg, setMsg] = useState<string | null>(null)
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [frozenOpen, setFrozenOpen] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState<Record<string, boolean>>({})
 
   async function load() {
     if (!user) return
@@ -50,6 +51,19 @@ export function TenantDashboard() {
       const { data: frozenRows } = await supabase.from('frozen_penalties').select('*').eq('contract_id', contract.id).order('period', { ascending: true })
       const { data: deferredReqs } = await supabase.from('deferred_requests').select('*').eq('contract_id', contract.id).order('created_at', { ascending: false }).limit(1)
 
+      const ids = (meters || []).map((m: any) => m.id)
+      const readingsByMeter: Record<string, any[]> = {}
+      if (ids.length) {
+        const { data: rd } = await supabase
+          .from('meter_readings').select('*')
+          .in('object_meter_id', ids)
+          .order('submitted_at', { ascending: false })
+        for (const r of rd || []) {
+          if (!readingsByMeter[r.object_meter_id]) readingsByMeter[r.object_meter_id] = []
+          readingsByMeter[r.object_meter_id].push(r)
+        }
+      }
+
       const { data: notifData } = await supabase
         .from('notifications_log').select('*')
         .eq('user_id', user!.id)
@@ -61,7 +75,8 @@ export function TenantDashboard() {
         payments: payments || [], meters: meters || [], meterTypes: meterTypes || [],
         penaltyRules: penaltyRules || [],
         frozenRows: frozenRows || [],
-        deferredReqs: deferredReqs || []
+        deferredReqs: deferredReqs || [],
+        readingsByMeter
       })
     } catch (e) {
       setError('Ошибка загрузки: ' + String(e))
@@ -119,18 +134,17 @@ export function TenantDashboard() {
     const rows: any[] = []
     for (const m of data.meters) {
       const v = vals[m.id]
-      if (v) rows.push({ object_meter_id: m.id, contract_id: data.contract.id, value: Number(v), period, submitted_at: new Date().toISOString() })
+      if (v) rows.push({ object_meter_id: m.id, contract_id: data.contract.id, value: Number(v), period, submitted_at: new Date().toISOString(), status: 'proposed' })
     }
     if (rows.length === 0) { setMsg('Введите показания счётчиков'); return }
     const { error: e } = await supabase.from('meter_readings').insert(rows)
-    setMsg(e ? 'Ошибка: ' + e.message : '✅ Показания переданы')
+    setMsg(e ? 'Ошибка: ' + e.message : '✅ Показания переданы и ждут подтверждения арендодателем')
     setVals({})
     if (!e) {
       await supabase.from('notifications_log').insert({
         user_id: user!.id, type: 'meter_submitted', related_id: data.contract.id, sent_at: new Date().toISOString()
       })
-      const { data: notifData } = await supabase.from('notifications_log').select('*').eq('user_id', user!.id).order('sent_at', { ascending: false }).limit(5)
-      setNotifications(notifData || [])
+      load()
     }
   }
 
@@ -148,7 +162,7 @@ export function TenantDashboard() {
   if (error) return <div style={s.container}>{error}</div>
   if (!data) return <div style={s.container}>Нет данных</div>
 
-  const { contract, obj, landlord, payments, meters, meterTypes, penaltyRules, frozenRows, deferredReqs } = data
+  const { contract, obj, landlord, payments, meters, meterTypes, penaltyRules, frozenRows, deferredReqs, readingsByMeter } = data
   const readingsMode = contract.readings_mode || 'manual'
   const reminder = contract.reminder_days_before || 3
   const payment = payments[0]
@@ -159,6 +173,17 @@ export function TenantDashboard() {
   const monthLabel = payment ? new Date(payment.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : ''
   const deposit = Number(contract.deposit_amount || 0)
   const frozenTotal = (frozenRows || []).reduce((sum: number, f: any) => sum + Number(f.amount || 0), 0)
+
+  const chip = (stt: string) => (stt || 'proposed') === 'confirmed' ? '🟢 получены' : (stt || 'proposed') === 'incomplete' ? '🔴 не полностью' : '🟡 ждут'
+
+  const latests = (meters || []).map((m: any) => ((readingsByMeter || {})[m.id] || [])[0]).filter(Boolean)
+  const overallReading = latests.length === 0
+    ? 'none'
+    : latests.some((r: any) => (r.status || 'proposed') === 'incomplete')
+      ? 'incomplete'
+      : latests.every((r: any) => (r.status || 'proposed') === 'confirmed')
+        ? 'confirmed'
+        : 'proposed'
 
   const effectiveMethod = contract.payment_method === 'both'
     ? (contract.tenant_pay_method || 'card')
@@ -357,17 +382,39 @@ export function TenantDashboard() {
         <div style={s.card}>
           <div style={s.h2}>💦 Передать показания</div>
           <div style={s.small}>Срок подачи: до {contract.meter_deadline_day} числа</div>
+          {overallReading === 'incomplete' && (
+            <div style={s.overdueNotice}>🔴 Арендодатель отметил: показания получены не полностью — передайте недостающие ещё раз</div>
+          )}
+          {overallReading === 'confirmed' && (
+            <div style={s.okNote}>🟢 Показания получены арендодателем</div>
+          )}
+          {overallReading === 'proposed' && (
+            <div style={s.meetingStatus}>🟡 Показания отправлены и ждут подтверждения арендодателем</div>
+          )}
           {meters.map((m: any) => {
             const t = meterTypes.find((x: any) => x.id === m.meter_type_id)
+            const hist = (readingsByMeter || {})[m.id] || []
+            const last = hist[0]
+            const open = !!historyOpen[m.id]
             return (
-              <input
-                key={m.id}
-                value={vals[m.id] || ''}
-                onChange={(e) => setVals({ ...vals, [m.id]: e.target.value })}
-                placeholder={(t?.label || 'Счётчик') + ', ' + (t?.unit || 'м³')}
-                style={s.input}
-                inputMode="decimal"
-              />
+              <div key={m.id}>
+                <input
+                  value={vals[m.id] || ''}
+                  onChange={(e) => setVals({ ...vals, [m.id]: e.target.value })}
+                  placeholder={(t?.label || 'Счётчик') + (m.label ? ` · № ${m.label}` : '') + ', ' + (t?.unit || 'м³')}
+                  style={s.input}
+                  inputMode="decimal"
+                />
+                {m.label && <div style={s.tiny}>номер счётчика: {m.label}</div>}
+                {last && (
+                  <div style={s.tinyLink} onClick={() => setHistoryOpen({ ...historyOpen, [m.id]: !open })}>
+                    🕐 последнее: {last.value} · подано {new Date(last.submitted_at).toLocaleDateString('ru-RU')} · {chip(last.status)} {open ? '▲' : '▼'}
+                  </div>
+                )}
+                {open && hist.slice(0, 10).map((r: any) => (
+                  <div key={r.id} style={s.tiny}>{r.value} · подано {new Date(r.submitted_at).toLocaleDateString('ru-RU')} · {chip(r.status)}</div>
+                ))}
+              </div>
             )
           })}
           <button onClick={submitMeters} style={s.button}>📤 Передать показания</button>
@@ -420,6 +467,9 @@ const s: Record<string, React.CSSProperties> = {
   card: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' },
   address: { fontSize: 16, fontWeight: 600, marginBottom: 8 },
   small: { fontSize: 13, color: '#666', marginTop: 6 },
+  tiny: { fontSize: 11, color: 'rgba(0,0,0,0.45)', marginTop: 2, marginBottom: 6 },
+  tinyLink: { fontSize: 11, color: '#00695c', fontWeight: 600, cursor: 'pointer', marginTop: 2, marginBottom: 6 },
+  okNote: { padding: 8, background: '#eaf7ef', border: '1px solid #a5d6a7', borderRadius: 8, color: '#080', fontSize: 13, fontWeight: 600, marginBottom: 8 },
   h2: { fontSize: 17, fontWeight: 700, marginBottom: 10 },
   h3: { fontSize: 15, fontWeight: 600, marginBottom: 8 },
   row: { display: 'flex', justifyContent: 'space-between', fontSize: 14, marginBottom: 6 },
