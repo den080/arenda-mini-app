@@ -369,6 +369,7 @@ export function TenantDashboard() {
         {effectiveMethod === 'cash' && (
           <div style={s.cashSection}>
             <div style={s.h3}>💵 Оплата наличными</div>
+            <div style={s.small}>Место встречи по умолчанию — арендуемый объект, если не обсуждалось иное.</div>
             {slots.length === 0 ? (
               <div style={s.small}>Арендодатель ещё не указал слоты времени</div>
             ) : (
