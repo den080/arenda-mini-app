@@ -1,20 +1,14 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useTelegramUser } from '../hooks/useTelegramUser'
+import CashNegotiation from '../components/CashNegotiation'
 
 interface PayDetail { type: 'card' | 'sbp'; bank: string; number: string }
 interface Notification { id: string; user_id: string; type: string; related_id: string; sent_at: string }
-interface CashMeeting { id: string; contract_id: string; payment_id: string; day: number; time_from: string; time_to: string; status: 'proposed' | 'confirmed' }
 
 function parseDate(d: any): Date {
   const [y, m, dd] = String(d).slice(0, 10).split('-').map(Number)
   return new Date(y, (m || 1) - 1, dd || 1)
-}
-
-function formatSlotDate(d: any): string {
-  const dt = parseDate(d)
-  const wd = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'][dt.getDay()]
-  return `${String(dt.getDate()).padStart(2, '0')}.${String(dt.getMonth() + 1).padStart(2, '0')}.${dt.getFullYear()} (${wd})`
 }
 
 function formatCardNumber(v: string): string {
@@ -37,8 +31,6 @@ export function TenantDashboard() {
   const [vals, setVals] = useState<Record<string, string>>({})
   const [msg, setMsg] = useState<string | null>(null)
   const [notifications, setNotifications] = useState<Notification[]>([])
-  const [cashMeetings, setCashMeetings] = useState<CashMeeting[]>([])
-  const [selectedSlotIndex, setSelectedSlotIndex] = useState<number>(0)
 
   async function load() {
     if (!user) return
@@ -56,13 +48,6 @@ export function TenantDashboard() {
       const { data: penaltyRules } = await supabase.from('penalty_rules').select('*').eq('contract_id', contract.id)
       const { data: deferredDebts } = await supabase.from('deferred_debts').select('*').eq('contract_id', contract.id)
       const { data: deferredReqs } = await supabase.from('deferred_requests').select('*').eq('contract_id', contract.id).order('created_at', { ascending: false }).limit(1)
-
-      const { data: meetings } = await supabase
-        .from('cash_meetings').select('*')
-        .eq('contract_id', contract.id)
-        .order('created_at', { ascending: false }).limit(1)
-      if (meetings && meetings.length > 0) setCashMeetings(meetings)
-      else setCashMeetings([])
 
       const { data: notifData } = await supabase
         .from('notifications_log').select('*')
@@ -144,33 +129,6 @@ export function TenantDashboard() {
       const { data: notifData } = await supabase.from('notifications_log').select('*').eq('user_id', user!.id).order('sent_at', { ascending: false }).limit(5)
       setNotifications(notifData || [])
     }
-  }
-
-  async function proposeCashMeeting() {
-    if (!data || !data.contract) return
-    const slots = data.contract.cash_slots || []
-    if (slots.length === 0) { setMsg('Нет доступных слотов времени'); return }
-    const slot = slots[selectedSlotIndex]
-    if (!slot) return
-    const payment = data.payments[0]
-    const meetingData = {
-      contract_id: data.contract.id,
-      payment_id: payment ? payment.id : null,
-      day: slot.day,
-      meeting_date: (slot as any).date || null,
-      time_from: slot.time_from,
-      time_to: slot.time_to,
-      status: 'proposed' as const
-    }
-    const { error: e } = await supabase.from('cash_meetings').insert(meetingData)
-    if (e) { setMsg('Ошибка: ' + e.message); return }
-    await supabase.from('notifications_log').insert({
-      user_id: data.landlord.id, type: 'cash_proposed', related_id: data.contract.id, sent_at: new Date().toISOString()
-    })
-    const { data: newMeeting } = await supabase.from('cash_meetings').select('*')
-      .eq('contract_id', data.contract.id).order('created_at', { ascending: false }).limit(1).maybeSingle()
-    if (newMeeting) setCashMeetings([newMeeting])
-    setMsg('✅ Заявка отправлена арендодателю')
   }
 
   async function copyToClipboard(text: string, label: string) {
@@ -261,12 +219,6 @@ export function TenantDashboard() {
   const lastDeferral = deferredReqs && deferredReqs[0] ? deferredReqs[0] : null
   const deferralPending = !!(lastDeferral && lastDeferral.status === 'proposed' && payment && String(lastDeferral.payment_id) === String(payment.id))
 
-  const lastMeeting = cashMeetings[0]
-  const meetingStatus = !lastMeeting ? null : lastMeeting.status === 'proposed' ? { icon: '🟡', text: 'Заявка на рассмотрении' } : { icon: '🟢', text: 'Время подтверждено' }
-
-  const dayNames = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
-  const slots = contract.cash_slots || []
-
   const details: PayDetail[] = Array.isArray(contract.payment_details) && contract.payment_details.length > 0
     ? contract.payment_details
     : (contract.card_number ? [{ type: 'card', bank: 'Банк не указан', number: contract.card_number }] : [])
@@ -276,8 +228,8 @@ export function TenantDashboard() {
       case 'payment_claimed': return '✅ Арендатор сообщил об оплате'
       case 'payment_confirmed': return '🟢 Арендодатель подтвердил оплату'
       case 'meter_submitted': return '💦 Переданы новые показания'
-      case 'cash_proposed': return '💵 Арендатор предложил время оплаты наличными'
-      case 'cash_confirmed': return '🤝 Время оплаты наличными подтверждено'
+      case 'cash_proposed': return '💵 Предложено время встречи наличными'
+      case 'cash_confirmed': return '🤝 Время встречи наличными подтверждено'
       case 'deferred_proposed': return '🙏 Заявка на отсрочку штрафа отправлена'
       case 'deferred_confirmed': return '🤝 Арендодатель подтвердил отсрочку штрафа'
       default: return type
@@ -369,26 +321,12 @@ export function TenantDashboard() {
         {effectiveMethod === 'cash' && (
           <div style={s.cashSection}>
             <div style={s.h3}>💵 Оплата наличными</div>
-            <div style={s.small}>Место встречи по умолчанию — арендуемый объект, если не обсуждалось иное.</div>
-            {slots.length === 0 ? (
-              <div style={s.small}>Арендодатель ещё не указал слоты времени</div>
-            ) : (
-              <>
-                <select value={selectedSlotIndex} onChange={(e) => setSelectedSlotIndex(Number(e.target.value))} style={s.select}>
-                  {slots.map((slot: any, idx: number) => (
-                    <option key={idx} value={idx}>
-                      {slot.date ? formatSlotDate(slot.date) : (dayNames[slot.day] || '')} {slot.time_from}–{slot.time_to}
-                    </option>
-                  ))}
-                </select>
-                <button onClick={proposeCashMeeting} style={s.button}>Предложить время</button>
-              </>
-            )}
-            {meetingStatus && (
-              <div style={s.meetingStatus}>
-                <span>{meetingStatus.icon}</span> {meetingStatus.text}
-              </div>
-            )}
+            <CashNegotiation
+              contractId={contract.id}
+              myRole="tenant"
+              tenantId={contract.tenant_id}
+              landlordId={obj?.landlord_id}
+            />
           </div>
         )}
       </div>
@@ -481,7 +419,6 @@ const s: Record<string, React.CSSProperties> = {
   payBank: { fontWeight: 600, fontSize: 14 },
   payNumber: { fontFamily: 'monospace', fontSize: 16, fontWeight: 500, marginBottom: 8, wordBreak: 'break-all' as const },
   copyBtn: { padding: '8px 14px', borderRadius: 8, border: '1px solid #2196f3', background: '#fff', color: '#2196f3', fontSize: 13, fontWeight: 600, cursor: 'pointer' },
-  select: { width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 15, marginBottom: 8, boxSizing: 'border-box' },
   meetingStatus: { marginTop: 10, padding: 10, backgroundColor: '#fff3e0', borderRadius: 8, fontSize: 14 },
   notificationRow: { padding: '8px 0', borderBottom: '1px solid #eee', fontSize: 14, color: '#333' },
 }
