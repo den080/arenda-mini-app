@@ -51,7 +51,6 @@ export function LandlordDashboard() {
   const [statsPeriod, setStatsPeriod] = useState<'6m' | '12m'>('6m')
   const [statsObject, setStatsObject] = useState<string>('all')
 
-  const [newSlotDay, setNewSlotDay] = useState<number>(0)
   const [newSlotDate, setNewSlotDate] = useState<string>('')
   const [newSlotTimeFrom, setNewSlotTimeFrom] = useState<string>('')
   const [newSlotTimeTo, setNewSlotTimeTo] = useState<string>('')
@@ -452,7 +451,6 @@ export function LandlordDashboard() {
       alert('Ошибка: ' + meetError.message)
     }
   }
-
   const getStatusIcon = (color?: string) => {
     if (color === '#c00') return '🔴'
     if (color === '#a80') return '🟡'
@@ -526,7 +524,7 @@ export function LandlordDashboard() {
                     {obj.address}
                     <span style={styles.expandArrow}>{isExpanded ? '▲' : '▼'}</span>
                   </div>
-                                    {contract && (contract as any).start_date && (contract as any).end_date && <div style={{ fontSize: 11, color: 'rgba(0,0,0,0.4)', marginBottom: 6 }}>Срок аренды: с {parseDate((contract as any).start_date).toLocaleDateString('ru-RU')} по {parseDate((contract as any).end_date).toLocaleDateString('ru-RU')} ({Math.max(1, Math.round((parseDate((contract as any).end_date).getTime() - parseDate((contract as any).start_date).getTime()) / 2629800000))} мес.)</div>}
+                  {contract && (contract as any).start_date && (contract as any).end_date && <div style={{ fontSize: 11, color: 'rgba(0,0,0,0.4)', marginBottom: 6 }}>Срок аренды: с {parseDate((contract as any).start_date).toLocaleDateString('ru-RU')} по {parseDate((contract as any).end_date).toLocaleDateString('ru-RU')} ({Math.max(1, Math.round((parseDate((contract as any).end_date).getTime() - parseDate((contract as any).start_date).getTime()) / 2629800000))} мес.)</div>}
                   <div style={styles.statusRow}>
                     <span>{getStatusIcon(obj.statusColor)}</span>
                     <span style={{ ...styles.statusText, color: obj.statusColor || '#666' }}>{obj.statusDetail}</span>
@@ -705,42 +703,37 @@ export function LandlordDashboard() {
                             ))}
                           </div>
                           <div style={styles.addSlotForm}>
-                            <select
-                              value={newSlotDay}
-                              onChange={(e) => setNewSlotDay(Number(e.target.value))}
-                              style={styles.select}
-                            >
-                              {DAYS_OF_WEEK.map((d, i) => (
-                                <option key={i} value={i}>{d}</option>
-                              ))}
-                            </select>
                             <input
                               type="date"
                               value={newSlotDate}
                               onChange={(e) => setNewSlotDate(e.target.value)}
                               style={styles.select}
-                              title="Или укажите конкретную дату"
                             />
-                            <input
-                              type="time"
-                              step={600}
+                            <select
                               value={newSlotTimeFrom}
                               onChange={(e) => setNewSlotTimeFrom(e.target.value)}
-                              style={styles.timeInput}
-                            />
-                            <input
-                              type="time"
-                              step={600}
+                              style={styles.select}
+                            >
+                              <option value="">--:--</option>
+                              {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                            </select>
+                            <select
                               value={newSlotTimeTo}
                               onChange={(e) => setNewSlotTimeTo(e.target.value)}
-                              style={styles.timeInput}
-                            />
+                              style={styles.select}
+                            >
+                              <option value="">--:--</option>
+                              {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                            </select>
                             <button
                               onClick={() => {
+                                if (!newSlotDate || !newSlotTimeFrom || !newSlotTimeTo) {
+                                  alert('Укажите дату и время начала/окончания встречи')
+                                  return
+                                }
                                 const currentSlots = contract.cash_slots as CashSlot[] || []
-                                const newSlots = [...currentSlots, { day: newSlotDay, date: newSlotDate || null, time_from: newSlotTimeFrom, time_to: newSlotTimeTo } as any]
+                                const newSlots = [...currentSlots, { day: parseDate(newSlotDate).getDay(), date: newSlotDate, time_from: newSlotTimeFrom, time_to: newSlotTimeTo } as any]
                                 saveCashSlots(contract.id, newSlots)
-                                setNewSlotDay(0)
                                 setNewSlotDate('')
                                 setNewSlotTimeFrom('')
                                 setNewSlotTimeTo('')
@@ -750,7 +743,7 @@ export function LandlordDashboard() {
                               Добавить
                             </button>
                           </div>
-                          <div style={styles.smallNote}>День недели — для регулярных слотов; дата — для конкретной встречи. Если указана дата, она показывается вместо дня недели.</div>
+                          <div style={styles.smallNote}>Каждый слот — конкретная дата и время, день недели подставляется автоматически. Место встречи по умолчанию — арендуемый объект, если не обсуждалось иное.</div>
                         </div>
                       )}
                     </div>
@@ -837,6 +830,13 @@ export function LandlordDashboard() {
       </div>
     </div>
   )
+}
+
+const TIME_OPTIONS: string[] = []
+for (let h = 0; h < 24; h++) {
+  for (let m = 0; m < 60; m += 10) {
+    TIME_OPTIONS.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`)
+  }
 }
 
 const styles: Record<string, React.CSSProperties> = {
@@ -1028,12 +1028,6 @@ const styles: Record<string, React.CSSProperties> = {
   },
   select: {
     flex: 1,
-    padding: '6px',
-    borderRadius: '4px',
-    border: '1px solid #ddd',
-    fontSize: '14px',
-  },
-  timeInput: {
     padding: '6px',
     borderRadius: '4px',
     border: '1px solid #ddd',
