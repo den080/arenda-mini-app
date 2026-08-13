@@ -17,6 +17,25 @@ function normalizePhone(input: string): string {
   return cleaned
 }
 
+function formatCardInput(v: string): string {
+  const d = (v || '').replace(/\D/g, '').slice(0, 16)
+  return d.replace(/(.{4})/g, '$1 ').trim()
+}
+
+function formatPhoneInput(v: string): string {
+  const digits = (v || '').replace(/\D/g, '').slice(0, 11)
+  if (digits.length === 11 && (digits.startsWith('7') || digits.startsWith('8'))) {
+    const x = digits.slice(1)
+    let out = '+7'
+    if (x.length > 0) out += ' ' + x.slice(0, 3)
+    if (x.length > 3) out += ' ' + x.slice(3, 6)
+    if (x.length > 6) out += ' ' + x.slice(6, 8)
+    if (x.length > 8) out += ' ' + x.slice(8, 10)
+    return out
+  }
+  return v
+}
+
 function DetailsEditor({ list, onChange }: { list: PayDetail[]; onChange: (v: PayDetail[]) => void }) {
   return (
     <div>
@@ -29,7 +48,13 @@ function DetailsEditor({ list, onChange }: { list: PayDetail[]; onChange: (v: Pa
           <select value={d.bank} onChange={e => { const v = [...list]; v[i] = { ...v[i], bank: e.target.value }; onChange(v) }} style={s.half}>
             {BANKS.map(b => <option key={b} value={b}>{b}</option>)}
           </select>
-          <input value={d.number} onChange={e => { const v = [...list]; v[i] = { ...v[i], number: e.target.value }; onChange(v) }} placeholder={d.type === 'card' ? 'Номер карты' : 'Номер телефона для СБП'} style={s.input} />
+          <input
+            value={d.number}
+            onChange={e => { const v = [...list]; v[i] = { ...v[i], number: d.type === 'card' ? formatCardInput(e.target.value) : formatPhoneInput(e.target.value) }; onChange(v) }}
+            placeholder={d.type === 'card' ? '0000 0000 0000 0000' : '+7 000 000 00-00'}
+            style={s.input}
+            inputMode="numeric"
+          />
           <button style={s.delButton} onClick={() => onChange(list.filter((_, x) => x !== i))}>✕</button>
         </div>
       ))}
@@ -64,13 +89,14 @@ export function ObjectManager() {
   const [deposit, setDeposit] = useState('')
   const [paymentDay, setPaymentDay] = useState('')
   const [endDate, setEndDate] = useState('')
-  const [meterDay, setMeterDay] = useState('')
+  const [meterDay, setMeterDay] = useState('15')
   const [readingsMode, setReadingsMode] = useState('manual')
   const [method, setMethod] = useState('both')
   const [penPay, setPenPay] = useState('')
   const [penRead, setPenRead] = useState('')
   const [remind, setRemind] = useState('')
   const [details, setDetails] = useState<PayDetail[]>([])
+  const [addDetailsErr, setAddDetailsErr] = useState<string | null>(null)
 
   const [editId, setEditId] = useState<string | null>(null)
   const [editContractId, setEditContractId] = useState<string | null>(null)
@@ -83,7 +109,7 @@ export function ObjectManager() {
   const [eRent, setERent] = useState('')
   const [eDeposit, setEDeposit] = useState('')
   const [ePaymentDay, setEPaymentDay] = useState('')
-  const [eMeterDay, setEMeterDay] = useState('')
+  const [eMeterDay, setEMeterDay] = useState('15')
   const [eReadingsMode, setEReadingsMode] = useState('manual')
   const [eEndDate, setEEndDate] = useState('')
   const [eMethod, setEMethod] = useState('both')
@@ -91,6 +117,7 @@ export function ObjectManager() {
   const [ePenRead, setEPenRead] = useState('')
   const [eRemind, setERemind] = useState('')
   const [eDetails, setEDetails] = useState<PayDetail[]>([])
+  const [editDetailsErr, setEditDetailsErr] = useState<string | null>(null)
 
   async function load() {
     if (!user) return
@@ -107,9 +134,10 @@ export function ObjectManager() {
     if (saving) return
     if (!user || !address) { setMsg('Укажите адрес объекта'); return }
     if (method !== 'cash' && details.length === 0) {
-      setMsg('⚠️ Добавьте хотя бы один способ безналичной оплаты: карту банка или СБП')
+      setAddDetailsErr('⚠️ Добавьте хотя бы один способ безналичной оплаты: карту банка или СБП')
       return
     }
+    setAddDetailsErr(null)
     setSaving(true)
     try {
       const normalizedPhone = phone ? normalizePhone(phone) : null
@@ -137,7 +165,7 @@ export function ObjectManager() {
         rent_amount: Number(rent) || 0,
         deposit_amount: Number(deposit) || 0,
         payment_day: Number(paymentDay) || 1,
-        meter_deadline_day: Number(meterDay) || 5,
+        meter_deadline_day: Number(meterDay) || 15,
         readings_mode: readingsMode,
         start_date: startISO,
         end_date: endDate || null,
@@ -164,7 +192,7 @@ export function ObjectManager() {
       })
       setMsg('✅ Объект, договор и первый платёж сохранены')
       setShowForm(false)
-      setAddress(''); setNotes(''); setName(''); setPhone(''); setRent(''); setDeposit(''); setStartDate(''); setDetails([]); setReadingsMode('manual'); setMethod('both')
+      setAddress(''); setNotes(''); setName(''); setPhone(''); setRent(''); setDeposit(''); setStartDate(''); setPaymentDay(''); setMeterDay('15'); setDetails([]); setReadingsMode('manual'); setMethod('both'); setAddDetailsErr(null)
       load()
     } finally {
       setSaving(false)
@@ -182,7 +210,7 @@ export function ObjectManager() {
       setERent(String(contract.rent_amount ?? ''))
       setEDeposit(String(contract.deposit_amount ?? ''))
       setEPaymentDay(String(contract.payment_day ?? ''))
-      setEMeterDay(String(contract.meter_deadline_day ?? ''))
+      setEMeterDay(String(contract.meter_deadline_day || 15))
       setEReadingsMode(contract.readings_mode || 'manual')
       setEEndDate(contract.end_date || '')
       setEMethod(contract.payment_method || 'both')
@@ -208,9 +236,10 @@ export function ObjectManager() {
   async function saveEdit() {
     if (!editId || !user) return
     if (eMethod !== 'cash' && eDetails.length === 0) {
-      setMsg('⚠️ Добавьте хотя бы один способ безналичной оплаты: карту банка или СБП')
+      setEditDetailsErr('⚠️ Добавьте хотя бы один способ безналичной оплаты: карту банка или СБП')
       return
     }
+    setEditDetailsErr(null)
     const { error: oe } = await supabase.from('objects').update({ address: eAddress, notes: eNotes || null }).eq('id', editId)
     if (oe) { setMsg('Ошибка: ' + oe.message); return }
     if (editContractId) {
@@ -219,7 +248,7 @@ export function ObjectManager() {
         rent_amount: Number(eRent) || 0,
         deposit_amount: Number(eDeposit) || 0,
         payment_day: Number(ePaymentDay) || 1,
-        meter_deadline_day: Number(eMeterDay) || 5,
+        meter_deadline_day: Number(eMeterDay) || 15,
         readings_mode: eReadingsMode,
         start_date: eStartDate || null,
         end_date: eEndDate || null,
@@ -290,19 +319,29 @@ export function ObjectManager() {
           <div style={s.small}>Телефон арендатора</div>
           <input style={s.input} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+79995553322 или 89995553322" />
           <div style={s.small}>Начало договора</div>
-          <input style={s.input} type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+          <input
+            style={s.input}
+            type="date"
+            value={startDate}
+            onChange={(e) => {
+              const v = e.target.value
+              setStartDate(v)
+              const d = Number(v.slice(8, 10))
+              if (d >= 1 && d <= 31) setPaymentDay(String(d))
+            }}
+          />
           <div style={s.small}>Сумма аренды, руб</div>
           <input style={s.input} value={rent} onChange={(e) => setRent(e.target.value)} placeholder="85000" inputMode="numeric" />
           <div style={s.small}>Залоговый депозит, руб</div>
           <input style={s.input} value={deposit} onChange={(e) => setDeposit(e.target.value)} placeholder="Например: 85000" inputMode="numeric" />
-          <div style={s.small}>День платежа (число месяца)</div>
+          <div style={s.small}>День платежа (число месяца, подставляется из начала договора)</div>
           <input style={s.input} value={paymentDay} onChange={(e) => setPaymentDay(e.target.value)} placeholder="1" inputMode="numeric" />
           <div style={s.small}>Режим показаний счётчиков</div>
           <ReadingsModeSelect value={readingsMode} onChange={setReadingsMode} />
           {readingsMode === 'manual' && (
             <div>
               <div style={s.small}>Крайний день подачи показаний (число месяца)</div>
-              <input style={s.input} value={meterDay} onChange={(e) => setMeterDay(e.target.value)} placeholder="5" inputMode="numeric" />
+              <input style={s.input} value={meterDay} onChange={(e) => setMeterDay(e.target.value)} placeholder="15" inputMode="numeric" />
             </div>
           )}
           <div style={s.small}>Окончание договора</div>
@@ -312,7 +351,8 @@ export function ObjectManager() {
           {method !== 'cash' && (
             <div>
               <div style={s.small}>Способы оплаты (карты банков и СБП) *</div>
-              <DetailsEditor list={details} onChange={setDetails} />
+              <DetailsEditor list={details} onChange={(v) => { setDetails(v); if (v.length > 0) setAddDetailsErr(null) }} />
+              {addDetailsErr && <div style={s.warnNote}>{addDetailsErr}</div>}
             </div>
           )}
           <div style={s.small}>Штраф за просрочку оплаты, руб/день</div>
@@ -342,12 +382,22 @@ export function ObjectManager() {
               <div style={s.small}>Телефон арендатора</div>
               <input style={s.input} value={ePhone} onChange={(e) => setEPhone(e.target.value)} />
               <div style={s.small}>Начало договора</div>
-              <input style={s.input} type="date" value={eStartDate} onChange={(e) => setEStartDate(e.target.value)} />
+              <input
+                style={s.input}
+                type="date"
+                value={eStartDate}
+                onChange={(e) => {
+                  const v = e.target.value
+                  setEStartDate(v)
+                  const d = Number(v.slice(8, 10))
+                  if (d >= 1 && d <= 31) setEPaymentDay(String(d))
+                }}
+              />
               <div style={s.small}>Сумма аренды, руб</div>
               <input style={s.input} value={eRent} onChange={(e) => setERent(e.target.value)} inputMode="numeric" />
               <div style={s.small}>Залоговый депозит, руб</div>
               <input style={s.input} value={eDeposit} onChange={(e) => setEDeposit(e.target.value)} inputMode="numeric" />
-              <div style={s.small}>День платежа</div>
+              <div style={s.small}>День платежа (число месяца, подставляется из начала договора)</div>
               <input style={s.input} value={ePaymentDay} onChange={(e) => setEPaymentDay(e.target.value)} inputMode="numeric" />
               <div style={s.small}>Режим показаний счётчиков</div>
               <ReadingsModeSelect value={eReadingsMode} onChange={setEReadingsMode} />
@@ -364,7 +414,8 @@ export function ObjectManager() {
               {eMethod !== 'cash' && (
                 <div>
                   <div style={s.small}>Способы оплаты (карты банков и СБП) *</div>
-                  <DetailsEditor list={eDetails} onChange={setEDetails} />
+                  <DetailsEditor list={eDetails} onChange={(v) => { setEDetails(v); if (v.length > 0) setEditDetailsErr(null) }} />
+                  {editDetailsErr && <div style={s.warnNote}>{editDetailsErr}</div>}
                 </div>
               )}
               <div style={s.small}>Штраф за просрочку оплаты, руб/день</div>
@@ -408,6 +459,7 @@ const s: Record<string, React.CSSProperties> = {
   row: { display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start', marginBottom: 8 },
   small: { fontSize: 13, color: '#666', margin: '4px 0' },
   msg: { padding: 12, borderRadius: 10, background: '#e8f5e9', color: '#2e7d32', marginTop: 8, fontSize: 14 },
+  warnNote: { padding: '8px 10px', backgroundColor: '#fdecea', border: '1px solid #ef9a9a', borderRadius: 8, color: '#c00', fontSize: 13, fontWeight: 600, marginTop: 4, marginBottom: 8 },
   objRow: { background: '#fff', borderRadius: 10, padding: 10, marginBottom: 8, boxShadow: '0 1px 4px rgba(0,0,0,0.1)' },
   detailRow: { background: '#f9f9f9', borderRadius: 8, padding: 8, marginBottom: 8 },
 }
