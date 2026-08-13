@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useTelegramUser } from '../hooks/useTelegramUser'
 import CashNegotiation from '../components/CashNegotiation'
-import type { Object as PropertyObject, Contract, MeterType, ObjectMeter, NotificationLog, Payment, User } from '../types/database'
+import type { Object as PropertyObject, Contract, MeterType, ObjectMeter, NotificationLog, User } from '../types/database'
 
 interface ObjectWithStatus extends PropertyObject {
   status: 'paid' | 'overdue' | 'pending' | 'no_contract' | 'no_payment'
@@ -14,7 +14,7 @@ interface ObjectWithStatus extends PropertyObject {
   utilitiesAmount?: number
   paymentId: string | null
   contract?: Contract & { tenant?: User }
-  payment?: Payment
+  payment?: any
   daysOverdue?: number
   waitingForReadings?: boolean
   needUtilitiesReminder?: boolean
@@ -416,7 +416,7 @@ export function LandlordDashboard() {
 
     // Вычисляем, какие каналы задействованы
     const cardEngaged = !!pay.card_claimed
-    const cashEngaged = !!cashMeeting && !(pay.cash_closed || close && channel === 'cash') && !pay.confirmed_cash
+    //const cashEngaged = !!cashMeeting && !(pay.cash_closed || close && channel === 'cash') && !pay.confirmed_cash
 
     const update: any = {}
     if (channel === 'card') {
