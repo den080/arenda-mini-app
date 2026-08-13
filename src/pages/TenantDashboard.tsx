@@ -31,6 +31,7 @@ export function TenantDashboard() {
   const [vals, setVals] = useState<Record<string, string>>({})
   const [msg, setMsg] = useState<string | null>(null)
   const [notifications, setNotifications] = useState<Notification[]>([])
+  const [frozenOpen, setFrozenOpen] = useState(false)
 
   async function load() {
     if (!user) return
@@ -46,7 +47,7 @@ export function TenantDashboard() {
       const { data: meters } = await supabase.from('object_meters').select('*').eq('object_id', contract.object_id).eq('is_active', true)
       const { data: meterTypes } = await supabase.from('meter_types').select('*')
       const { data: penaltyRules } = await supabase.from('penalty_rules').select('*').eq('contract_id', contract.id)
-      const { data: deferredDebts } = await supabase.from('deferred_debts').select('*').eq('contract_id', contract.id)
+      const { data: frozenRows } = await supabase.from('frozen_penalties').select('*').eq('contract_id', contract.id).order('period', { ascending: true })
       const { data: deferredReqs } = await supabase.from('deferred_requests').select('*').eq('contract_id', contract.id).order('created_at', { ascending: false }).limit(1)
 
       const { data: notifData } = await supabase
@@ -59,7 +60,8 @@ export function TenantDashboard() {
         contract, obj, landlord,
         payments: payments || [], meters: meters || [], meterTypes: meterTypes || [],
         penaltyRules: penaltyRules || [],
-        deferredDebts: deferredDebts || [], deferredReqs: deferredReqs || []
+        frozenRows: frozenRows || [],
+        deferredReqs: deferredReqs || []
       })
     } catch (e) {
       setError('Ошибка загрузки: ' + String(e))
@@ -146,7 +148,7 @@ export function TenantDashboard() {
   if (error) return <div style={s.container}>{error}</div>
   if (!data) return <div style={s.container}>Нет данных</div>
 
-  const { contract, obj, landlord, payments, meters, meterTypes, penaltyRules, deferredDebts, deferredReqs } = data
+  const { contract, obj, landlord, payments, meters, meterTypes, penaltyRules, frozenRows, deferredReqs } = data
   const readingsMode = contract.readings_mode || 'manual'
   const reminder = contract.reminder_days_before || 3
   const payment = payments[0]
@@ -155,6 +157,8 @@ export function TenantDashboard() {
   const utilities = Number(payment?.utilities_amount || 0)
   const total = payment ? Number(payment.base_amount) + Number(payment.penalty_amount || 0) + utilities : Number(contract.rent_amount)
   const monthLabel = payment ? new Date(payment.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : ''
+  const deposit = Number(contract.deposit_amount || 0)
+  const frozenTotal = (frozenRows || []).reduce((sum: number, f: any) => sum + Number(f.amount || 0), 0)
 
   const effectiveMethod = contract.payment_method === 'both'
     ? (contract.tenant_pay_method || 'card')
@@ -216,7 +220,6 @@ export function TenantDashboard() {
   const paymentOverdueRule = penaltyRules.find((r: any) => r.violation_type === 'payment_overdue')
   const penaltyRate = paymentOverdueRule ? Number(paymentOverdueRule.rate) : 500
 
-  const deferredTotal = (deferredDebts || []).reduce((sum: number, d: any) => sum + Number(d.amount || 0), 0)
   const lastDeferral = deferredReqs && deferredReqs[0] ? deferredReqs[0] : null
   const deferralPending = !!(lastDeferral && lastDeferral.status === 'proposed' && payment && String(lastDeferral.payment_id) === String(payment.id))
 
@@ -232,7 +235,7 @@ export function TenantDashboard() {
       case 'cash_proposed': return '💵 Предложено время встречи наличными'
       case 'cash_confirmed': return '🤝 Время встречи наличными подтверждено'
       case 'deferred_proposed': return '🙏 Заявка на отсрочку штрафа отправлена'
-      case 'deferred_confirmed': return '🤝 Арендодатель подтвердил отсрочку штрафа'
+      case 'deferred_confirmed': return '🧊 Замороженный штраф обновлён'
       default: return type
     }
   }
@@ -244,14 +247,28 @@ export function TenantDashboard() {
         <div style={s.address}>{obj?.address}</div>
         <div style={s.small}>Арендодатель: {landlord?.full_name}{landlord?.phone ? ', ' + formatPhoneDisplay(landlord.phone) : ''}</div>
         {contract.start_date && contract.end_date && <div style={{ fontSize: 11, color: 'rgba(0,0,0,0.4)', marginTop: 4 }}>Срок аренды: с {parseDate(contract.start_date).toLocaleDateString('ru-RU')} по {parseDate(contract.end_date).toLocaleDateString('ru-RU')} ({Math.max(1, Math.round((parseDate(contract.end_date).getTime() - parseDate(contract.start_date).getTime()) / 2629800000))} мес.)</div>}
+        {deposit > 0 && <div style={{ fontSize: 11, color: 'rgba(0,0,0,0.4)', marginTop: 4 }}>Депозит: {deposit.toFixed(0)} ₽</div>}
+        {frozenTotal > 0 && (
+          <div style={s.frozenNote} onClick={() => setFrozenOpen(!frozenOpen)}>
+            🧊 Замороженные штрафы: {frozenTotal.toFixed(0)} ₽ {frozenOpen ? '▲' : '▼'}
+            {frozenOpen && (
+              <div style={{ marginTop: 6 }}>
+                {(frozenRows || []).map((f: any) => (
+                  <div key={f.id} style={{ fontSize: 11, color: 'rgba(0,0,0,0.5)', marginBottom: 2 }}>
+                    {f.period ? parseDate(f.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : 'без месяца'} — {Number(f.amount).toFixed(0)} ₽{f.adjusted_note ? ` (${f.adjusted_note})` : ''}
+                  </div>
+                ))}
+                {deposit > 0
+                  ? (deposit >= frozenTotal
+                    ? <div style={{ fontSize: 11, color: 'rgba(0,0,0,0.5)' }}>будет удержано из депозита; остаток депозита: {(deposit - frozenTotal).toFixed(0)} ₽</div>
+                    : <div style={{ fontSize: 11, color: '#c00' }}>сверх депозита долг: {(frozenTotal - deposit).toFixed(0)} ₽</div>)
+                  : <div style={{ fontSize: 11, color: '#c00' }}>долг арендатора (депозита нет)</div>}
+                <div style={{ fontSize: 11, color: 'rgba(0,0,0,0.4)' }}>записи хранятся до конца договора</div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
-
-      {deferredTotal > 0 && (
-        <div style={s.suspendedBlock}>
-          ⚠️ Приостановленный долг: <b>{deferredTotal.toFixed(2)} ₽</b>
-          <div style={s.small}>Напоминание о недобросовестности — останется до конца срока аренды</div>
-        </div>
-      )}
 
       <div style={s.card}>
         <div style={s.h2}>🧾 Счёт за {monthLabel}</div>
@@ -409,7 +426,7 @@ const s: Record<string, React.CSSProperties> = {
   total: { fontSize: 17 },
   statusRow: { display: 'flex', gap: 8, alignItems: 'center', margin: '10px 0' },
   overdueNotice: { padding: 10, background: '#fdecea', color: '#c00', borderRadius: 8, fontSize: 14, fontWeight: 600, marginTop: 8 },
-  suspendedBlock: { padding: 12, backgroundColor: '#fff3e0', border: '1px solid #ffb74d', borderRadius: 12, marginBottom: 12, fontSize: 15, color: '#e65100' },
+  frozenNote: { fontSize: 13, color: '#00695c', marginTop: 6, fontWeight: 600, cursor: 'pointer' },
   button: { marginTop: 10, width: '100%', padding: 12, borderRadius: 10, border: 'none', background: '#2196f3', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer' },
   warnButton: { marginTop: 10, width: '100%', padding: 12, borderRadius: 10, border: 'none', background: '#ff9800', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer' },
   input: { width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 15, marginBottom: 8, boxSizing: 'border-box' },
