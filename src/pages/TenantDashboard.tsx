@@ -46,7 +46,7 @@ export function TenantDashboard() {
       const { data: contract } = await supabase
         .from('contracts').select('*')
         .eq('tenant_id', user!.id).eq('status', 'active').maybeSingle()
-      if (!contract) { setError('Договор не найден. Обратитесь к арендодателю.'); setLoading(false); return }
+      if (!contract) { setError('🤝 У вас пока нет активной аренды. Переключитесь наверх в режим «Арендодатель» и в «Добавить объект» выберите «Я арендатор» — или попросите арендодателя добавить вас в договор по телефону.'); setLoading(false); return }
 
       const { data: obj } = await supabase.from('objects').select('*').eq('id', contract.object_id).maybeSingle()
       const { data: landlord } = await supabase.from('users').select('*').eq('id', obj?.landlord_id).maybeSingle()
@@ -328,7 +328,7 @@ export function TenantDashboard() {
             <div style={s.methodRow}>
               <label style={s.methodLabel}>
                 <input type="radio" checked={effectiveMethod === 'card'} onChange={() => choosePayMethod('card')} />
-                {' '}💳 Карта
+                {' '}💳 Безналичный расчёт
               </label>
               <label style={s.methodLabel}>
                 <input type="radio" checked={effectiveMethod === 'cash'} onChange={() => choosePayMethod('cash')} />
@@ -338,22 +338,26 @@ export function TenantDashboard() {
           </div>
         )}
 
-        {effectiveMethod === 'card' && details.length > 0 && (
+        {effectiveMethod === 'card' && (
           <div style={s.paySection}>
             <div style={s.h3}>💳 Способы оплаты</div>
-            {details.map((d: PayDetail, i: number) => (
-              <div key={i} style={s.payItem}>
-                <div style={s.payHeader}>
-                  <span style={s.payIcon}>{d.type === 'card' ? '💳' : '⚡'}</span>
-                  <span style={s.payBank}>{d.type === 'card' ? d.bank : `СБП • ${d.bank}`}</span>
+            {details.length === 0 ? (
+              <div style={s.small}>Арендодатель ещё не добавил реквизиты для безналичной оплаты.</div>
+            ) : (
+              details.map((d: PayDetail, i: number) => (
+                <div key={i} style={s.payItem}>
+                  <div style={s.payHeader}>
+                    <span style={s.payIcon}>{d.type === 'card' ? '💳' : '⚡'}</span>
+                    <span style={s.payBank}>{d.type === 'card' ? d.bank : `СБП • ${d.bank}`}</span>
+                  </div>
+                  <div style={s.payNumber}>{d.type === 'card' ? formatCardNumber(d.number) : formatPhoneDisplay(d.number)}</div>
+                  <button onClick={() => copyToClipboard(d.type === 'card' ? formatCardNumber(d.number) : d.number, d.type === 'card' ? 'номер карты' : 'номер СБП')} style={s.copyBtn}>
+                    📋 Скопировать
+                  </button>
                 </div>
-                <div style={s.payNumber}>{d.type === 'card' ? formatCardNumber(d.number) : formatPhoneDisplay(d.number)}</div>
-                <button onClick={() => copyToClipboard(d.type === 'card' ? formatCardNumber(d.number) : d.number, d.type === 'card' ? 'номер карты' : 'номер СБП')} style={s.copyBtn}>
-                  📋 Скопировать
-                </button>
-              </div>
-            ))}
-            {!payment?.confirmed_by_landlord && (
+              ))
+            )}
+            {!payment?.confirmed_by_landlord && details.length > 0 && (
               <button onClick={claimPaid} style={s.button}>✅ Я оплатил</button>
             )}
           </div>
@@ -426,8 +430,8 @@ export function TenantDashboard() {
         <div style={s.h2}>📜 История платежей</div>
         {payments.slice(0, 5).map((p: any) => (
           <div key={p.id} style={s.row}>
-            <span>{new Date(p.period).toLocaleDateString('ru-RU', { month: 'short', year: 'numeric' })} {p.confirmed_by_landlord ? '🟢' : '🟡'}</span>
-            <b>{(Number(p.base_amount) + Number(p.penalty_amount || 0) + Number(p.utilities_amount || 0)).toFixed(2)} ₽</b>
+            <span style={{ flex: 1, minWidth: 0 }}>{new Date(p.period).toLocaleDateString('ru-RU', { month: 'short', year: 'numeric' })} {p.confirmed_by_landlord ? '🟢' : '🟡'}</span>
+            <b style={{ whiteSpace: 'nowrap', marginLeft: 8 }}>{(Number(p.base_amount) + Number(p.penalty_amount || 0) + Number(p.utilities_amount || 0)).toFixed(2)} ₽</b>
           </div>
         ))}
       </div>
