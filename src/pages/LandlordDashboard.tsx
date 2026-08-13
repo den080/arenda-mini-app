@@ -4,7 +4,7 @@ import { useTelegramUser } from '../hooks/useTelegramUser'
 import CashNegotiation from '../components/CashNegotiation'
 import MetersEditor from '../components/MetersEditor'
 import ReadingsReview from '../components/ReadingsReview'
-import type { Object as PropertyObject, Contract, MeterType, ObjectMeter, NotificationLog, User } from '../types/database'
+import type { Object as PropertyObject, Contract, NotificationLog, User } from '../types/database'
 
 interface ObjectWithStatus extends PropertyObject {
   status: 'paid' | 'overdue' | 'pending' | 'no_contract' | 'no_payment'
@@ -38,8 +38,6 @@ export function LandlordDashboard() {
   const [objects, setObjects] = useState<ObjectWithStatus[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [meterTypes, setMeterTypes] = useState<MeterType[]>([])
-  const [objectMeters, setObjectMeters] = useState<Record<string, ObjectMeter[]>>({})
   const [notifications, setNotifications] = useState<NotificationLog[]>([])
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
   const [expandedFrozen, setExpandedFrozen] = useState<Set<string>>(new Set())
@@ -71,9 +69,6 @@ export function LandlordDashboard() {
 
     async function fetchData() {
       try {
-        const { data: mtData } = await supabase.from('meter_types').select('*')
-        if (mtData) setMeterTypes(mtData)
-
         const { data: notifData } = await supabase
           .from('notifications_log')
           .select('*')
@@ -95,7 +90,6 @@ export function LandlordDashboard() {
         }
 
         const objectsWithStatus: ObjectWithStatus[] = []
-        const allObjectMeters: Record<string, ObjectMeter[]> = {}
         const allHistory: any[] = []
 
         const today = new Date()
@@ -110,12 +104,6 @@ export function LandlordDashboard() {
             .eq('object_id', obj.id)
             .eq('status', 'active')
             .maybeSingle()
-
-          const { data: omData } = await supabase
-            .from('object_meters')
-            .select('*')
-            .eq('object_id', obj.id)
-          allObjectMeters[obj.id] = omData || []
 
           if (!contract) {
             objectsWithStatus.push({ ...obj, status: 'no_contract', amount: 0, paymentId: null, statusColor: '#888', statusDetail: 'Нет договора', bgColor: '#fff' })
@@ -287,7 +275,6 @@ export function LandlordDashboard() {
           })
         }
 
-        setObjectMeters(allObjectMeters)
         setHistory(allHistory)
 
         const sortedObjects = objectsWithStatus.sort((a, b) => {
@@ -314,19 +301,6 @@ export function LandlordDashboard() {
       clearInterval(interval)
     }
   }, [user])
-  async function setElecMode(objId: string, mode: string) {
-    const need: Record<string, string[]> = {
-      'none': [],
-      '1': ['electricity_single'],
-      '2': ['electricity_day', 'electricity_night'],
-      '3': ['electricity_peak', 'electricity_semipeak', 'electricity_night'],
-    }
-    const all = ['electricity_single', 'electricity_day', 'electricity_night', 'electricity_peak', 'electricity_semipeak']
-    for (const code of all) {
-      await setMeterActive(objId, code, (need[mode] || []).includes(code))
-    }
-    window.dispatchEvent(new Event('rentflow-refresh'))
-  }
 
   async function saveUtilities(paymentId: string, value: string) {
     const { error } = await supabase
