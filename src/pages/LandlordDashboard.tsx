@@ -452,6 +452,7 @@ export function LandlordDashboard() {
       alert('Ошибка: ' + meetError.message)
     }
   }
+
   const getStatusIcon = (color?: string) => {
     if (color === '#c00') return '🔴'
     if (color === '#a80') return '🟡'
