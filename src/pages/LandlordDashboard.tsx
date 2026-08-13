@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useTelegramUser } from '../hooks/useTelegramUser'
-import type { Object as PropertyObject, Contract, MeterType, ObjectMeter, NotificationLog, CashSlot, CashMeeting, Payment, User } from '../types/database'
+import CashNegotiation from '../components/CashNegotiation'
+import type { Object as PropertyObject, Contract, MeterType, ObjectMeter, NotificationLog, Payment, User } from '../types/database'
 
 interface ObjectWithStatus extends PropertyObject {
   status: 'paid' | 'overdue' | 'pending' | 'no_contract' | 'no_payment'
@@ -13,7 +14,6 @@ interface ObjectWithStatus extends PropertyObject {
   utilitiesAmount?: number
   paymentId: string | null
   contract?: Contract & { tenant?: User }
-  cashMeetings?: CashMeeting[]
   payment?: Payment
   daysOverdue?: number
   waitingForReadings?: boolean
@@ -24,17 +24,9 @@ interface ObjectWithStatus extends PropertyObject {
   deferredRequests?: any[]
 }
 
-const DAYS_OF_WEEK = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
-
 function parseDate(d: any): Date {
   const [y, m, dd] = String(d).slice(0, 10).split('-').map(Number)
   return new Date(y, (m || 1) - 1, dd || 1)
-}
-
-function formatSlotDate(d: any): string {
-  const dt = parseDate(d)
-  const wd = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'][dt.getDay()]
-  return `${String(dt.getDate()).padStart(2, '0')}.${String(dt.getMonth() + 1).padStart(2, '0')}.${dt.getFullYear()} (${wd})`
 }
 
 export function LandlordDashboard() {
@@ -50,10 +42,6 @@ export function LandlordDashboard() {
   const [history, setHistory] = useState<any[]>([])
   const [statsPeriod, setStatsPeriod] = useState<'6m' | '12m'>('6m')
   const [statsObject, setStatsObject] = useState<string>('all')
-
-  const [newSlotDate, setNewSlotDate] = useState<string>('')
-  const [newSlotTimeFrom, setNewSlotTimeFrom] = useState<string>('')
-  const [newSlotTimeTo, setNewSlotTimeTo] = useState<string>('')
 
   function toggleExpanded(id: string) {
     setExpandedIds(prev => {
@@ -408,49 +396,6 @@ export function LandlordDashboard() {
       alert('Ошибка: ' + error.message)
     }
   }
-
-  async function saveCashSlots(contractId: string, slots: CashSlot[]) {
-    const { error } = await supabase
-      .from('contracts')
-      .update({ cash_slots: slots })
-      .eq('id', contractId)
-
-    if (!error) {
-      setObjects(prev => prev.map(o =>
-        o.contract?.id === contractId
-          ? { ...o, contract: { ...o.contract!, cash_slots: slots } }
-          : o
-      ))
-      alert('Слоты сохранены')
-    } else {
-      alert('Ошибка: ' + error.message)
-    }
-  }
-
-  async function confirmCashMeeting(meetingId: string, _contractId: string, tenantId: string) {
-    const { error: meetError } = await supabase
-      .from('cash_meetings')
-      .update({ status: 'confirmed' })
-      .eq('id', meetingId)
-
-    if (!meetError) {
-      const { error: notifError } = await supabase
-        .from('notifications_log')
-        .insert({
-          user_id: tenantId,
-          type: 'cash_confirmed',
-          related_id: meetingId,
-          sent_at: new Date().toISOString()
-        })
-
-      if (!notifError) {
-        alert('Время подтверждено')
-        window.dispatchEvent(new Event('rentflow-refresh'))
-      }
-    } else {
-      alert('Ошибка: ' + meetError.message)
-    }
-  }
   const getStatusIcon = (color?: string) => {
     if (color === '#c00') return '🔴'
     if (color === '#a80') return '🟡'
@@ -463,8 +408,8 @@ export function LandlordDashboard() {
       case 'payment_claimed': return '✅ Арендатор сообщил об оплате'
       case 'payment_confirmed': return '🟢 Арендодатель подтвердил оплату'
       case 'meter_submitted': return '💦 Переданы новые показания'
-      case 'cash_proposed': return '💵 Арендатор предложил время оплаты наличными'
-      case 'cash_confirmed': return '🤝 Время оплаты наличными подтверждено'
+      case 'cash_proposed': return '💵 Предложено время встречи наличными'
+      case 'cash_confirmed': return '🤝 Время встречи наличными подтверждено'
       case 'deferred_proposed': return '🙏 Арендатор попросил отсрочку штрафа'
       case 'deferred_confirmed': return '🤝 Отсрочка штрафа подтверждена'
       default: return type
@@ -683,79 +628,17 @@ export function LandlordDashboard() {
                       {contract.payment_method === 'both' && (
                         <div style={styles.smallNote}>💡 Способ оплаты выбирает арендатор: карта или наличные.</div>
                       )}
-
-                      {contract.payment_method !== 'card' && (
-                        <div style={styles.slotsEditor}>
-                          <div style={styles.slotsList}>
-                            {(contract.cash_slots as CashSlot[] || []).map((slot: CashSlot, idx: number) => (
-                              <div key={idx} style={styles.slotItem}>
-                                <span>{(slot as any).date ? formatSlotDate((slot as any).date) : DAYS_OF_WEEK[slot.day]} {slot.time_from}–{slot.time_to}</span>
-                                <button
-                                  onClick={() => {
-                                    const newSlots = (contract.cash_slots as CashSlot[]).filter((_: CashSlot, i: number) => i !== idx)
-                                    saveCashSlots(contract.id, newSlots)
-                                  }}
-                                  style={styles.deleteButton}
-                                >
-                                  ✕
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                          <div style={styles.addSlotForm}>
-                            <input
-                              type="date"
-                              value={newSlotDate}
-                              onChange={(e) => setNewSlotDate(e.target.value)}
-                              style={styles.select}
-                            />
-                            <select
-                              value={newSlotTimeFrom}
-                              onChange={(e) => setNewSlotTimeFrom(e.target.value)}
-                              style={styles.select}
-                            >
-                              <option value="">--:--</option>
-                              {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-                            </select>
-                            <select
-                              value={newSlotTimeTo}
-                              onChange={(e) => setNewSlotTimeTo(e.target.value)}
-                              style={styles.select}
-                            >
-                              <option value="">--:--</option>
-                              {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-                            </select>
-                            <button
-                              onClick={() => {
-                                if (!newSlotDate || !newSlotTimeFrom || !newSlotTimeTo) {
-                                  alert('Укажите дату и время начала/окончания встречи')
-                                  return
-                                }
-                                const currentSlots = contract.cash_slots as CashSlot[] || []
-                                const newSlots = [...currentSlots, { day: parseDate(newSlotDate).getDay(), date: newSlotDate, time_from: newSlotTimeFrom, time_to: newSlotTimeTo } as any]
-                                saveCashSlots(contract.id, newSlots)
-                                setNewSlotDate('')
-                                setNewSlotTimeFrom('')
-                                setNewSlotTimeTo('')
-                              }}
-                              style={styles.addButton}
-                            >
-                              Добавить
-                            </button>
-                          </div>
-                          <div style={styles.smallNote}>Каждый слот — конкретная дата и время, день недели подставляется автоматически. Место встречи по умолчанию — арендуемый объект, если не обсуждалось иное.</div>
-                        </div>
-                      )}
                     </div>
                   )}
 
                   {contract && tenantChoseCash && (
                     <div style={styles.subCard}>
-                      <div style={styles.subCardTitle}>🤝 Оплата наличными</div>
-                      <CashMeetingsList
+                      <div style={styles.subCardTitle}>🤝 Оплата наличными — договорённость о времени</div>
+                      <CashNegotiation
                         contractId={contract.id}
+                        myRole="landlord"
                         tenantId={contract.tenant_id}
-                        onConfirm={confirmCashMeeting}
+                        landlordId={obj.landlord_id}
                       />
                     </div>
                   )}
@@ -830,13 +713,6 @@ export function LandlordDashboard() {
       </div>
     </div>
   )
-}
-
-const TIME_OPTIONS: string[] = []
-for (let h = 0; h < 24; h++) {
-  for (let m = 0; m < 60; m += 10) {
-    TIME_OPTIONS.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`)
-  }
 }
 
 const styles: Record<string, React.CSSProperties> = {
@@ -995,12 +871,6 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '14px',
     cursor: 'pointer',
   },
-  slotsEditor: {
-    marginTop: '8px',
-  },
-  slotsList: {
-    marginBottom: '12px',
-  },
   slotItem: {
     display: 'flex',
     justifyContent: 'space-between',
@@ -1009,28 +879,6 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: '#f9f9f9',
     borderRadius: '6px',
     marginBottom: '6px',
-    fontSize: '14px',
-  },
-  deleteButton: {
-    background: '#ff5252',
-    color: '#fff',
-    border: 'none',
-    borderRadius: '4px',
-    padding: '4px 8px',
-    cursor: 'pointer',
-    fontSize: '12px',
-  },
-  addSlotForm: {
-    display: 'flex',
-    gap: '8px',
-    flexWrap: 'wrap' as const,
-    alignItems: 'center',
-  },
-  select: {
-    flex: 1,
-    padding: '6px',
-    borderRadius: '4px',
-    border: '1px solid #ddd',
     fontSize: '14px',
   },
   addButton: {
@@ -1048,45 +896,6 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '14px',
     color: '#555',
   },
-}
-
-function CashMeetingsList({ contractId, tenantId, onConfirm }: { contractId: string, tenantId: string, onConfirm: (id: string, cid: string, tid: string) => void }) {
-  const [meetings, setMeetings] = useState<CashMeeting[]>([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    async function loadMeetings() {
-      const { data } = await supabase
-        .from('cash_meetings')
-        .select('*')
-        .eq('contract_id', contractId)
-        .eq('status', 'proposed')
-        .order('created_at', { ascending: false })
-
-      if (data) setMeetings(data)
-      setLoading(false)
-    }
-    loadMeetings()
-  }, [contractId])
-
-  if (loading) return <div style={styles.empty}>Загрузка...</div>
-  if (meetings.length === 0) return <div style={styles.empty}>Нет заявок</div>
-
-  return (
-    <div>
-      {meetings.map(m => (
-        <div key={m.id} style={styles.slotItem}>
-          <span>{(m as any).meeting_date ? formatSlotDate((m as any).meeting_date) : DAYS_OF_WEEK[m.day]} {m.time_from}–{m.time_to}</span>
-          <button
-            onClick={() => onConfirm(m.id, contractId, tenantId)}
-            style={{ ...styles.confirmButton, marginTop: 0, width: 'auto', padding: '6px 12px', fontSize: '13px' }}
-          >
-            Подтвердить
-          </button>
-        </div>
-      ))}
-    </div>
-  )
 }
 
 export default LandlordDashboard
