@@ -521,7 +521,7 @@ export function LandlordDashboard() {
               <div style={styles.cardHeader} onClick={() => toggleExpanded(obj.id)}>
                 <div style={{ flex: 1 }}>
                   <div style={styles.address}>
-                    {obj.address}
+                    {(obj.contract as any)?.deposit_amount > 0 && <span style={{ float: 'right', fontSize: 11, color: 'rgba(0,0,0,0.4)' }}>депозит: {Number((obj.contract as any).deposit_amount).toFixed(0)} ₽</span>}{obj.address}
                     <span style={styles.expandArrow}>{isExpanded ? '▲' : '▼'}</span>
                   </div>
                   <div style={styles.statusRow}>
