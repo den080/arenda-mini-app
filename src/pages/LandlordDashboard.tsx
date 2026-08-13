@@ -656,7 +656,7 @@ export function LandlordDashboard() {
                             checked={contract.payment_method === 'card'}
                             onChange={() => updatePaymentMethod(contract.id, 'card')}
                           />
-                          {' '}Карта
+                          {' '}Безналичный расчёт
                         </label>
                         <label style={styles.methodLabel}>
                           <input
@@ -809,11 +809,11 @@ export function LandlordDashboard() {
             const sum = Number(h.base_amount || 0) + Number(h.penalty_amount || 0) + Number(h.utilities_amount || 0)
             return (
               <div key={h.id} style={styles.slotItem}>
-                <span>
+               <span style={{ flex: 1, minWidth: 0 }}>
                   {h.address}<br />
                   <span style={styles.smallNote}>{parseDate(h.period).toLocaleDateString('ru-RU')} · {h.confirmed_by_landlord ? (late ? 'просрочка' : 'вовремя') : 'не подтверждён'}</span>
                 </span>
-                <b style={{ color: late ? '#c00' : '#333' }}>{sum.toFixed(0)} ₽</b>
+                <b style={{ color: late ? '#c00' : '#333', whiteSpace: 'nowrap', marginLeft: 8 }}>{sum.toFixed(0)} ₽</b>
               </div>
             )
           })
