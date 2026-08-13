@@ -55,18 +55,17 @@ export function ObjectManager() {
   const [msg, setMsg] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
-  const [role, setRole] = useState<'landlord' | 'tenant'>('landlord')
   const [address, setAddress] = useState('')
   const [notes, setNotes] = useState('')
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
-  const [tgId, setTgId] = useState('')
   const [startDate, setStartDate] = useState('')
+  const [rent, setRent] = useState('')
+  const [deposit, setDeposit] = useState('')
   const [paymentDay, setPaymentDay] = useState('')
   const [endDate, setEndDate] = useState('')
   const [meterDay, setMeterDay] = useState('')
   const [readingsMode, setReadingsMode] = useState('manual')
-  const [rent, setRent] = useState('')
   const [method, setMethod] = useState('card')
   const [penPay, setPenPay] = useState('')
   const [penRead, setPenRead] = useState('')
@@ -82,6 +81,7 @@ export function ObjectManager() {
   const [ePhone, setEPhone] = useState('')
   const [eStartDate, setEStartDate] = useState('')
   const [eRent, setERent] = useState('')
+  const [eDeposit, setEDeposit] = useState('')
   const [ePaymentDay, setEPaymentDay] = useState('')
   const [eMeterDay, setEMeterDay] = useState('')
   const [eReadingsMode, setEReadingsMode] = useState('manual')
@@ -110,31 +110,28 @@ export function ObjectManager() {
     try {
       const normalizedPhone = phone ? normalizePhone(phone) : null
       let counter: any = null
-      if (normalizedPhone || tgId) {
-        const { data } = await supabase.from('users').select('*')
-          .or(`telegram_id.eq."${tgId}",phone.eq."${normalizedPhone}"`).limit(1)
+      if (normalizedPhone) {
+        const { data } = await supabase.from('users').select('*').eq('phone', normalizedPhone).limit(1)
         counter = data && data[0]
       }
       if (!counter) {
         const { data, error } = await supabase.from('users').insert({
-          full_name: name || 'Контрагент',
+          full_name: name || 'Арендатор',
           phone: normalizedPhone,
-          telegram_id: tgId || null,
-          role: role === 'landlord' ? 'tenant' : 'landlord',
+          role: 'tenant',
         }).select().single()
-        if (error) { setMsg('Ошибка контрагента: ' + error.message); return }
+        if (error) { setMsg('Ошибка арендатора: ' + error.message); return }
         counter = data
       }
-      const landlordId = role === 'landlord' ? user.id : counter.id
-      const tenantId = role === 'tenant' ? user.id : counter.id
       const { data: obj, error: objErr } = await supabase.from('objects')
-        .insert({ landlord_id: landlordId, address, notes: notes || null }).select().single()
+        .insert({ landlord_id: user.id, address, notes: notes || null }).select().single()
       if (objErr) { setMsg('Ошибка: ' + objErr.message); return }
       const firstCard = details.find(d => d.type === 'card')
       const startISO = startDate || new Date().toISOString().slice(0, 10)
       const { data: contract, error: conErr } = await supabase.from('contracts').insert({
-        object_id: obj.id, tenant_id: tenantId,
+        object_id: obj.id, tenant_id: counter.id,
         rent_amount: Number(rent) || 0,
+        deposit_amount: Number(deposit) || 0,
         payment_day: Number(paymentDay) || 1,
         meter_deadline_day: Number(meterDay) || 5,
         readings_mode: readingsMode,
@@ -163,7 +160,7 @@ export function ObjectManager() {
       })
       setMsg('✅ Объект, договор и первый платёж сохранены')
       setShowForm(false)
-      setAddress(''); setNotes(''); setName(''); setPhone(''); setTgId(''); setRent(''); setStartDate(''); setDetails([]); setReadingsMode('manual')
+      setAddress(''); setNotes(''); setName(''); setPhone(''); setRent(''); setDeposit(''); setStartDate(''); setDetails([]); setReadingsMode('manual')
       load()
     } finally {
       setSaving(false)
@@ -179,6 +176,7 @@ export function ObjectManager() {
       setEditContractId(contract.id)
       setEStartDate(contract.start_date || '')
       setERent(String(contract.rent_amount ?? ''))
+      setEDeposit(String(contract.deposit_amount ?? ''))
       setEPaymentDay(String(contract.payment_day ?? ''))
       setEMeterDay(String(contract.meter_deadline_day ?? ''))
       setEReadingsMode(contract.readings_mode || 'manual')
@@ -186,7 +184,7 @@ export function ObjectManager() {
       setEMethod(contract.payment_method || 'card')
       setERemind(String(contract.reminder_days_before ?? ''))
       setEDetails((contract.payment_details as PayDetail[]) || [])
-      const counterId = user!.id === o.landlord_id ? contract.tenant_id : o.landlord_id
+      const counterId = contract.tenant_id
       setEditCounterId(counterId)
       const { data: counter } = await supabase.from('users').select('*').eq('id', counterId).maybeSingle()
       setEName(counter?.full_name || '')
@@ -211,6 +209,7 @@ export function ObjectManager() {
       const firstCard = eDetails.find(d => d.type === 'card')
       const { error: ce } = await supabase.from('contracts').update({
         rent_amount: Number(eRent) || 0,
+        deposit_amount: Number(eDeposit) || 0,
         payment_day: Number(ePaymentDay) || 1,
         meter_deadline_day: Number(eMeterDay) || 5,
         readings_mode: eReadingsMode,
@@ -232,7 +231,7 @@ export function ObjectManager() {
         else await supabase.from('penalty_rules').insert({ contract_id: editContractId, violation_type: vt, rate, rate_unit: 'per_day_rub', starts_after_days: 0 })
       }
       if (editCounterId) {
-        await supabase.from('users').update({ full_name: eName || 'Контрагент', phone: ePhone ? normalizePhone(ePhone) : null }).eq('id', editCounterId)
+        await supabase.from('users').update({ full_name: eName || 'Арендатор', phone: ePhone ? normalizePhone(ePhone) : null }).eq('id', editCounterId)
       }
     }
     setMsg('✅ Изменения сохранены')
@@ -274,24 +273,20 @@ export function ObjectManager() {
       <button style={s.button} onClick={() => setShowForm(!showForm)}>{showForm ? 'Скрыть форму' : 'Добавить объект'}</button>
       {showForm && (
         <div>
-          <div style={s.row}>
-            <label><input type="radio" checked={role === 'landlord'} onChange={() => setRole('landlord')} /> Я арендодатель</label>
-            <label><input type="radio" checked={role === 'tenant'} onChange={() => setRole('tenant')} /> Я арендатор</label>
-          </div>
           <div style={s.small}>Адрес объекта *</div>
           <input style={s.input} value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Квартира, дом, гараж, коммерция" />
           <div style={s.small}>Заметка</div>
           <input style={s.input} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Необязательно" />
-          <div style={s.small}>{role === 'landlord' ? 'Арендатор' : 'Арендодатель'}</div>
+          <div style={s.small}>Арендатор (имя)</div>
           <input style={s.input} value={name} onChange={(e) => setName(e.target.value)} placeholder="Имя" />
-          <div style={s.small}>Телефон контрагента</div>
+          <div style={s.small}>Телефон арендатора</div>
           <input style={s.input} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+79995553322 или 89995553322" />
-          <div style={s.small}>Telegram ID контрагента</div>
-          <input style={s.input} value={tgId} onChange={(e) => setTgId(e.target.value)} placeholder="Необязательно" />
           <div style={s.small}>Начало договора</div>
           <input style={s.input} type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
           <div style={s.small}>Сумма аренды, руб</div>
           <input style={s.input} value={rent} onChange={(e) => setRent(e.target.value)} placeholder="85000" inputMode="numeric" />
+          <div style={s.small}>Залоговый депозит, руб</div>
+          <input style={s.input} value={deposit} onChange={(e) => setDeposit(e.target.value)} placeholder="Например: 85000" inputMode="numeric" />
           <div style={s.small}>День платежа (число месяца)</div>
           <input style={s.input} value={paymentDay} onChange={(e) => setPaymentDay(e.target.value)} placeholder="1" inputMode="numeric" />
           <div style={s.small}>Режим показаний счётчиков</div>
@@ -334,14 +329,16 @@ export function ObjectManager() {
               <input style={s.input} value={eAddress} onChange={(e) => setEAddress(e.target.value)} />
               <div style={s.small}>Заметка</div>
               <input style={s.input} value={eNotes} onChange={(e) => setENotes(e.target.value)} />
-              <div style={s.small}>Контрагент (имя)</div>
+              <div style={s.small}>Арендатор (имя)</div>
               <input style={s.input} value={eName} onChange={(e) => setEName(e.target.value)} />
-              <div style={s.small}>Телефон контрагента</div>
+              <div style={s.small}>Телефон арендатора</div>
               <input style={s.input} value={ePhone} onChange={(e) => setEPhone(e.target.value)} />
               <div style={s.small}>Начало договора</div>
               <input style={s.input} type="date" value={eStartDate} onChange={(e) => setEStartDate(e.target.value)} />
               <div style={s.small}>Сумма аренды, руб</div>
               <input style={s.input} value={eRent} onChange={(e) => setERent(e.target.value)} inputMode="numeric" />
+              <div style={s.small}>Залоговый депозит, руб</div>
+              <input style={s.input} value={eDeposit} onChange={(e) => setEDeposit(e.target.value)} inputMode="numeric" />
               <div style={s.small}>День платежа</div>
               <input style={s.input} value={ePaymentDay} onChange={(e) => setEPaymentDay(e.target.value)} inputMode="numeric" />
               <div style={s.small}>Режим показаний счётчиков</div>
@@ -377,8 +374,8 @@ export function ObjectManager() {
             </div>
           ) : (
             <div style={s.row}>
-              <span>{o.address}</span>
-              <span>
+              <span style={{ flex: 1 }}>{o.address}</span>
+              <span style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
                 <button style={s.smallButton} onClick={() => openEdit(o)}>✏️</button>
                 <button style={s.delButton} onClick={() => removeObject(o.id)}>🗑</button>
               </span>
@@ -395,11 +392,11 @@ const s: Record<string, React.CSSProperties> = {
   card: { fontFamily: 'system-ui', maxWidth: 600, margin: '0 auto', padding: 16 },
   h2: { fontSize: 17, fontWeight: 700, margin: '12px 0 8px' },
   button: { width: '100%', padding: 12, borderRadius: 10, border: 'none', background: '#2196f3', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', marginBottom: 8 },
-  smallButton: { padding: '6px 10px', borderRadius: 8, border: 'none', background: '#90a4ae', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginLeft: 6, marginTop: 6 },
-  delButton: { padding: '6px 10px', borderRadius: 8, border: 'none', background: '#e57373', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginLeft: 6 },
+  smallButton: { padding: '6px 10px', borderRadius: 8, border: 'none', background: '#90a4ae', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' },
+  delButton: { padding: '6px 10px', borderRadius: 8, border: 'none', background: '#e57373', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' },
   input: { width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 15, marginBottom: 8, boxSizing: 'border-box' },
   half: { width: '48%', padding: '8px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, marginBottom: 8, boxSizing: 'border-box' },
-  row: { display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', marginBottom: 8 },
+  row: { display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start', marginBottom: 8 },
   small: { fontSize: 13, color: '#666', margin: '4px 0' },
   msg: { padding: 12, borderRadius: 10, background: '#e8f5e9', color: '#2e7d32', marginTop: 8, fontSize: 14 },
   objRow: { background: '#fff', borderRadius: 10, padding: 10, marginBottom: 8, boxShadow: '0 1px 4px rgba(0,0,0,0.1)' },
