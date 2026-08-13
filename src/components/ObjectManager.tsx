@@ -66,7 +66,7 @@ export function ObjectManager() {
   const [endDate, setEndDate] = useState('')
   const [meterDay, setMeterDay] = useState('')
   const [readingsMode, setReadingsMode] = useState('manual')
-  const [method, setMethod] = useState('card')
+  const [method, setMethod] = useState('both')
   const [penPay, setPenPay] = useState('')
   const [penRead, setPenRead] = useState('')
   const [remind, setRemind] = useState('')
@@ -86,7 +86,7 @@ export function ObjectManager() {
   const [eMeterDay, setEMeterDay] = useState('')
   const [eReadingsMode, setEReadingsMode] = useState('manual')
   const [eEndDate, setEEndDate] = useState('')
-  const [eMethod, setEMethod] = useState('card')
+  const [eMethod, setEMethod] = useState('both')
   const [ePenPay, setEPenPay] = useState('')
   const [ePenRead, setEPenRead] = useState('')
   const [eRemind, setERemind] = useState('')
@@ -106,6 +106,10 @@ export function ObjectManager() {
   async function save() {
     if (saving) return
     if (!user || !address) { setMsg('Укажите адрес объекта'); return }
+    if (method !== 'cash' && details.length === 0) {
+      setMsg('⚠️ Добавьте хотя бы один способ безналичной оплаты: карту банка или СБП')
+      return
+    }
     setSaving(true)
     try {
       const normalizedPhone = phone ? normalizePhone(phone) : null
@@ -160,7 +164,7 @@ export function ObjectManager() {
       })
       setMsg('✅ Объект, договор и первый платёж сохранены')
       setShowForm(false)
-      setAddress(''); setNotes(''); setName(''); setPhone(''); setRent(''); setDeposit(''); setStartDate(''); setDetails([]); setReadingsMode('manual')
+      setAddress(''); setNotes(''); setName(''); setPhone(''); setRent(''); setDeposit(''); setStartDate(''); setDetails([]); setReadingsMode('manual'); setMethod('both')
       load()
     } finally {
       setSaving(false)
@@ -181,7 +185,7 @@ export function ObjectManager() {
       setEMeterDay(String(contract.meter_deadline_day ?? ''))
       setEReadingsMode(contract.readings_mode || 'manual')
       setEEndDate(contract.end_date || '')
-      setEMethod(contract.payment_method || 'card')
+      setEMethod(contract.payment_method || 'both')
       setERemind(String(contract.reminder_days_before ?? ''))
       setEDetails((contract.payment_details as PayDetail[]) || [])
       const counterId = contract.tenant_id
@@ -203,6 +207,10 @@ export function ObjectManager() {
 
   async function saveEdit() {
     if (!editId || !user) return
+    if (eMethod !== 'cash' && eDetails.length === 0) {
+      setMsg('⚠️ Добавьте хотя бы один способ безналичной оплаты: карту банка или СБП')
+      return
+    }
     const { error: oe } = await supabase.from('objects').update({ address: eAddress, notes: eNotes || null }).eq('id', editId)
     if (oe) { setMsg('Ошибка: ' + oe.message); return }
     if (editContractId) {
@@ -261,7 +269,7 @@ export function ObjectManager() {
 
   const methodOptions = (
     <>
-      <option value="card">Карта</option>
+      <option value="card">Безналичный расчёт</option>
       <option value="cash">Наличные</option>
       <option value="both">Наличный и безналичный расчёт</option>
     </>
@@ -303,7 +311,7 @@ export function ObjectManager() {
           <select style={s.input} value={method} onChange={(e) => setMethod(e.target.value)}>{methodOptions}</select>
           {method !== 'cash' && (
             <div>
-              <div style={s.small}>Способы оплаты (карты банков и СБП)</div>
+              <div style={s.small}>Способы оплаты (карты банков и СБП) *</div>
               <DetailsEditor list={details} onChange={setDetails} />
             </div>
           )}
@@ -355,7 +363,7 @@ export function ObjectManager() {
               <select style={s.input} value={eMethod} onChange={(e) => setEMethod(e.target.value)}>{methodOptions}</select>
               {eMethod !== 'cash' && (
                 <div>
-                  <div style={s.small}>Способы оплаты (карты банков и СБП)</div>
+                  <div style={s.small}>Способы оплаты (карты банков и СБП) *</div>
                   <DetailsEditor list={eDetails} onChange={setEDetails} />
                 </div>
               )}
@@ -369,8 +377,8 @@ export function ObjectManager() {
               )}
               <div style={s.small}>Напоминать за сколько дней</div>
               <input style={s.input} value={eRemind} onChange={(e) => setERemind(e.target.value)} inputMode="numeric" />
-              <button style={s.smallButton} onClick={saveEdit}>Сохранить</button>
-              <button style={s.smallButton} onClick={() => setEditId(null)}>Отмена</button>
+              <button style={s.blueBtn} onClick={saveEdit}>Сохранить</button>
+              <button style={s.blueBtn} onClick={() => setEditId(null)}>Отмена</button>
             </div>
           ) : (
             <div style={s.row}>
@@ -392,6 +400,7 @@ const s: Record<string, React.CSSProperties> = {
   card: { fontFamily: 'system-ui', maxWidth: 600, margin: '0 auto', padding: 16 },
   h2: { fontSize: 17, fontWeight: 700, margin: '12px 0 8px' },
   button: { width: '100%', padding: 12, borderRadius: 10, border: 'none', background: '#2196f3', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', marginBottom: 8 },
+  blueBtn: { padding: '8px 14px', borderRadius: 8, border: 'none', background: '#2196f3', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginRight: 8, marginTop: 6 },
   smallButton: { padding: '6px 10px', borderRadius: 8, border: 'none', background: '#90a4ae', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' },
   delButton: { padding: '6px 10px', borderRadius: 8, border: 'none', background: '#e57373', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' },
   input: { width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 15, marginBottom: 8, boxSizing: 'border-box' },
