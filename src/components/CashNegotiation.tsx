@@ -39,6 +39,8 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
   landlordId: string
 }) {
   const [rows, setRows] = useState<Meeting[]>([])
+  const [con, setCon] = useState<any>(null)
+  const [pay, setPay] = useState<any>(null)
   const [date, setDate] = useState('')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
@@ -51,6 +53,10 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
       .eq('contract_id', contractId)
       .order('created_at', { ascending: false })
     setRows((data as Meeting[]) || [])
+    const { data: c } = await supabase.from('contracts').select('*').eq('id', contractId).maybeSingle()
+    setCon(c)
+    const { data: p } = await supabase.from('payments').select('*').eq('contract_id', contractId).order('period', { ascending: false }).limit(1).maybeSingle()
+    setPay(p)
   }
 
   useEffect(() => {
@@ -71,6 +77,13 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
 
   const meetMs = confirmed && confirmed.meeting_date ? new Date(`${confirmed.meeting_date}T${confirmed.time_from}`).getTime() : 0
   const canResched = !!confirmed && (meetMs - Date.now()) > 24 * 3600 * 1000
+
+  const today = new Date()
+  const todayMid = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  const D = pay ? parseDate(pay.due_date) : null
+  const M = confirmed && confirmed.meeting_date ? parseDate(confirmed.meeting_date) : null
+  const effectiveCash = !!con && (con.payment_method === 'cash' || (con.payment_method === 'both' && con.tenant_pay_method === 'cash'))
+  const pauseActive = !!(pay && !pay.confirmed_by_landlord && effectiveCash && D && M && M >= D && M <= new Date(D.getFullYear(), D.getMonth(), D.getDate() + 3) && todayMid <= M)
 
   async function notifyOther() {
     const other = myRole === 'landlord' ? tenantId : landlordId
@@ -173,6 +186,14 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
         </div>
       )}
 
+      {pauseActive && D && (
+        <div style={st.pause}>
+          ⏸ Штраф на паузе до встречи {fmtDate(confirmed?.meeting_date)}: встреча в пределах 3 дней после срока оплаты.
+          Если встреча пройдёт без оплаты — штраф начислится с {D.toLocaleDateString('ru-RU')} полностью.
+          Переключение на безнал тоже вернёт штраф за пропущенные дни.
+        </div>
+      )}
+
       {resched && (
         <>
           <div style={st.h}>🔁 Выберите новое время (внутри любого открытого окна)</div>
@@ -243,6 +264,7 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
 const st: Record<string, React.CSSProperties> = {
   note: { fontSize: 12, color: '#888', marginTop: 6 },
   ok: { padding: 10, background: '#eaf7ef', border: '1px solid #a5d6a7', borderRadius: 8, color: '#080', fontSize: 14, fontWeight: 600, marginTop: 8 },
+  pause: { padding: 10, background: '#fff3e0', border: '1px solid #ffb74d', borderRadius: 8, color: '#e65100', fontSize: 13, fontWeight: 600, marginTop: 8 },
   h: { fontSize: 15, fontWeight: 600, margin: '14px 0 8px' },
   row: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 8, background: '#f9f9f9', borderRadius: 6, marginBottom: 6, fontSize: 14 },
   box: { padding: 10, background: '#f9f9f9', borderRadius: 8, marginBottom: 8 },
