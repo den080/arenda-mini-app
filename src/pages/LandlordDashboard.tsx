@@ -314,42 +314,6 @@ export function LandlordDashboard() {
       clearInterval(interval)
     }
   }, [user])
-
-  async function setMeterActive(objId: string, code: string, active: boolean) {
-    const mt = meterTypes.find(t => t.code === code)
-    if (!mt) return
-    const existing = (objectMeters[objId] || []).find(om => om.meter_type_id === mt.id)
-    if (existing) {
-      if (!!existing.is_active !== active) {
-        const { error } = await supabase.from('object_meters').update({ is_active: active }).eq('id', existing.id)
-        if (!error) {
-          setObjectMeters(prev => ({
-            ...prev,
-            [objId]: (prev[objId] || []).map(om => om.id === existing.id ? { ...om, is_active: active } : om)
-          }))
-        }
-      }
-    } else if (active) {
-      const { data, error } = await supabase.from('object_meters').insert({ object_id: objId, meter_type_id: mt.id, is_active: true }).select()
-      if (!error && data) {
-        setObjectMeters(prev => ({ ...prev, [objId]: [...(prev[objId] || []), data[0]] }))
-      }
-    }
-  }
-
-  function isMeterActive(objId: string, code: string): boolean {
-    const mt = meterTypes.find(t => t.code === code)
-    if (!mt) return false
-    return !!(objectMeters[objId] || []).find(om => om.meter_type_id === mt.id && om.is_active)
-  }
-
-  function getElecMode(objId: string): string {
-    if (isMeterActive(objId, 'electricity_peak') && isMeterActive(objId, 'electricity_semipeak') && isMeterActive(objId, 'electricity_night')) return '3'
-    if (isMeterActive(objId, 'electricity_day') && isMeterActive(objId, 'electricity_night')) return '2'
-    if (isMeterActive(objId, 'electricity_single')) return '1'
-    return 'none'
-  }
-
   async function setElecMode(objId: string, mode: string) {
     const need: Record<string, string[]> = {
       'none': [],
