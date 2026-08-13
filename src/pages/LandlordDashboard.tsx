@@ -22,6 +22,7 @@ interface ObjectWithStatus extends PropertyObject {
   bgColor?: string
   deferredTotal?: number
   deferredRequests?: any[]
+  hasConfirmedCashMeeting?: boolean
 }
 
 function parseDate(d: any): Date {
@@ -155,6 +156,17 @@ export function LandlordDashboard() {
             continue
           }
 
+          // Проверка согласованной наличной встречи
+          const { data: cashMeeting } = await supabase
+            .from('cash_meetings')
+            .select('*')
+            .eq('contract_id', contract.id)
+            .eq('kind', 'meeting')
+            .eq('status', 'confirmed')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+
           const dueMid = parseDate(payment.due_date)
           const sd = contract.start_date ? parseDate(contract.start_date) : null
           const firstMonthGrace = !!sd && dueMid.getMonth() === sd.getMonth() && dueMid.getFullYear() === sd.getFullYear() && todayMid < new Date(sd.getFullYear(), sd.getMonth() + 1, 1)
@@ -254,7 +266,8 @@ export function LandlordDashboard() {
             readingsMode,
             bgColor,
             deferredTotal,
-            deferredRequests: dReq || []
+            deferredRequests: dReq || [],
+            hasConfirmedCashMeeting: !!cashMeeting
           })
         }
 
@@ -335,19 +348,6 @@ export function LandlordDashboard() {
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
 
-  async function confirmPayment(_objId: string, paymentId: string) {
-    const { error: updError } = await supabase
-      .from('payments')
-      .update({ confirmed_by_landlord: true, confirmed_at: new Date().toISOString() })
-      .eq('id', paymentId)
-
-    if (!updError) {
-      window.dispatchEvent(new Event('rentflow-refresh'))
-    } else {
-      alert('Не удалось подтвердить: ' + updError.message)
-    }
-  }
-
   async function saveUtilities(paymentId: string, value: string) {
     const { error } = await supabase
       .from('payments')
@@ -395,6 +395,69 @@ export function LandlordDashboard() {
     } else {
       alert('Ошибка: ' + error.message)
     }
+  }
+
+  // Подтверждение конкретного канала оплаты.
+  // close=true — закрыть канал без подтверждения (например, «нал закрыт, оплатили всё картой»)
+  async function confirmChannel(paymentId: string, channel: 'card' | 'cash', close: boolean = false) {
+    const { data: pay } = await supabase.from('payments').select('*').eq('id', paymentId).maybeSingle()
+    if (!pay) { alert('Платёж не найден'); return }
+
+    // Есть ли согласованная наличная встреча?
+    const { data: cashMeeting } = await supabase
+      .from('cash_meetings')
+      .select('*')
+      .eq('contract_id', pay.contract_id)
+      .eq('kind', 'meeting')
+      .eq('status', 'confirmed')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    // Вычисляем, какие каналы задействованы
+    const cardEngaged = !!pay.card_claimed
+    const cashEngaged = !!cashMeeting && !(pay.cash_closed || close && channel === 'cash') && !pay.confirmed_cash
+
+    const update: any = {}
+    if (channel === 'card') {
+      if (close) return // безнал закрывать нельзя — только подтверждать
+      update.confirmed_card = true
+    } else {
+      if (close) update.cash_closed = true
+      else update.confirmed_cash = true
+    }
+
+    // После обновления проверим: если все задействованные каналы закрыты — закрываем платёж
+    const afterCard = channel === 'card' ? true : pay.confirmed_card
+    const afterCashConfirmed = channel === 'cash' && !close ? true : pay.confirmed_cash
+    const afterCashClosed = channel === 'cash' && close ? true : pay.cash_closed
+    const cashFinalClosed = afterCashClosed || afterCashConfirmed
+
+    const cardEngagedAfter = cardEngaged // не меняется
+    const cashEngagedAfter = !!cashMeeting && !afterCashClosed
+
+    const cardSatisfied = !cardEngagedAfter || afterCard
+    const cashSatisfied = !cashEngagedAfter || cashFinalClosed
+
+    if (cardSatisfied && cashSatisfied) {
+      update.confirmed_by_landlord = true
+      update.confirmed_at = new Date().toISOString()
+    }
+
+    const { error: e1 } = await supabase.from('payments').update(update).eq('id', paymentId)
+    if (e1) { alert('Ошибка: ' + e1.message); return }
+
+    // Уведомление арендатору
+    const { data: con } = await supabase.from('contracts').select('*').eq('id', pay.contract_id).maybeSingle()
+    if (con) {
+      const msg = channel === 'card'
+        ? '🟢 Арендодатель подтвердил получение по безналу'
+        : (close ? '⚪ Наличный канал закрыт' : '🟢 Арендодатель подтвердил получение наличных')
+      await supabase.from('notifications_log').insert({
+        user_id: con.tenant_id, type: 'payment_confirmed', related_id: pay.id, message: msg, sent_at: new Date().toISOString(),
+      })
+    }
+    window.dispatchEvent(new Event('rentflow-refresh'))
   }
   const getStatusIcon = (color?: string) => {
     if (color === '#c00') return '🔴'
@@ -485,13 +548,45 @@ export function LandlordDashboard() {
 
               {isExpanded && (
                 <>
-                  {obj.paymentId && obj.status === 'overdue' && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); confirmPayment(String(obj.id), obj.paymentId!) }}
-                      style={styles.confirmButton}
-                    >
-                      ✅ Подтвердить оплату
-                    </button>
+                  {contract && obj.paymentId && !obj.payment?.confirmed_by_landlord && (
+                    <div style={styles.subCard}>
+                      <div style={styles.subCardTitle}>💰 Подтверждение оплаты по каналам</div>
+                      <div style={styles.slotItem}>
+                        <span>💳 Безнал: {obj.payment?.confirmed_card ? '🟢 получен' : obj.payment?.card_claimed ? '🟡 заявлен арендатором' : '⚪ не заявлен'}</span>
+                        {obj.payment?.card_claimed && !obj.payment?.confirmed_card && (
+                          <button
+                            style={{ ...styles.confirmButton, marginTop: 0, width: 'auto', padding: '6px 12px', fontSize: '13px' }}
+                            onClick={() => confirmChannel(obj.paymentId!, 'card')}
+                          >
+                            Подтвердить
+                          </button>
+                        )}
+                      </div>
+                      <div style={styles.slotItem}>
+                        <span>💵 Нал: {obj.payment?.confirmed_cash ? '🟢 получен' : obj.payment?.cash_closed ? '⚪ канал закрыт' : obj.hasConfirmedCashMeeting ? '🟡 ждёт встречи' : '⚪ не заявлен'}</span>
+                        {obj.hasConfirmedCashMeeting && !obj.payment?.cash_closed && !obj.payment?.confirmed_cash && (
+                          <span>
+                            <button
+                              style={{ ...styles.confirmButton, marginTop: 0, width: 'auto', padding: '6px 12px', fontSize: '13px', marginRight: 6 }}
+                              onClick={() => confirmChannel(obj.paymentId!, 'cash')}
+                            >
+                              Подтвердить
+                            </button>
+                            <button
+                              style={styles.deleteButton}
+                              onClick={() => confirmChannel(obj.paymentId!, 'cash', true)}
+                            >
+                              закрыть канал
+                            </button>
+                          </span>
+                        )}
+                      </div>
+                      {!obj.payment?.card_claimed && !obj.hasConfirmedCashMeeting && (
+                        <button style={styles.confirmButton} onClick={() => confirmChannel(obj.paymentId!, 'card')}>
+                          ✅ Подтвердить оплату полностью
+                        </button>
+                      )}
+                    </div>
                   )}
 
                   {contract && obj.paymentId && !obj.payment?.confirmed_by_landlord && obj.readingsMode !== 'self' && (
@@ -880,6 +975,15 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '6px',
     marginBottom: '6px',
     fontSize: '14px',
+  },
+  deleteButton: {
+    background: '#ff5252',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '4px',
+    padding: '4px 8px',
+    cursor: 'pointer',
+    fontSize: '12px',
   },
   addButton: {
     padding: '6px 12px',
