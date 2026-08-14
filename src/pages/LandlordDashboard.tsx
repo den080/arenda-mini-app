@@ -242,6 +242,14 @@ export function LandlordDashboard() {
     const cashSatisfied = !(!!cashMeeting && !afterCashClosed) || cashFinalClosed
     if (cardSatisfied && cashSatisfied) { update.confirmed_by_landlord = true; update.confirmed_at = new Date().toISOString() }
     const { error: e1 } = await supabase.from('payments').update(update).eq('id', paymentId)
+    if (e1) { alert('Ошибка: ' + e1.message); return }
+    const { data: con } = await supabase.from('contracts').select('*').eq('id', pay.contract_id).maybeSingle()
+    if (con) {
+      const msg = channel === 'card' ? '🟢 Арендодатель подтвердил получение по безналу' : (close ? '⚪ Наличный канал закрыт' : '🟢 Арендодатель подтвердил получение наличных')
+      await supabase.from('notifications_log').insert({ user_id: con.tenant_id, type: 'payment_confirmed', related_id: pay.id, message: msg, sent_at: new Date().toISOString() })
+    }
+    window.dispatchEvent(new Event('rentflow-refresh'))
+  }
   const getNotificationText = (type: string) => {
     switch (type) {
       case 'payment_claimed': return '✅ Арендатор сообщил об оплате'
