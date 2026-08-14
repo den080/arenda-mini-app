@@ -5,6 +5,7 @@ import CashNegotiation from '../components/CashNegotiation'
 import MetersEditor from '../components/MetersEditor'
 import ReadingsReview from '../components/ReadingsReview'
 import { ensureNextPayment } from '../lib/nextPayment'
+import Chat from '../components/Chat'
 import { T, C } from '../theme'
 import type { Object as PropertyObject, Contract, NotificationLog, User } from '../types/database'
 
@@ -473,6 +474,13 @@ export function LandlordDashboard() {
                   <ReadingsReview contractId={contract.id} tenantId={contract.tenant_id} />
                 </div>
               )}
+             {tab === 'chat' && contract && (
+               <div style={T.card}>
+               <div style={T.h2}>Чат с арендатором</div>
+               <Chat contractId={contract.id} myId={user!.id} />
+            </div>
+          )}
+
             </>
           )}
 
@@ -576,6 +584,8 @@ function TabBar({ tab, setTab }: { tab: string; setTab: (t: string) => void }) {
     { id: 'pay', l: 'Оплата' },
     { id: 'meters', l: 'Счётчики' },
     { id: 'contract', l: 'Договор' },
+    { id: 'chat', l: 'Чат' },
+
   ]
   return (
     <div style={{ display: 'flex', background: C.gray, borderRadius: 12, padding: 4, marginBottom: 12 }}>
