@@ -48,15 +48,18 @@ export function ReadingsReview({ contractId, tenantId }: { contractId: string; t
         ? 'confirmed'
         : 'proposed'
 
-  async function review(status: 'confirmed' | 'incomplete') {
-    const ids = monthReadings.map(r => r.id)
-    if (!ids.length) return
-    await supabase.from('meter_readings').update({ status, reviewed_at: new Date().toISOString() }).in('id', ids)
+  async function reviewMeter(meterId: string, status: 'confirmed' | 'incomplete') {
+    const r = monthByMeter[meterId]
+    if (!r) return
+    const m = meters.find(x => x.id === meterId)
+    const t = types.find(x => x.id === m?.meter_type_id)
+    const label = (t?.label || 'Счётчик') + (m?.label ? ` · № ${m.label}` : '')
+    await supabase.from('meter_readings').update({ status, reviewed_at: new Date().toISOString() }).eq('id', r.id)
     await supabase.from('notifications_log').insert({
       user_id: tenantId, type: 'meter_submitted', related_id: contractId,
       message: status === 'confirmed'
-        ? '🟢 Показания получены арендодателем'
-        : '🔴 Показания получены не полностью — передайте недостающие ещё раз',
+        ? `🟢 ${label}: показания получены`
+        : `🔴 ${label}: показания получены не полностью — передайте ещё раз`,
       sent_at: new Date().toISOString(),
     })
     window.dispatchEvent(new Event('rentflow-refresh'))
@@ -75,7 +78,7 @@ export function ReadingsReview({ contractId, tenantId }: { contractId: string; t
         const open = !!historyOpen[m.id]
         return (
           <div key={m.id} style={st.row}>
-            <div>
+            <div style={{ flex: 1 }}>
               {t?.label || 'Счётчик'}{m.label ? ` · № ${m.label}` : ''}
               <div style={st.note}>
                 {month
@@ -91,29 +94,39 @@ export function ReadingsReview({ contractId, tenantId }: { contractId: string; t
                 <div key={r.id} style={st.note}>{r.value} · подано {new Date(r.submitted_at).toLocaleDateString('ru-RU')} · {chip(r.status)}</div>
               ))}
             </div>
+            {month && (
+              <div style={st.btnsCol}>
+                <button
+                  style={month.status === 'confirmed' ? st.okBtnActive : st.okBtn}
+                  title="Подтвердить этот счётчик"
+                  onClick={() => reviewMeter(m.id, 'confirmed')}
+                >✅</button>
+                <button
+                  style={month.status === 'incomplete' ? st.warnBtnActive : st.warnBtn}
+                  title="Не полностью по этому счётчику"
+                  onClick={() => reviewMeter(m.id, 'incomplete')}
+                >⚠️</button>
+              </div>
+            )}
           </div>
         )
       })}
-      {hasAny && (
-        <div style={st.btns}>
-          <button style={st.okBtn} onClick={() => review('confirmed')}>✅ Данные получены</button>
-          <button style={st.warnBtn} onClick={() => review('incomplete')}>⚠️ Получены не полностью</button>
-        </div>
-      )}
       <div style={st.note}>
-        {overall === 'confirmed' ? 'Все показания этого месяца подтверждены.' : overall === 'incomplete' ? 'Отмечено «не полностью» — для арендатора это неподача.' : overall === 'proposed' ? 'Показания отправлены арендатором и ждут вашего подтверждения.' : 'Арендатор ещё не подавал показания в этом месяце.'}
+        {overall === 'confirmed' ? 'Все показания этого месяца подтверждены.' : overall === 'incomplete' ? 'Часть счётчиков отмечена «не полностью» — арендатор видит, какие именно.' : overall === 'proposed' ? 'Показания отправлены арендатором и ждут вашего подтверждения по каждому счётчику.' : 'Арендатор ещё не подавал показания в этом месяце.'}
       </div>
     </div>
   )
 }
 
 const st: Record<string, React.CSSProperties> = {
-  row: { padding: 8, background: '#f9f9f9', borderRadius: 6, marginBottom: 6, fontSize: 14 },
+  row: { padding: 8, background: '#f9f9f9', borderRadius: 6, marginBottom: 6, fontSize: 14, display: 'flex', gap: 8, alignItems: 'flex-start' },
   note: { fontSize: 11, color: 'rgba(0,0,0,0.45)', marginTop: 2, marginBottom: 4 },
   link: { fontSize: 11, color: '#00695c', fontWeight: 600, cursor: 'pointer', marginTop: 2, marginBottom: 4 },
-  btns: { display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' },
-  okBtn: { padding: '8px 12px', borderRadius: 8, border: 'none', background: '#4caf50', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' },
-  warnBtn: { padding: '8px 12px', borderRadius: 8, border: 'none', background: '#ff9800', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' },
+  btnsCol: { display: 'flex', flexDirection: 'column', gap: 4 },
+  okBtn: { padding: '6px 10px', borderRadius: 8, border: 'none', background: '#4caf50', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' },
+  okBtnActive: { padding: '6px 10px', borderRadius: 8, border: '2px solid #2e7d32', background: '#4caf50', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' },
+  warnBtn: { padding: '6px 10px', borderRadius: 8, border: 'none', background: '#ff9800', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' },
+  warnBtnActive: { padding: '6px 10px', borderRadius: 8, border: '2px solid #e65100', background: '#ff9800', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' },
 }
 
 export default ReadingsReview
