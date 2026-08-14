@@ -172,7 +172,13 @@ export function TenantDashboard() {
   const total = payment ? Number(payment.base_amount) + Number(payment.penalty_amount || 0) + utilities : Number(contract.rent_amount)
   const monthLabel = payment ? new Date(payment.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : ''
   const deposit = Number(contract.deposit_amount || 0)
+  const depositPaid = Number(contract.deposit_paid || 0)
   const frozenTotal = (frozenRows || []).reduce((sum: number, f: any) => sum + Number(f.amount || 0), 0)
+
+  const startMid = contract.start_date ? parseDate(contract.start_date) : null
+  const periodMid = payment ? parseDate(payment.period) : null
+  const firstMonthPending = !!(payment && startMid && periodMid && !payment.confirmed_by_landlord
+    && periodMid.getFullYear() === startMid.getFullYear() && periodMid.getMonth() === startMid.getMonth())
 
   const chip = (stt: string) => (stt || 'proposed') === 'confirmed' ? '🟢 получены' : (stt || 'proposed') === 'incomplete' ? '🔴 не полностью' : '🟡 ждут'
 
@@ -272,7 +278,7 @@ export function TenantDashboard() {
         <div style={s.address}>{obj?.address}</div>
         <div style={s.small}>Арендодатель: {landlord?.full_name}{landlord?.phone ? ', ' + formatPhoneDisplay(landlord.phone) : ''}</div>
         {contract.start_date && contract.end_date && <div style={{ fontSize: 11, color: 'rgba(0,0,0,0.4)', marginTop: 4 }}>Срок аренды: с {parseDate(contract.start_date).toLocaleDateString('ru-RU')} по {parseDate(contract.end_date).toLocaleDateString('ru-RU')} ({Math.max(1, Math.round((parseDate(contract.end_date).getTime() - parseDate(contract.start_date).getTime()) / 2629800000))} мес.)</div>}
-        {deposit > 0 && <div style={{ fontSize: 11, color: 'rgba(0,0,0,0.4)', marginTop: 4 }}>Депозит: {deposit.toFixed(0)} ₽</div>}
+        {deposit > 0 && <div style={{ fontSize: 11, color: 'rgba(0,0,0,0.4)', marginTop: 4 }}>Депозит: внесено {depositPaid.toFixed(0)} из {deposit.toFixed(0)} ₽ · остаток {Math.max(0, deposit - depositPaid).toFixed(0)} ₽</div>}
         {frozenTotal > 0 && (
           <div style={s.frozenNote} onClick={() => setFrozenOpen(!frozenOpen)}>
             🧊 Замороженные штрафы: {frozenTotal.toFixed(0)} ₽ {frozenOpen ? '▲' : '▼'}
@@ -312,6 +318,10 @@ export function TenantDashboard() {
           <div style={s.overdueNotice}>⚠️ +{penaltyRate} руб за каждый день просрочки</div>
         )}
 
+        {firstMonthPending && (
+          <div style={s.signNote}>🤝 Оплата первого месяца и залогового депозита происходит очно при заключении договора. Арендодатель подтвердит получение в своём кабинете — после этого откроются обычные способы оплаты.</div>
+        )}
+
         {payment && !payment.confirmed_by_landlord && Number(payment.penalty_amount) > 0 && (
           deferralPending ? (
             <div style={s.meetingStatus}>🟡 Отсрочка штрафа: заявка на рассмотрении</div>
@@ -320,7 +330,7 @@ export function TenantDashboard() {
           )
         )}
 
-        {contract.payment_method === 'both' && (
+        {!firstMonthPending && contract.payment_method === 'both' && (
           <div style={s.paySection}>
             <div style={s.h3}>💰 Как вы будете платить</div>
             <div style={s.methodRow}>
@@ -336,7 +346,7 @@ export function TenantDashboard() {
           </div>
         )}
 
-        {effectiveMethod === 'card' && (
+        {!firstMonthPending && effectiveMethod === 'card' && (
           <div style={s.paySection}>
             <div style={s.h3}>💳 Способы оплаты</div>
             {details.length === 0 ? (
@@ -365,7 +375,7 @@ export function TenantDashboard() {
           </div>
         )}
 
-        {effectiveMethod === 'cash' && (
+        {!firstMonthPending && effectiveMethod === 'cash' && (
           <div style={s.cashSection}>
             <div style={s.h3}>💵 Оплата наличными</div>
             <CashNegotiation
@@ -470,6 +480,7 @@ const s: Record<string, React.CSSProperties> = {
   tiny: { fontSize: 11, color: 'rgba(0,0,0,0.45)', marginTop: 2, marginBottom: 6 },
   tinyLink: { fontSize: 11, color: '#00695c', fontWeight: 600, cursor: 'pointer', marginTop: 2, marginBottom: 6 },
   okNote: { padding: 8, background: '#eaf7ef', border: '1px solid #a5d6a7', borderRadius: 8, color: '#080', fontSize: 13, fontWeight: 600, marginBottom: 8 },
+  signNote: { padding: 10, background: '#e3f2fd', border: '1px solid #90caf9', borderRadius: 8, color: '#0d47a1', fontSize: 13, fontWeight: 600, marginTop: 8 },
   h2: { fontSize: 17, fontWeight: 700, marginBottom: 10 },
   h3: { fontSize: 15, fontWeight: 600, marginBottom: 8 },
   row: { display: 'flex', justifyContent: 'space-between', fontSize: 14, marginBottom: 6 },
