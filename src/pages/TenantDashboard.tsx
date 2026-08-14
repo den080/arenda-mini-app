@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useTelegramUser } from '../hooks/useTelegramUser'
 import CashNegotiation from '../components/CashNegotiation'
-import { T, C } from '../theme'
+import { T } from '../theme'
 
 interface PayDetail { type: 'card' | 'sbp'; bank: string; number: string }
 interface Notification { id: string; user_id: string; type: string; related_id: string; sent_at: string }
