@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useTelegramUser } from '../hooks/useTelegramUser'
 import CashNegotiation from '../components/CashNegotiation'
+import { T, C } from '../theme'
 
 interface PayDetail { type: 'card' | 'sbp'; bank: string; number: string }
 interface Notification { id: string; user_id: string; type: string; related_id: string; sent_at: string }
@@ -40,7 +41,7 @@ export function TenantDashboard() {
       const { data: contract } = await supabase
         .from('contracts').select('*')
         .eq('tenant_id', user!.id).eq('status', 'active').maybeSingle()
-        if (!contract) { setError('🤝 У вас пока нет активной аренды. Попросите арендодателя добавить объект и указать ваш номер телефона в договоре — после этого аренда появится здесь.'); setLoading(false); return }
+      if (!contract) { setError('🤝 У вас пока нет активной аренды. Попросите арендодателя добавить объект и указать ваш номер телефона в договоре — после этого аренда появится здесь.'); setLoading(false); return }
 
       const { data: obj } = await supabase.from('objects').select('*').eq('id', contract.object_id).maybeSingle()
       const { data: landlord } = await supabase.from('users').select('*').eq('id', obj?.landlord_id).maybeSingle()
@@ -158,9 +159,9 @@ export function TenantDashboard() {
     }
   }
 
-  if (userLoading || loading) return <div style={s.container}>Загрузка...</div>
-  if (error) return <div style={s.container}>{error}</div>
-  if (!data) return <div style={s.container}>Нет данных</div>
+  if (userLoading || loading) return <div style={T.page}>Загрузка…</div>
+  if (error) return <div style={T.page}><div style={T.card}>{error}</div></div>
+  if (!data) return <div style={T.page}><div style={T.card}>Нет данных</div></div>
 
   const { contract, obj, landlord, payments, meters, meterTypes, penaltyRules, frozenRows, deferredReqs, readingsByMeter } = data
   const readingsMode = contract.readings_mode || 'manual'
@@ -172,13 +173,7 @@ export function TenantDashboard() {
   const total = payment ? Number(payment.base_amount) + Number(payment.penalty_amount || 0) + utilities : Number(contract.rent_amount)
   const monthLabel = payment ? new Date(payment.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : ''
   const deposit = Number(contract.deposit_amount || 0)
-  const depositPaid = Number(contract.deposit_paid || 0)
   const frozenTotal = (frozenRows || []).reduce((sum: number, f: any) => sum + Number(f.amount || 0), 0)
-
-  const startMid = contract.start_date ? parseDate(contract.start_date) : null
-  const periodMid = payment ? parseDate(payment.period) : null
-  const firstMonthPending = !!(payment && startMid && periodMid && !payment.confirmed_by_landlord
-    && periodMid.getFullYear() === startMid.getFullYear() && periodMid.getMonth() === startMid.getMonth())
 
   const chip = (stt: string) => (stt || 'proposed') === 'confirmed' ? '🟢 получены' : (stt || 'proposed') === 'incomplete' ? '🔴 не полностью' : '🟡 ждут'
 
@@ -195,9 +190,8 @@ export function TenantDashboard() {
     ? (contract.tenant_pay_method || 'card')
     : contract.payment_method
 
-  let statusIcon = '⚪'
+  let statusChip: any = T.chipGray
   let statusText = 'Нет счёта'
-  let statusColor = '#888'
   let isOverdue = false
 
   if (payment) {
@@ -208,43 +202,26 @@ export function TenantDashboard() {
       const daysUntilDue = firstMonthGrace && todayMid > dueMid ? 0 : Math.round((dueMid.getTime() - todayMid.getTime()) / 86400000)
       if (todayMid > dueMid && !firstMonthGrace) {
         isOverdue = true
-        statusIcon = '🔴'
-        statusColor = '#c00'
+        statusChip = T.chipRed
         statusText = `Просрочка ${-daysUntilDue} дн.`
       } else if (daysUntilDue === 0) {
-        statusIcon = '🟡'
-        statusColor = '#a80'
+        statusChip = T.chipOrange
         statusText = firstMonthGrace ? 'Первый месяц — просрочка не начисляется' : 'Сегодня последний день оплаты'
       } else if (daysUntilDue <= reminder) {
-        statusIcon = '🟡'
-        statusColor = '#a80'
+        statusChip = T.chipOrange
         statusText = `До оплаты ${daysUntilDue} дн.`
       } else {
-        statusIcon = '🟢'
-        statusColor = '#080'
+        statusChip = T.chipGreen
         statusText = `До оплаты ${daysUntilDue} дн.`
       }
     } else {
       const periodDate = parseDate(payment.period)
       const nextDue = new Date(periodDate.getFullYear(), periodDate.getMonth() + 1, contract.payment_day || 1)
       const daysLeft = Math.round((nextDue.getTime() - todayMid.getTime()) / 86400000)
-      if (daysLeft < 0) {
-        statusIcon = '🔴'
-        statusColor = '#c00'
-        statusText = `Следующий платёж просрочен на ${-daysLeft} дн.`
-      } else if (daysLeft === 0) {
-        statusIcon = '🟡'
-        statusColor = '#a80'
-        statusText = 'Следующая оплата: сегодня последний день'
-      } else if (daysLeft <= reminder) {
-        statusIcon = '🟡'
-        statusColor = '#a80'
-        statusText = `${daysLeft} дн. до следующей оплаты`
-      } else {
-        statusIcon = '🟢'
-        statusColor = '#080'
-        statusText = `${daysLeft} дн. до следующей оплаты`
-      }
+      if (daysLeft < 0) { statusChip = T.chipRed; statusText = `Следующий платёж просрочен на ${-daysLeft} дн.` }
+      else if (daysLeft === 0) { statusChip = T.chipOrange; statusText = 'Следующая оплата: сегодня последний день' }
+      else if (daysLeft <= reminder) { statusChip = T.chipOrange; statusText = `${daysLeft} дн. до следующей оплаты` }
+      else { statusChip = T.chipGreen; statusText = `${daysLeft} дн. до следующей оплаты` }
     }
   }
 
@@ -272,94 +249,79 @@ export function TenantDashboard() {
   }
 
   return (
-    <div style={s.container}>
-      <h1 style={s.title}>💧 Моя аренда</h1>
-      <div style={s.card}>
-        <div style={s.address}>{obj?.address}</div>
-        <div style={s.small}>Арендодатель: {landlord?.full_name}{landlord?.phone ? ', ' + formatPhoneDisplay(landlord.phone) : ''}</div>
-        {contract.start_date && contract.end_date && <div style={{ fontSize: 11, color: 'rgba(0,0,0,0.4)', marginTop: 4 }}>Срок аренды: с {parseDate(contract.start_date).toLocaleDateString('ru-RU')} по {parseDate(contract.end_date).toLocaleDateString('ru-RU')} ({Math.max(1, Math.round((parseDate(contract.end_date).getTime() - parseDate(contract.start_date).getTime()) / 2629800000))} мес.)</div>}
-        {deposit > 0 && <div style={{ fontSize: 11, color: 'rgba(0,0,0,0.4)', marginTop: 4 }}>Депозит: внесено {depositPaid.toFixed(0)} из {deposit.toFixed(0)} ₽ · остаток {Math.max(0, deposit - depositPaid).toFixed(0)} ₽</div>}
+    <div style={T.page}>
+      <h1 style={T.h1}>Моя аренда</h1>
+
+      <div style={T.card}>
+        <div style={{ fontSize: 17, fontWeight: 600 }}>{obj?.address}</div>
+        <div style={T.small}>Арендодатель: {landlord?.full_name}{landlord?.phone ? ', ' + formatPhoneDisplay(landlord.phone) : ''}</div>
+        {contract.start_date && contract.end_date && <div style={T.tiny}>Срок аренды: с {parseDate(contract.start_date).toLocaleDateString('ru-RU')} по {parseDate(contract.end_date).toLocaleDateString('ru-RU')} ({Math.max(1, Math.round((parseDate(contract.end_date).getTime() - parseDate(contract.start_date).getTime()) / 2629800000))} мес.)</div>}
+        {deposit > 0 && <div style={T.tiny}>Депозит: {deposit.toFixed(0)} ₽</div>}
         {frozenTotal > 0 && (
-          <div style={s.frozenNote} onClick={() => setFrozenOpen(!frozenOpen)}>
+          <div style={T.link} onClick={() => setFrozenOpen(!frozenOpen)}>
             🧊 Замороженные штрафы: {frozenTotal.toFixed(0)} ₽ {frozenOpen ? '▲' : '▼'}
-            {frozenOpen && (
-              <div style={{ marginTop: 6 }}>
-                {(frozenRows || []).map((f: any) => (
-                  <div key={f.id} style={{ fontSize: 11, color: 'rgba(0,0,0,0.5)', marginBottom: 2 }}>
-                    {f.period ? parseDate(f.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : 'без месяца'} — {Number(f.amount).toFixed(0)} ₽{f.adjusted_note ? ` (${f.adjusted_note})` : ''}
-                  </div>
-                ))}
-                {deposit > 0
-                  ? (deposit >= frozenTotal
-                    ? <div style={{ fontSize: 11, color: 'rgba(0,0,0,0.5)' }}>будет удержано из депозита; остаток депозита: {(deposit - frozenTotal).toFixed(0)} ₽</div>
-                    : <div style={{ fontSize: 11, color: '#c00' }}>сверх депозита долг: {(frozenTotal - deposit).toFixed(0)} ₽</div>)
-                  : <div style={{ fontSize: 11, color: '#c00' }}>долг арендатора (депозита нет)</div>}
-                <div style={{ fontSize: 11, color: 'rgba(0,0,0,0.4)' }}>записи хранятся до конца договора</div>
+          </div>
+        )}
+        {frozenOpen && frozenTotal > 0 && (
+          <div style={{ marginTop: 6 }}>
+            {(frozenRows || []).map((f: any) => (
+              <div key={f.id} style={T.tiny}>
+                {f.period ? parseDate(f.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : 'без месяца'} — {Number(f.amount).toFixed(0)} ₽{f.adjusted_note ? ` (${f.adjusted_note})` : ''}
               </div>
-            )}
+            ))}
+            {deposit > 0
+              ? (deposit >= frozenTotal
+                ? <div style={T.tiny}>будет удержано из депозита; остаток депозита: {(deposit - frozenTotal).toFixed(0)} ₽</div>
+                : <div style={{ ...T.tiny, color: C.red }}>сверх депозита долг: {(frozenTotal - deposit).toFixed(0)} ₽</div>)
+              : <div style={{ ...T.tiny, color: C.red }}>долг арендатора (депозита нет)</div>}
+            <div style={T.tiny}>записи хранятся до конца договора</div>
           </div>
         )}
       </div>
 
-      <div style={s.card}>
-        <div style={s.h2}>🧾 Счёт за {monthLabel}</div>
-        <div style={s.row}><span>Аренда</span><b>{Number(payment?.base_amount ?? contract.rent_amount).toFixed(2)} ₽</b></div>
-        <div style={s.row}><span>Штраф</span><b>{Number(payment?.penalty_amount || 0).toFixed(2)} ₽</b></div>
+      <div style={T.card}>
+        <div style={T.h2}>Счёт за {monthLabel}</div>
+        <div style={T.row}><span style={{ color: C.text2 }}>Аренда</span><b>{Number(payment?.base_amount ?? contract.rent_amount).toFixed(2)} ₽</b></div>
+        <div style={T.row}><span style={{ color: C.text2 }}>Штраф</span><b>{Number(payment?.penalty_amount || 0).toFixed(2)} ₽</b></div>
         {utilities > 0 && (
-          <div style={s.row}><span>Ресурсы по квитанции</span><b>{utilities.toFixed(2)} ₽</b></div>
+          <div style={T.row}><span style={{ color: C.text2 }}>Ресурсы по квитанции</span><b>{utilities.toFixed(2)} ₽</b></div>
         )}
-        <div style={s.row}><span>Итого</span><b style={s.total}>{total.toFixed(2)} ₽</b></div>
-        {payment && <div style={s.small}>Оплатить до: {parseDate(payment.due_date).toLocaleDateString('ru-RU')}</div>}
-        <div style={s.statusRow}>
-          <span>{statusIcon}</span>
-          <span style={{ color: statusColor, fontWeight: 600 }}>{statusText}</span>
-        </div>
+        <div style={T.row}><span style={{ color: C.text2 }}>Итого</span><span style={T.total}>{total.toFixed(2)} ₽</span></div>
+        {payment && <div style={T.small}>Оплатить до: {parseDate(payment.due_date).toLocaleDateString('ru-RU')}</div>}
+        <div style={{ marginTop: 10 }}><span style={statusChip}>{statusText}</span></div>
         {isOverdue && (
-          <div style={s.overdueNotice}>⚠️ +{penaltyRate} руб за каждый день просрочки</div>
-        )}
-
-        {firstMonthPending && (
-          <div style={s.signNote}>🤝 Оплата первого месяца и залогового депозита происходит очно при заключении договора. Арендодатель подтвердит получение в своём кабинете — после этого откроются обычные способы оплаты.</div>
+          <div style={T.noteRed}>⚠️ +{penaltyRate} руб за каждый день просрочки</div>
         )}
 
         {payment && !payment.confirmed_by_landlord && Number(payment.penalty_amount) > 0 && (
           deferralPending ? (
-            <div style={s.meetingStatus}>🟡 Отсрочка штрафа: заявка на рассмотрении</div>
+            <div style={T.note}>🟡 Отсрочка штрафа: заявка на рассмотрении</div>
           ) : (
-            <button onClick={requestDeferral} style={s.warnButton}>🙏 Попросить отсрочку штрафа</button>
+            <button onClick={requestDeferral} style={T.btnWarn}>Попросить отсрочку штрафа</button>
           )
         )}
 
-        {!firstMonthPending && contract.payment_method === 'both' && (
-          <div style={s.paySection}>
-            <div style={s.h3}>💰 Как вы будете платить</div>
-            <div style={s.methodRow}>
-              <label style={s.methodLabel}>
-                <input type="radio" checked={effectiveMethod === 'card'} onChange={() => choosePayMethod('card')} />
-                {' '}💳 Безналичный расчёт
-              </label>
-              <label style={s.methodLabel}>
-                <input type="radio" checked={effectiveMethod === 'cash'} onChange={() => choosePayMethod('cash')} />
-                {' '}💵 Наличные
-              </label>
+        {contract.payment_method === 'both' && (
+          <div style={T.sub}>
+            <div style={T.h3}>Как вы будете платить</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button style={effectiveMethod === 'card' ? T.btnSmall : T.btnSecondary} onClick={() => choosePayMethod('card')}>💳 Безналичный расчёт</button>
+              <button style={effectiveMethod === 'cash' ? T.btnSmall : T.btnSecondary} onClick={() => choosePayMethod('cash')}>💵 Наличные</button>
             </div>
           </div>
         )}
 
-        {!firstMonthPending && effectiveMethod === 'card' && (
-          <div style={s.paySection}>
-            <div style={s.h3}>💳 Способы оплаты</div>
+        {effectiveMethod === 'card' && (
+          <div style={T.sub}>
+            <div style={T.h3}>Способы оплаты</div>
             {details.length === 0 ? (
-              <div style={s.small}>Арендодатель ещё не добавил реквизиты для безналичной оплаты.</div>
+              <div style={T.small}>Арендодатель ещё не добавил реквизиты для безналичной оплаты.</div>
             ) : (
               details.map((d: PayDetail, i: number) => (
-                <div key={i} style={s.payItem}>
-                  <div style={s.payHeader}>
-                    <span style={s.payIcon}>{d.type === 'card' ? '💳' : '⚡'}</span>
-                    <span style={s.payBank}>{d.type === 'card' ? d.bank : `СБП • ${d.bank}`}</span>
-                  </div>
-                  <div style={s.payNumber}>{d.type === 'card' ? formatCardNumber(d.number) : formatPhoneDisplay(d.number)}</div>
-                  <button onClick={() => copyToClipboard(d.type === 'card' ? formatCardNumber(d.number) : d.number, d.type === 'card' ? 'номер карты' : 'номер СБП')} style={s.copyBtn}>
+                <div key={i} style={T.item}>
+                  <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 6 }}>{d.type === 'card' ? '💳' : '⚡'} {d.type === 'card' ? d.bank : `СБП • ${d.bank}`}</div>
+                  <div style={{ fontFamily: 'monospace', fontSize: 16, marginBottom: 8 }}>{d.type === 'card' ? formatCardNumber(d.number) : formatPhoneDisplay(d.number)}</div>
+                  <button onClick={() => copyToClipboard(d.type === 'card' ? formatCardNumber(d.number) : d.number, d.type === 'card' ? 'номер карты' : 'номер СБП')} style={T.btnSecondary}>
                     📋 Скопировать
                   </button>
                 </div>
@@ -367,17 +329,17 @@ export function TenantDashboard() {
             )}
             {!payment?.confirmed_by_landlord && details.length > 0 && (
               payment.card_claimed ? (
-                <div style={s.meetingStatus}>💳 Безнал заявлен: ждёт подтверждения арендодателем</div>
+                <div style={T.note}>💳 Безнал заявлен: ждёт подтверждения арендодателем</div>
               ) : (
-                <button onClick={claimPaid} style={s.button}>✅ Я оплатил</button>
+                <button onClick={claimPaid} style={T.btn}>✅ Я оплатил</button>
               )
             )}
           </div>
         )}
 
-        {!firstMonthPending && effectiveMethod === 'cash' && (
-          <div style={s.cashSection}>
-            <div style={s.h3}>💵 Оплата наличными</div>
+        {effectiveMethod === 'cash' && (
+          <div style={T.sub}>
+            <div style={T.h3}>Оплата наличными</div>
             <CashNegotiation
               contractId={contract.id}
               myRole="tenant"
@@ -389,17 +351,17 @@ export function TenantDashboard() {
       </div>
 
       {readingsMode === 'manual' && meters.length > 0 && (
-        <div style={s.card}>
-          <div style={s.h2}>💦 Передать показания</div>
-          <div style={s.small}>Срок подачи: до {contract.meter_deadline_day} числа</div>
+        <div style={T.card}>
+          <div style={T.h2}>Передать показания</div>
+          <div style={T.small}>Срок подачи: до {contract.meter_deadline_day} числа</div>
           {overallReading === 'incomplete' && (
-            <div style={s.overdueNotice}>🔴 Арендодатель отметил: показания получены не полностью — передайте недостающие ещё раз</div>
+            <div style={T.noteRed}>🔴 Арендодатель отметил: показания получены не полностью — передайте недостающие ещё раз</div>
           )}
           {overallReading === 'confirmed' && (
-            <div style={s.okNote}>🟢 Показания получены арендодателем</div>
+            <div style={T.noteGreen}>🟢 Показания получены арендодателем</div>
           )}
           {overallReading === 'proposed' && (
-            <div style={s.meetingStatus}>🟡 Показания отправлены и ждут подтверждения арендодателем</div>
+            <div style={T.note}>🟡 Показания отправлены и ждут подтверждения арендодателем</div>
           )}
           {meters.map((m: any) => {
             const t = meterTypes.find((x: any) => x.id === m.meter_type_id)
@@ -407,103 +369,68 @@ export function TenantDashboard() {
             const last = hist[0]
             const open = !!historyOpen[m.id]
             return (
-              <div key={m.id}>
+              <div key={m.id} style={T.item}>
                 <input
                   value={vals[m.id] || ''}
                   onChange={(e) => setVals({ ...vals, [m.id]: e.target.value })}
                   placeholder={(t?.label || 'Счётчик') + (m.label ? ` · № ${m.label}` : '') + ', ' + (t?.unit || 'м³')}
-                  style={s.input}
+                  style={{ ...T.input, marginBottom: 4 }}
                   inputMode="decimal"
                 />
-                {m.label && <div style={s.tiny}>номер счётчика: {m.label}</div>}
+                {m.label && <div style={T.tiny}>номер счётчика: {m.label}</div>}
                 {last && (
-                  <div style={s.tinyLink} onClick={() => setHistoryOpen({ ...historyOpen, [m.id]: !open })}>
+                  <div style={T.link} onClick={() => setHistoryOpen({ ...historyOpen, [m.id]: !open })}>
                     🕐 последнее: {last.value} · подано {new Date(last.submitted_at).toLocaleDateString('ru-RU')} · {chip(last.status)} {open ? '▲' : '▼'}
                   </div>
                 )}
                 {open && hist.slice(0, 10).map((r: any) => (
-                  <div key={r.id} style={s.tiny}>{r.value} · подано {new Date(r.submitted_at).toLocaleDateString('ru-RU')} · {chip(r.status)}</div>
+                  <div key={r.id} style={T.tiny}>{r.value} · подано {new Date(r.submitted_at).toLocaleDateString('ru-RU')} · {chip(r.status)}</div>
                 ))}
               </div>
             )
           })}
-          <button onClick={submitMeters} style={s.button}>📤 Передать показания</button>
+          <button onClick={submitMeters} style={T.btn}>📤 Передать показания</button>
         </div>
       )}
 
       {readingsMode === 'auto' && (
-        <div style={s.card}>
-          <div style={s.h2}>💦 Показания счётчиков</div>
-          <div style={s.small}>💡 Показания передаются автоматически — вам ничего подавать не нужно.</div>
+        <div style={T.card}>
+          <div style={T.h2}>Показания счётчиков</div>
+          <div style={T.small}>💡 Показания передаются автоматически — вам ничего подавать не нужно.</div>
         </div>
       )}
 
       {readingsMode === 'self' && (
-        <div style={s.card}>
-          <div style={s.h2}>💦 Показания счётчиков</div>
-          <div style={s.small}>💡 Вы платите полную квитанцию сами — показания подавать не нужно.</div>
+        <div style={T.card}>
+          <div style={T.h2}>Показания счётчиков</div>
+          <div style={T.small}>💡 Вы платите полную квитанцию сами — показания подавать не нужно.</div>
         </div>
       )}
 
-      {msg && <div style={s.msg}>{msg}</div>}
+      {msg && <div style={T.msg}>{msg}</div>}
 
-      <div style={s.card}>
-        <div style={s.h2}>📜 История платежей</div>
+      <div style={T.card}>
+        <div style={T.h2}>История платежей</div>
         {payments.slice(0, 5).map((p: any) => (
-          <div key={p.id} style={s.row}>
-            <span style={{ flex: 1, minWidth: 0 }}>{new Date(p.period).toLocaleDateString('ru-RU', { month: 'short', year: 'numeric' })} {p.confirmed_by_landlord ? '🟢' : '🟡'}</span>
-            <b style={{ whiteSpace: 'nowrap', marginLeft: 8 }}>{(Number(p.base_amount) + Number(p.penalty_amount || 0) + Number(p.utilities_amount || 0)).toFixed(2)} ₽</b>
+          <div key={p.id} style={T.row}>
+            <span>{new Date(p.period).toLocaleDateString('ru-RU', { month: 'short', year: 'numeric' })} {p.confirmed_by_landlord ? '🟢' : '🟡'}</span>
+            <b>{(Number(p.base_amount) + Number(p.penalty_amount || 0) + Number(p.utilities_amount || 0)).toFixed(2)} ₽</b>
           </div>
         ))}
       </div>
 
-      <div style={s.card}>
-        <div style={s.h2}>🔔 Уведомления</div>
+      <div style={T.card}>
+        <div style={T.h2}>Уведомления</div>
         {notifications.length === 0 ? (
-          <div style={s.small}>Нет уведомлений</div>
+          <div style={T.small}>Нет уведомлений</div>
         ) : (
           notifications.map(n => (
-            <div key={n.id} style={s.notificationRow}>{(n as any).message || getNotificationText(n.type)}</div>
+            <div key={n.id} style={{ padding: '8px 0', borderBottom: `1px solid ${C.line}`, fontSize: 14 }}>{(n as any).message || getNotificationText(n.type)}</div>
           ))
         )}
       </div>
     </div>
   )
-}
-
-const s: Record<string, React.CSSProperties> = {
-  container: { fontFamily: 'system-ui', maxWidth: 600, margin: '0 auto', padding: 16, backgroundColor: '#f5f5f5', minHeight: 'auto' },
-  title: { fontSize: 24, fontWeight: 'bold', marginBottom: 16 },
-  card: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' },
-  address: { fontSize: 16, fontWeight: 600, marginBottom: 8 },
-  small: { fontSize: 13, color: '#666', marginTop: 6 },
-  tiny: { fontSize: 11, color: 'rgba(0,0,0,0.45)', marginTop: 2, marginBottom: 6 },
-  tinyLink: { fontSize: 11, color: '#00695c', fontWeight: 600, cursor: 'pointer', marginTop: 2, marginBottom: 6 },
-  okNote: { padding: 8, background: '#eaf7ef', border: '1px solid #a5d6a7', borderRadius: 8, color: '#080', fontSize: 13, fontWeight: 600, marginBottom: 8 },
-  signNote: { padding: 10, background: '#e3f2fd', border: '1px solid #90caf9', borderRadius: 8, color: '#0d47a1', fontSize: 13, fontWeight: 600, marginTop: 8 },
-  h2: { fontSize: 17, fontWeight: 700, marginBottom: 10 },
-  h3: { fontSize: 15, fontWeight: 600, marginBottom: 8 },
-  row: { display: 'flex', justifyContent: 'space-between', fontSize: 14, marginBottom: 6 },
-  total: { fontSize: 17 },
-  statusRow: { display: 'flex', gap: 8, alignItems: 'center', margin: '10px 0' },
-  overdueNotice: { padding: 10, background: '#fdecea', color: '#c00', borderRadius: 8, fontSize: 14, fontWeight: 600, marginTop: 8 },
-  frozenNote: { fontSize: 13, color: '#00695c', marginTop: 6, fontWeight: 600, cursor: 'pointer' },
-  button: { marginTop: 10, width: '100%', padding: 12, borderRadius: 10, border: 'none', background: '#2196f3', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer' },
-  warnButton: { marginTop: 10, width: '100%', padding: 12, borderRadius: 10, border: 'none', background: '#ff9800', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer' },
-  input: { width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 15, marginBottom: 8, boxSizing: 'border-box' },
-  msg: { padding: 12, borderRadius: 10, backgroundColor: '#e8f5e9', color: '#2e7d32', marginBottom: 12, fontSize: 14 },
-  paySection: { marginTop: 12, paddingTop: 12, borderTop: '1px solid #eee' },
-  cashSection: { marginTop: 12, paddingTop: 12, borderTop: '1px solid #eee' },
-  methodRow: { display: 'flex', gap: 16, marginBottom: 8 },
-  methodLabel: { fontSize: 14, cursor: 'pointer' },
-  payItem: { background: '#f9f9f9', borderRadius: 8, padding: 12, marginBottom: 8 },
-  payHeader: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 },
-  payIcon: { fontSize: 20 },
-  payBank: { fontWeight: 600, fontSize: 14 },
-  payNumber: { fontFamily: 'monospace', fontSize: 16, fontWeight: 500, marginBottom: 8, wordBreak: 'break-all' as const },
-  copyBtn: { padding: '8px 14px', borderRadius: 8, border: '1px solid #2196f3', background: '#fff', color: '#2196f3', fontSize: 13, fontWeight: 600, cursor: 'pointer' },
-  meetingStatus: { marginTop: 10, padding: 10, backgroundColor: '#fff3e0', borderRadius: 8, fontSize: 14 },
-  notificationRow: { padding: '8px 0', borderBottom: '1px solid #eee', fontSize: 14, color: '#333' },
 }
 
 export default TenantDashboard
