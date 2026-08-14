@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { T, C } from '../theme'
 
 export function ReadingsReview({ contractId, tenantId }: { contractId: string; tenantId: string }) {
   const [meters, setMeters] = useState<any[]>([])
@@ -65,11 +66,11 @@ export function ReadingsReview({ contractId, tenantId }: { contractId: string; t
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
 
-  const chip = (stt: string) => (stt || 'proposed') === 'confirmed' ? '🟢 получены' : (stt || 'proposed') === 'incomplete' ? '🔴 не полностью' : '🟡 ждут'
+  const chip = (stt: string) => (stt || 'proposed') === 'confirmed' ? T.chipGreen : (stt || 'proposed') === 'incomplete' ? T.chipRed : T.chipOrange
 
   return (
     <div>
-      {meters.length === 0 && <div style={st.note}>На объекте нет активных счётчиков.</div>}
+      {meters.length === 0 && <div style={T.tiny}>На объекте нет активных счётчиков.</div>}
       {meters.map(m => {
         const t = types.find(x => x.id === m.meter_type_id)
         const last = latestByMeter[m.id]
@@ -77,32 +78,33 @@ export function ReadingsReview({ contractId, tenantId }: { contractId: string; t
         const hist = readings.filter(r => r.object_meter_id === m.id)
         const open = !!historyOpen[m.id]
         return (
-          <div key={m.id} style={st.row}>
+          <div key={m.id} style={{ ...T.item, display: 'flex', gap: 8, alignItems: 'flex-start' }}>
             <div style={{ flex: 1 }}>
-              {t?.label || 'Счётчик'}{m.label ? ` · № ${m.label}` : ''}
-              <div style={st.note}>
+              <div style={{ fontSize: 14, fontWeight: 600 }}>{t?.label || 'Счётчик'}{m.label ? ` · № ${m.label}` : ''}</div>
+              <div style={T.tiny}>
                 {month
-                  ? `за этот месяц: ${month.value} · подано ${new Date(month.submitted_at).toLocaleDateString('ru-RU')} · ${chip(month.status)}`
+                  ? `за этот месяц: ${month.value} · подано ${new Date(month.submitted_at).toLocaleDateString('ru-RU')}`
                   : 'нет данных в этом месяце'}
               </div>
+              {month && <div style={{ marginTop: 4 }}><span style={chip(month.status)}>{(month.status || 'proposed') === 'confirmed' ? '🟢 получены' : (month.status || 'proposed') === 'incomplete' ? '🔴 не полностью' : '🟡 ждут'}</span></div>}
               {last && (
-                <div style={st.link} onClick={() => setHistoryOpen({ ...historyOpen, [m.id]: !open })}>
-                  🕐 последнее: {last.value} · подано {new Date(last.submitted_at).toLocaleDateString('ru-RU')} · {chip(last.status)} {open ? '▲' : '▼'}
+                <div style={T.link} onClick={() => setHistoryOpen({ ...historyOpen, [m.id]: !open })}>
+                  🕐 последнее: {last.value} · подано {new Date(last.submitted_at).toLocaleDateString('ru-RU')} {open ? '▲' : '▼'}
                 </div>
               )}
               {open && hist.slice(0, 10).map((r: any) => (
-                <div key={r.id} style={st.note}>{r.value} · подано {new Date(r.submitted_at).toLocaleDateString('ru-RU')} · {chip(r.status)}</div>
+                <div key={r.id} style={T.tiny}>{r.value} · подано {new Date(r.submitted_at).toLocaleDateString('ru-RU')}</div>
               ))}
             </div>
             {month && (
-              <div style={st.btnsCol}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <button
-                  style={month.status === 'confirmed' ? st.okBtnActive : st.okBtn}
+                  style={{ ...T.btnSmall, background: month.status === 'confirmed' ? C.green : T.btnSmall.background, opacity: month.status === 'confirmed' ? 1 : 0.85 }}
                   title="Подтвердить этот счётчик"
                   onClick={() => reviewMeter(m.id, 'confirmed')}
                 >✅</button>
                 <button
-                  style={month.status === 'incomplete' ? st.warnBtnActive : st.warnBtn}
+                  style={{ ...T.btnDanger, opacity: month.status === 'incomplete' ? 1 : 0.7 }}
                   title="Не полностью по этому счётчику"
                   onClick={() => reviewMeter(m.id, 'incomplete')}
                 >⚠️</button>
@@ -111,22 +113,11 @@ export function ReadingsReview({ contractId, tenantId }: { contractId: string; t
           </div>
         )
       })}
-      <div style={st.note}>
+      <div style={T.tiny}>
         {overall === 'confirmed' ? 'Все показания этого месяца подтверждены.' : overall === 'incomplete' ? 'Часть счётчиков отмечена «не полностью» — арендатор видит, какие именно.' : overall === 'proposed' ? 'Показания отправлены арендатором и ждут вашего подтверждения по каждому счётчику.' : 'Арендатор ещё не подавал показания в этом месяце.'}
       </div>
     </div>
   )
-}
-
-const st: Record<string, React.CSSProperties> = {
-  row: { padding: 8, background: '#f9f9f9', borderRadius: 6, marginBottom: 6, fontSize: 14, display: 'flex', gap: 8, alignItems: 'flex-start' },
-  note: { fontSize: 11, color: 'rgba(0,0,0,0.45)', marginTop: 2, marginBottom: 4 },
-  link: { fontSize: 11, color: '#00695c', fontWeight: 600, cursor: 'pointer', marginTop: 2, marginBottom: 4 },
-  btnsCol: { display: 'flex', flexDirection: 'column', gap: 4 },
-  okBtn: { padding: '6px 10px', borderRadius: 8, border: 'none', background: '#4caf50', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' },
-  okBtnActive: { padding: '6px 10px', borderRadius: 8, border: '2px solid #2e7d32', background: '#4caf50', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' },
-  warnBtn: { padding: '6px 10px', borderRadius: 8, border: 'none', background: '#ff9800', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' },
-  warnBtnActive: { padding: '6px 10px', borderRadius: 8, border: '2px solid #e65100', background: '#ff9800', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' },
 }
 
 export default ReadingsReview
