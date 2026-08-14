@@ -40,7 +40,7 @@ export function TenantDashboard() {
       const { data: contract } = await supabase
         .from('contracts').select('*')
         .eq('tenant_id', user!.id).eq('status', 'active').maybeSingle()
-      if (!contract) { setError('🤝 У вас пока нет активной аренды. Переключитесь наверх в режим «Арендодатель» и в «Добавить объект» выберите «Я арендатор» — или попросите арендодателя добавить вас в договор по телефону.'); setLoading(false); return }
+        if (!contract) { setError('🤝 У вас пока нет активной аренды. Попросите арендодателя добавить объект и указать ваш номер телефона в договоре — после этого аренда появится здесь.'); setLoading(false); return }
 
       const { data: obj } = await supabase.from('objects').select('*').eq('id', contract.object_id).maybeSingle()
       const { data: landlord } = await supabase.from('users').select('*').eq('id', obj?.landlord_id).maybeSingle()
