@@ -24,11 +24,39 @@ function formatPhoneDisplay(v: string): string {
   return v || ''
 }
 
+const TABS = [
+  { id: 'overview', l: 'Обзор' },
+  { id: 'pay', l: 'Оплата' },
+  { id: 'meters', l: 'Счётчики' },
+  { id: 'contract', l: 'Договор' },
+]
+
+function TabBar({ tab, setTab }: { tab: string; setTab: (t: string) => void }) {
+  return (
+    <div style={{ display: 'flex', background: C.gray, borderRadius: 12, padding: 4, marginBottom: 12 }}>
+      {TABS.map(t => (
+        <button
+          key={t.id}
+          onClick={() => setTab(t.id)}
+          style={{
+            flex: 1, padding: '9px 4px', borderRadius: 9, border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            background: tab === t.id ? '#fff' : 'transparent',
+            color: tab === t.id ? C.text : C.text2,
+            boxShadow: tab === t.id ? '0 1px 3px rgba(0,0,0,0.12)' : 'none',
+          }}
+        >{t.l}</button>
+      ))}
+    </div>
+  )
+}
+
 export function TenantDashboard() {
   const { user, loading: userLoading } = useTelegramUser()
   const [contracts, setContracts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [notifications, setNotifications] = useState<Notification[]>([])
+  const [sel, setSel] = useState(0)
+  const [tab, setTab] = useState('overview')
 
   async function load() {
     if (!user) return
@@ -36,7 +64,12 @@ export function TenantDashboard() {
       .from('contracts').select('*')
       .eq('tenant_id', user.id).eq('status', 'active')
       .order('created_at', { ascending: true })
-    setContracts(cs || [])
+    const list: any[] = []
+    for (const c of cs || []) {
+      const { data: obj } = await supabase.from('objects').select('address').eq('id', c.object_id).maybeSingle()
+      list.push({ ...c, _address: obj?.address || 'Объект' })
+    }
+    setContracts(list)
     const { data: notifData } = await supabase
       .from('notifications_log').select('*')
       .eq('user_id', user.id)
@@ -67,13 +100,25 @@ export function TenantDashboard() {
 
   if (userLoading || loading) return <div style={T.page}>Загрузка…</div>
 
+  const current = contracts[Math.min(sel, contracts.length - 1)]
+
   return (
     <div style={T.page}>
       <h1 style={T.h1}>Моя аренда</h1>
       {contracts.length === 0 ? (
         <div style={T.card}>🤝 У вас пока нет активной аренды. Попросите арендодателя добавить объект и указать ваш номер телефона в договоре — после этого аренда появится здесь.</div>
       ) : (
-        contracts.map(c => <TenantRental key={c.id} contract={c} />)
+        <>
+          {contracts.length > 1 && (
+            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', marginBottom: 10, paddingBottom: 4 }}>
+              {contracts.map((c, i) => (
+                <button key={c.id} style={{ ...(i === sel ? T.btnSmall : T.btnSecondary), whiteSpace: 'nowrap' }} onClick={() => setSel(i)}>{c._address}</button>
+              ))}
+            </div>
+          )}
+          <TabBar tab={tab} setTab={setTab} />
+          <TenantRental contract={current} tab={tab} />
+        </>
       )}
 
       <div style={T.card}>
@@ -90,7 +135,7 @@ export function TenantDashboard() {
   )
 }
 
-function TenantRental({ contract }: { contract: any }) {
+function TenantRental({ contract, tab }: { contract: any; tab: string }) {
   const { user } = useTelegramUser()
   const [data, setData] = useState<any>(null)
   const [vals, setVals] = useState<Record<string, string>>({})
@@ -253,6 +298,7 @@ function TenantRental({ contract }: { contract: any }) {
 
   const paymentOverdueRule = penaltyRules.find((r: any) => r.violation_type === 'payment_overdue')
   const penaltyRate = paymentOverdueRule ? Number(paymentOverdueRule.rate) : 500
+  const readingsRule = penaltyRules.find((r: any) => r.violation_type === 'readings_overdue')
 
   const lastDeferral = deferredReqs && deferredReqs[0] ? deferredReqs[0] : null
   const deferralPending = !!(lastDeferral && lastDeferral.status === 'proposed' && payment && String(lastDeferral.payment_id) === String(payment.id))
@@ -263,172 +309,210 @@ function TenantRental({ contract }: { contract: any }) {
 
   return (
     <div>
-      <div style={T.card}>
-        <div style={{ fontSize: 17, fontWeight: 600 }}>{obj?.address}</div>
-        <div style={T.small}>Арендодатель: {landlord?.full_name}{landlord?.phone ? ', ' + formatPhoneDisplay(landlord.phone) : ''}</div>
-        {contract.start_date && contract.end_date && <div style={T.tiny}>Срок аренды: с {parseDate(contract.start_date).toLocaleDateString('ru-RU')} по {parseDate(contract.end_date).toLocaleDateString('ru-RU')} ({Math.max(1, Math.round((parseDate(contract.end_date).getTime() - parseDate(contract.start_date).getTime()) / 2629800000))} мес.)</div>}
-        {deposit > 0 && <div style={T.tiny}>Депозит: {deposit.toFixed(0)} ₽</div>}
-        {frozenTotal > 0 && (
-          <div style={T.link} onClick={() => setFrozenOpen(!frozenOpen)}>
-            🧊 Замороженные штрафы: {frozenTotal.toFixed(0)} ₽ {frozenOpen ? '▲' : '▼'}
+      {tab === 'overview' && (
+        <>
+          <div style={T.card}>
+            <div style={{ fontSize: 17, fontWeight: 600 }}>{obj?.address}</div>
+            <div style={T.small}>Арендодатель: {landlord?.full_name}{landlord?.phone ? ', ' + formatPhoneDisplay(landlord.phone) : ''}</div>
+            {contract.start_date && contract.end_date && <div style={T.tiny}>Срок аренды: с {parseDate(contract.start_date).toLocaleDateString('ru-RU')} по {parseDate(contract.end_date).toLocaleDateString('ru-RU')}</div>}
+            {deposit > 0 && <div style={T.tiny}>Депозит: {deposit.toFixed(0)} ₽</div>}
+            {frozenTotal > 0 && <div style={T.tiny}>🧊 Замороженные штрафы: {frozenTotal.toFixed(0)} ₽ (подробнее во вкладке «Договор»)</div>}
           </div>
-        )}
-        {frozenOpen && frozenTotal > 0 && (
-          <div style={{ marginTop: 6 }}>
-            {(frozenRows || []).map((f: any) => (
-              <div key={f.id} style={T.tiny}>
-                {f.period ? parseDate(f.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : 'без месяца'} — {Number(f.amount).toFixed(0)} ₽{f.adjusted_note ? ` (${f.adjusted_note})` : ''}
-              </div>
-            ))}
-            {deposit > 0
-              ? (deposit >= frozenTotal
-                ? <div style={T.tiny}>будет удержано из депозита; остаток депозита: {(deposit - frozenTotal).toFixed(0)} ₽</div>
-                : <div style={{ ...T.tiny, color: C.red }}>сверх депозита долг: {(frozenTotal - deposit).toFixed(0)} ₽</div>)
-              : <div style={{ ...T.tiny, color: C.red }}>долг арендатора (депозита нет)</div>}
-            <div style={T.tiny}>записи хранятся до конца договора</div>
+          <div style={T.card}>
+            <div style={T.h2}>Счёт за {monthLabel}</div>
+            <div style={T.row}><span style={{ color: C.text2 }}>Итого</span><span style={T.total}>{total.toFixed(2)} ₽</span></div>
+            {payment && <div style={T.small}>Оплатить до: {parseDate(payment.due_date).toLocaleDateString('ru-RU')}</div>}
+            <div style={{ marginTop: 10 }}><span style={statusChip}>{statusText}</span></div>
+            {isOverdue && <div style={T.noteRed}>⚠️ +{penaltyRate} руб за каждый день просрочки</div>}
           </div>
-        )}
-      </div>
+        </>
+      )}
 
-      <div style={T.card}>
-        <div style={T.h2}>Счёт за {monthLabel}</div>
-        <div style={T.row}><span style={{ color: C.text2 }}>Аренда</span><b>{Number(payment?.base_amount ?? contract.rent_amount).toFixed(2)} ₽</b></div>
-        <div style={T.row}><span style={{ color: C.text2 }}>Штраф</span><b>{Number(payment?.penalty_amount || 0).toFixed(2)} ₽</b></div>
-        {utilities > 0 && (
-          <div style={T.row}><span style={{ color: C.text2 }}>Ресурсы по квитанции</span><b>{utilities.toFixed(2)} ₽</b></div>
-        )}
-        <div style={T.row}><span style={{ color: C.text2 }}>Итого</span><span style={T.total}>{total.toFixed(2)} ₽</span></div>
-        {payment && <div style={T.small}>Оплатить до: {parseDate(payment.due_date).toLocaleDateString('ru-RU')}</div>}
-        <div style={{ marginTop: 10 }}><span style={statusChip}>{statusText}</span></div>
-        {isOverdue && (
-          <div style={T.noteRed}>⚠️ +{penaltyRate} руб за каждый день просрочки</div>
-        )}
-
-        {payment && !payment.confirmed_by_landlord && Number(payment.penalty_amount) > 0 && (
-          deferralPending ? (
-            <div style={T.note}>🟡 Отсрочка штрафа: заявка на рассмотрении</div>
-          ) : (
-            <button onClick={requestDeferral} style={T.btnWarn}>Попросить отсрочку штрафа</button>
-          )
-        )}
-
-        {contract.payment_method === 'both' && (
-          <div style={T.sub}>
-            <div style={T.h3}>Как вы будете платить</div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button style={effectiveMethod === 'card' ? T.btnSmall : T.btnSecondary} onClick={() => choosePayMethod('card')}>💳 Безналичный расчёт</button>
-              <button style={effectiveMethod === 'cash' ? T.btnSmall : T.btnSecondary} onClick={() => choosePayMethod('cash')}>💵 Наличные</button>
-            </div>
-          </div>
-        )}
-
-        {effectiveMethod === 'card' && (
-          <div style={T.sub}>
-            <div style={T.h3}>Способы оплаты</div>
-            {details.length === 0 ? (
-              <div style={T.small}>Арендодатель ещё не добавил реквизиты для безналичной оплаты.</div>
-            ) : (
-              details.map((d: PayDetail, i: number) => (
-                <div key={i} style={T.item}>
-                  <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 6 }}>{d.type === 'card' ? '💳' : '⚡'} {d.type === 'card' ? d.bank : `СБП • ${d.bank}`}</div>
-                  <div style={{ fontFamily: 'monospace', fontSize: 16, marginBottom: 8 }}>{d.type === 'card' ? formatCardNumber(d.number) : formatPhoneDisplay(d.number)}</div>
-                  <button onClick={() => copyToClipboard(d.type === 'card' ? formatCardNumber(d.number) : d.number, d.type === 'card' ? 'номер карты' : 'номер СБП')} style={T.btnSecondary}>
-                    📋 Скопировать
-                  </button>
-                </div>
-              ))
+      {tab === 'pay' && (
+        <>
+          <div style={T.card}>
+            <div style={T.h2}>Счёт за {monthLabel}</div>
+            <div style={T.row}><span style={{ color: C.text2 }}>Аренда</span><b>{Number(payment?.base_amount ?? contract.rent_amount).toFixed(2)} ₽</b></div>
+            <div style={T.row}><span style={{ color: C.text2 }}>Штраф</span><b>{Number(payment?.penalty_amount || 0).toFixed(2)} ₽</b></div>
+            {utilities > 0 && (
+              <div style={T.row}><span style={{ color: C.text2 }}>Ресурсы по квитанции</span><b>{utilities.toFixed(2)} ₽</b></div>
             )}
-            {!payment?.confirmed_by_landlord && details.length > 0 && (
-              payment.card_claimed ? (
-                <div style={T.note}>💳 Безнал заявлен: ждёт подтверждения арендодателем</div>
+            <div style={T.row}><span style={{ color: C.text2 }}>Итого</span><span style={T.total}>{total.toFixed(2)} ₽</span></div>
+            {payment && <div style={T.small}>Оплатить до: {parseDate(payment.due_date).toLocaleDateString('ru-RU')}</div>}
+            <div style={{ marginTop: 10 }}><span style={statusChip}>{statusText}</span></div>
+
+            {payment && !payment.confirmed_by_landlord && Number(payment.penalty_amount) > 0 && (
+              deferralPending ? (
+                <div style={T.note}>🟡 Отсрочка штрафа: заявка на рассмотрении</div>
               ) : (
-                <button onClick={claimPaid} style={T.btn}>✅ Я оплатил</button>
+                <button onClick={requestDeferral} style={T.btnWarn}>Попросить отсрочку штрафа</button>
               )
             )}
-          </div>
-        )}
 
-        {effectiveMethod === 'cash' && (
-          <div style={T.sub}>
-            <div style={T.h3}>Оплата наличными</div>
-            <CashNegotiation
-              contractId={contract.id}
-              myRole="tenant"
-              tenantId={contract.tenant_id}
-              landlordId={obj?.landlord_id}
-            />
-          </div>
-        )}
-      </div>
-
-      {readingsMode === 'manual' && meters.length > 0 && (
-        <div style={T.card}>
-          <div style={T.h2}>Передать показания</div>
-          <div style={T.small}>Срок подачи: до {contract.meter_deadline_day} числа</div>
-          {overallReading === 'incomplete' && (
-            <div style={T.noteRed}>🔴 Арендодатель отметил: показания получены не полностью — передайте недостающие ещё раз</div>
-          )}
-          {overallReading === 'confirmed' && (
-            <div style={T.noteGreen}>🟢 Показания получены арендодателем</div>
-          )}
-          {overallReading === 'proposed' && (
-            <div style={T.note}>🟡 Показания отправлены и ждут подтверждения арендодателем</div>
-          )}
-          {meters.map((m: any) => {
-            const t = meterTypes.find((x: any) => x.id === m.meter_type_id)
-            const hist = (readingsByMeter || {})[m.id] || []
-            const last = hist[0]
-            const open = !!historyOpen[m.id]
-            return (
-              <div key={m.id} style={T.item}>
-                <input
-                  value={vals[m.id] || ''}
-                  onChange={(e) => setVals({ ...vals, [m.id]: e.target.value })}
-                  placeholder={(t?.label || 'Счётчик') + (m.label ? ` · № ${m.label}` : '') + ', ' + (t?.unit || 'м³')}
-                  style={{ ...T.input, marginBottom: 4 }}
-                  inputMode="decimal"
-                />
-                {m.label && <div style={T.tiny}>номер счётчика: {m.label}</div>}
-                {last && (
-                  <div style={T.link} onClick={() => setHistoryOpen({ ...historyOpen, [m.id]: !open })}>
-                    🕐 последнее: {last.value} · подано {new Date(last.submitted_at).toLocaleDateString('ru-RU')} · {chip(last.status)} {open ? '▲' : '▼'}
-                  </div>
-                )}
-                {open && hist.slice(0, 10).map((r: any) => (
-                  <div key={r.id} style={T.tiny}>{r.value} · подано {new Date(r.submitted_at).toLocaleDateString('ru-RU')} · {chip(r.status)}</div>
-                ))}
+            {contract.payment_method === 'both' && (
+              <div style={T.sub}>
+                <div style={T.h3}>Как вы будете платить</div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button style={effectiveMethod === 'card' ? T.btnSmall : T.btnSecondary} onClick={() => choosePayMethod('card')}>💳 Безналичный расчёт</button>
+                  <button style={effectiveMethod === 'cash' ? T.btnSmall : T.btnSecondary} onClick={() => choosePayMethod('cash')}>💵 Наличные</button>
+                </div>
               </div>
-            )
-          })}
-          <button onClick={submitMeters} style={T.btn}>📤 Передать показания</button>
-        </div>
+            )}
+
+            {effectiveMethod === 'card' && (
+              <div style={T.sub}>
+                <div style={T.h3}>Способы оплаты</div>
+                {details.length === 0 ? (
+                  <div style={T.small}>Арендодатель ещё не добавил реквизиты для безналичной оплаты.</div>
+                ) : (
+                  details.map((d: PayDetail, i: number) => (
+                    <div key={i} style={T.item}>
+                      <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 6 }}>{d.type === 'card' ? '💳' : '⚡'} {d.type === 'card' ? d.bank : `СБП • ${d.bank}`}</div>
+                      <div style={{ fontFamily: 'monospace', fontSize: 16, marginBottom: 8 }}>{d.type === 'card' ? formatCardNumber(d.number) : formatPhoneDisplay(d.number)}</div>
+                      <button onClick={() => copyToClipboard(d.type === 'card' ? formatCardNumber(d.number) : d.number, d.type === 'card' ? 'номер карты' : 'номер СБП')} style={T.btnSecondary}>
+                        📋 Скопировать
+                      </button>
+                    </div>
+                  ))
+                )}
+                {!payment?.confirmed_by_landlord && details.length > 0 && (
+                  payment.card_claimed ? (
+                    <div style={T.note}>💳 Безнал заявлен: ждёт подтверждения арендодателем</div>
+                  ) : (
+                    <button onClick={claimPaid} style={T.btn}>✅ Я оплатил</button>
+                  )
+                )}
+              </div>
+            )}
+
+            {effectiveMethod === 'cash' && (
+              <div style={T.sub}>
+                <div style={T.h3}>Оплата наличными</div>
+                <CashNegotiation
+                  contractId={contract.id}
+                  myRole="tenant"
+                  tenantId={contract.tenant_id}
+                  landlordId={obj?.landlord_id}
+                />
+              </div>
+            )}
+          </div>
+
+          <div style={T.card}>
+            <div style={T.h2}>История платежей</div>
+            {payments.slice(0, 5).map((p: any) => (
+              <div key={p.id} style={T.row}>
+                <span>{new Date(p.period).toLocaleDateString('ru-RU', { month: 'short', year: 'numeric' })} {p.confirmed_by_landlord ? '🟢' : '🟡'}</span>
+                <b>{(Number(p.base_amount) + Number(p.penalty_amount || 0) + Number(p.utilities_amount || 0)).toFixed(2)} ₽</b>
+              </div>
+            ))}
+          </div>
+        </>
       )}
 
-      {readingsMode === 'auto' && (
-        <div style={T.card}>
-          <div style={T.h2}>Показания счётчиков</div>
-          <div style={T.small}>💡 Показания передаются автоматически — вам ничего подавать не нужно.</div>
-        </div>
+      {tab === 'meters' && (
+        <>
+          {readingsMode === 'manual' && meters.length > 0 && (
+            <div style={T.card}>
+              <div style={T.h2}>Передать показания</div>
+              <div style={T.small}>Срок подачи: до {contract.meter_deadline_day} числа</div>
+              {overallReading === 'incomplete' && (
+                <div style={T.noteRed}>🔴 Арендодатель отметил: показания получены не полностью — передайте недостающие ещё раз</div>
+              )}
+              {overallReading === 'confirmed' && (
+                <div style={T.noteGreen}>🟢 Показания получены арендодателем</div>
+              )}
+              {overallReading === 'proposed' && (
+                <div style={T.note}>🟡 Показания отправлены и ждут подтверждения арендодателем</div>
+              )}
+              {meters.map((m: any) => {
+                const t = meterTypes.find((x: any) => x.id === m.meter_type_id)
+                const hist = (readingsByMeter || {})[m.id] || []
+                const last = hist[0]
+                const open = !!historyOpen[m.id]
+                return (
+                  <div key={m.id} style={T.item}>
+                    <input
+                      value={vals[m.id] || ''}
+                      onChange={(e) => setVals({ ...vals, [m.id]: e.target.value })}
+                      placeholder={(t?.label || 'Счётчик') + (m.label ? ` · № ${m.label}` : '') + ', ' + (t?.unit || 'м³')}
+                      style={{ ...T.input, marginBottom: 4 }}
+                      inputMode="decimal"
+                    />
+                    {m.label && <div style={T.tiny}>номер счётчика: {m.label}</div>}
+                    {last && (
+                      <div style={T.link} onClick={() => setHistoryOpen({ ...historyOpen, [m.id]: !open })}>
+                        🕐 последнее: {last.value} · подано {new Date(last.submitted_at).toLocaleDateString('ru-RU')} · {chip(last.status)} {open ? '▲' : '▼'}
+                      </div>
+                    )}
+                    {open && hist.slice(0, 10).map((r: any) => (
+                      <div key={r.id} style={T.tiny}>{r.value} · подано {new Date(r.submitted_at).toLocaleDateString('ru-RU')} · {chip(r.status)}</div>
+                    ))}
+                  </div>
+                )
+              })}
+              <button onClick={submitMeters} style={T.btn}>📤 Передать показания</button>
+            </div>
+          )}
+          {readingsMode === 'manual' && meters.length === 0 && (
+            <div style={T.card}>На объекте нет счётчиков с ручной подачей.</div>
+          )}
+          {readingsMode === 'auto' && (
+            <div style={T.card}>
+              <div style={T.h2}>Показания счётчиков</div>
+              <div style={T.small}>💡 Показания передаются автоматически — вам ничего подавать не нужно.</div>
+            </div>
+          )}
+          {readingsMode === 'self' && (
+            <div style={T.card}>
+              <div style={T.h2}>Показания счётчиков</div>
+              <div style={T.small}>💡 Вы платите полную квитанцию сами — показания подавать не нужно.</div>
+            </div>
+          )}
+        </>
       )}
 
-      {readingsMode === 'self' && (
-        <div style={T.card}>
-          <div style={T.h2}>Показания счётчиков</div>
-          <div style={T.small}>💡 Вы платите полную квитанцию сами — показания подавать не нужно.</div>
-        </div>
+      {tab === 'contract' && (
+        <>
+          <div style={T.card}>
+            <div style={T.h2}>Договор</div>
+            <div style={T.row}><span style={{ color: C.text2 }}>Арендодатель</span><b>{landlord?.full_name}</b></div>
+            {landlord?.phone && <div style={T.row}><span style={{ color: C.text2 }}>Телефон</span><b>{formatPhoneDisplay(landlord.phone)}</b></div>}
+            {contract.start_date && contract.end_date && (
+              <div style={T.row}><span style={{ color: C.text2 }}>Срок</span><b>{parseDate(contract.start_date).toLocaleDateString('ru-RU')} — {parseDate(contract.end_date).toLocaleDateString('ru-RU')}</b></div>
+            )}
+            <div style={T.row}><span style={{ color: C.text2 }}>Аренда</span><b>{Number(contract.rent_amount).toFixed(0)} ₽/мес</b></div>
+            <div style={T.row}><span style={{ color: C.text2 }}>День платежа</span><b>{contract.payment_day} число</b></div>
+            {deposit > 0 && <div style={T.row}><span style={{ color: C.text2 }}>Депозит</span><b>{deposit.toFixed(0)} ₽</b></div>}
+          </div>
+          <div style={T.card}>
+            <div style={T.h2}>Штрафы</div>
+            <div style={T.row}><span style={{ color: C.text2 }}>Просрочка оплаты</span><b>+{penaltyRate} ₽/день</b></div>
+            {readingsMode === 'manual' && readingsRule && (
+              <div style={T.row}><span style={{ color: C.text2 }}>Просрочка показаний</span><b>+{Number(readingsRule.rate)} ₽/день</b></div>
+            )}
+          </div>
+          {frozenTotal > 0 && (
+            <div style={T.card}>
+              <div style={T.h2}>🧊 Замороженные штрафы: {frozenTotal.toFixed(0)} ₽</div>
+              {(frozenRows || []).map((f: any) => (
+                <div key={f.id} style={T.item}>
+                  <div style={{ fontSize: 14 }}>{f.period ? parseDate(f.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : 'без месяца'} — {Number(f.amount).toFixed(0)} ₽</div>
+                  {f.adjusted_note && <div style={T.tiny}>{f.adjusted_note}</div>}
+                </div>
+              ))}
+              {deposit > 0
+                ? (deposit >= frozenTotal
+                  ? <div style={T.small}>Будет удержано из депозита; остаток депозита: {(deposit - frozenTotal).toFixed(0)} ₽</div>
+                  : <div style={{ ...T.small, color: C.red }}>Сверх депозита долг: {(frozenTotal - deposit).toFixed(0)} ₽</div>)
+                : <div style={{ ...T.small, color: C.red }}>Долг арендатора (депозита нет)</div>}
+              <div style={T.tiny}>Записи хранятся до конца договора</div>
+            </div>
+          )}
+        </>
       )}
 
       {msg && <div style={T.msg}>{msg}</div>}
-
-      <div style={T.card}>
-        <div style={T.h2}>История платежей</div>
-        {payments.slice(0, 5).map((p: any) => (
-          <div key={p.id} style={T.row}>
-            <span>{new Date(p.period).toLocaleDateString('ru-RU', { month: 'short', year: 'numeric' })} {p.confirmed_by_landlord ? '🟢' : '🟡'}</span>
-            <b>{(Number(p.base_amount) + Number(p.penalty_amount || 0) + Number(p.utilities_amount || 0)).toFixed(2)} ₽</b>
-          </div>
-        ))}
-      </div>
     </div>
   )
 }
