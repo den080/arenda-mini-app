@@ -47,316 +47,127 @@ export function LandlordDashboard() {
   const [statsObject, setStatsObject] = useState<string>('all')
 
   function toggleExpanded(id: string) {
-    setExpandedIds(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
+    setExpandedIds(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
   }
-
   function toggleFrozen(id: string) {
-    setExpandedFrozen(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
+    setExpandedFrozen(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
   }
 
   useEffect(() => {
     if (!user) return
-
     async function fetchData() {
       try {
-        const { data: notifData } = await supabase
-          .from('notifications_log')
-          .select('*')
-          .eq('user_id', user!.id)
-          .order('sent_at', { ascending: false })
-          .limit(5)
+        const { data: notifData } = await supabase.from('notifications_log').select('*').eq('user_id', user!.id).order('sent_at', { ascending: false }).limit(5)
         if (notifData) setNotifications(notifData)
-
-        const { data: objectsData } = await supabase
-          .from('objects')
-          .select('*')
-          .eq('landlord_id', user!.id)
-
-        if (!objectsData) {
-          setObjects([])
-          setHistory([])
-          setLoading(false)
-          return
-        }
-
+        const { data: objectsData } = await supabase.from('objects').select('*').eq('landlord_id', user!.id)
+        if (!objectsData) { setObjects([]); setHistory([]); setLoading(false); return }
         const objectsWithStatus: ObjectWithStatus[] = []
         const allHistory: any[] = []
-
         const today = new Date()
         const todayMid = new Date(today.getFullYear(), today.getMonth(), today.getDate())
         const currentMonth = today.getMonth()
         const currentYear = today.getFullYear()
-
         for (const obj of objectsData) {
-          const { data: contract } = await supabase
-            .from('contracts')
-            .select('*, tenant:users!tenant_id(full_name, phone)')
-            .eq('object_id', obj.id)
-            .eq('status', 'active')
-            .maybeSingle()
-
-          if (!contract) {
-            objectsWithStatus.push({ ...obj, status: 'no_contract', amount: 0, paymentId: null, statusColor: '#888', statusDetail: 'Нет договора', bgColor: '#fff' })
-            continue
-          }
-
+          const { data: contract } = await supabase.from('contracts').select('*, tenant:users!tenant_id(full_name, phone)').eq('object_id', obj.id).eq('status', 'active').maybeSingle()
+          if (!contract) { objectsWithStatus.push({ ...obj, status: 'no_contract', amount: 0, paymentId: null, statusColor: '#888', statusDetail: 'Нет договора', bgColor: '#fff' }); continue }
           const readingsMode = contract.readings_mode || 'manual'
           const reminder = contract.reminder_days_before || 3
-
-          const { data: allPays } = await supabase
-            .from('payments')
-            .select('*')
-            .eq('contract_id', contract.id)
-          for (const p of allPays || []) {
-            allHistory.push({ ...p, objId: obj.id, address: obj.address })
-          }
-
-          const { data: dReq } = await supabase
-            .from('deferred_requests').select('*')
-            .eq('contract_id', contract.id).eq('status', 'proposed')
-
-          const { data: fRows } = await supabase
-            .from('frozen_penalties').select('*')
-            .eq('contract_id', contract.id)
-            .order('period', { ascending: true })
+          const { data: allPays } = await supabase.from('payments').select('*').eq('contract_id', contract.id)
+          for (const p of allPays || []) allHistory.push({ ...p, objId: obj.id, address: obj.address })
+          const { data: dReq } = await supabase.from('deferred_requests').select('*').eq('contract_id', contract.id).eq('status', 'proposed')
+          const { data: fRows } = await supabase.from('frozen_penalties').select('*').eq('contract_id', contract.id).order('period', { ascending: true })
           const frozenTotal = (fRows || []).reduce((s2: number, d: any) => s2 + Number(d.amount || 0), 0)
-
-          const { data: payment } = await supabase
-            .from('payments')
-            .select('*')
-            .eq('contract_id', contract.id)
-            .order('period', { ascending: false })
-            .limit(1)
-            .maybeSingle()
-
-          if (!payment) {
-            objectsWithStatus.push({
-              ...obj,
-              status: 'no_payment',
-              statusDetail: 'Платёж не создан',
-              statusColor: '#a80',
-              amount: contract.rent_amount,
-              baseAmount: contract.rent_amount,
-              penaltyAmount: 0,
-              utilitiesAmount: 0,
-              paymentId: null,
-              contract,
-              bgColor: '#fdf6e3',
-              readingsMode,
-              frozenTotal,
-              frozenRows: fRows || [],
-              deferredRequests: dReq || []
-            })
-            continue
-          }
-
-          const { data: cashMeeting } = await supabase
-            .from('cash_meetings')
-            .select('*')
-            .eq('contract_id', contract.id)
-            .eq('kind', 'meeting')
-            .eq('status', 'confirmed')
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle()
-
+          const { data: payment } = await supabase.from('payments').select('*').eq('contract_id', contract.id).order('period', { ascending: false }).limit(1).maybeSingle()
+          if (!payment) { objectsWithStatus.push({ ...obj, status: 'no_payment', statusDetail: 'Платёж не создан', statusColor: '#a80', amount: contract.rent_amount, baseAmount: contract.rent_amount, penaltyAmount: 0, utilitiesAmount: 0, paymentId: null, contract, bgColor: '#fdf6e3', readingsMode, frozenTotal, frozenRows: fRows || [], deferredRequests: dReq || [] }); continue }
+          const { data: cashMeeting } = await supabase.from('cash_meetings').select('*').eq('contract_id', contract.id).eq('kind', 'meeting').eq('status', 'confirmed').order('created_at', { ascending: false }).limit(1).maybeSingle()
           const dueMid = parseDate(payment.due_date)
           const sd = contract.start_date ? parseDate(contract.start_date) : null
           const firstMonthGrace = !!sd && dueMid.getMonth() === sd.getMonth() && dueMid.getFullYear() === sd.getFullYear() && todayMid < new Date(sd.getFullYear(), sd.getMonth() + 1, 1)
           const isOverdue = todayMid > dueMid && !firstMonthGrace
           const daysUntilDue = firstMonthGrace && todayMid > dueMid ? 0 : Math.round((dueMid.getTime() - todayMid.getTime()) / 86400000)
-
           const baseAmount = payment.base_amount || contract.rent_amount
           const penaltyAmount = payment.penalty_amount || 0
           const utilitiesAmount = Number(payment.utilities_amount || 0)
           const paymentId = String(payment.id)
-
           let waitingForReadings = false
           if (readingsMode === 'manual' && contract.meter_deadline_day && today.getDate() > contract.meter_deadline_day) {
-            const { data: readingsData } = await supabase
-              .from('meter_readings')
-              .select('*')
-              .eq('contract_id', contract.id)
-              .gte('submitted_at', new Date(currentYear, currentMonth, 1).toISOString())
-              .lt('submitted_at', new Date(currentYear, currentMonth + 1, 1).toISOString())
-
-            if (!readingsData || readingsData.length === 0) {
-              waitingForReadings = true
-            }
+            const { data: readingsData } = await supabase.from('meter_readings').select('*').eq('contract_id', contract.id).gte('submitted_at', new Date(currentYear, currentMonth, 1).toISOString()).lt('submitted_at', new Date(currentYear, currentMonth + 1, 1).toISOString())
+            if (!readingsData || readingsData.length === 0) waitingForReadings = true
           }
-
-          const needUtilitiesReminder = !payment.confirmed_by_landlord && readingsMode !== 'self'
-            && daysUntilDue >= 0 && daysUntilDue <= reminder && utilitiesAmount === 0
-
+          const needUtilitiesReminder = !payment.confirmed_by_landlord && readingsMode !== 'self' && daysUntilDue >= 0 && daysUntilDue <= reminder && utilitiesAmount === 0
           let status: 'paid' | 'overdue' | 'pending' = 'pending'
           let statusDetail = ''
           let statusColor = '#a80'
           let bgColor = '#fff'
-
           if (!payment.confirmed_by_landlord) {
-            if (isOverdue) {
-              status = 'overdue'
-              const daysOverdue = Math.round((todayMid.getTime() - dueMid.getTime()) / 86400000)
-              statusDetail = `Просрочка ${daysOverdue} дн.`
-              statusColor = '#c00'
-              bgColor = '#fdecea'
-            } else if (waitingForReadings) {
-              statusDetail = 'Ждём показания'
-              statusColor = '#a80'
-              bgColor = '#fdf6e3'
-            } else if (daysUntilDue === 0) {
-              statusDetail = firstMonthGrace ? 'Первый месяц — просрочка не начисляется' : 'Сегодня последний день оплаты'
-              statusColor = '#a80'
-              bgColor = '#fdf6e3'
-            } else if (daysUntilDue <= reminder) {
-              statusDetail = `До оплаты ${daysUntilDue} дн.`
-              statusColor = '#a80'
-              bgColor = '#fdf6e3'
-            } else {
-              statusDetail = `До оплаты ${daysUntilDue} дн.`
-              statusColor = '#080'
-              bgColor = '#eaf7ef'
-            }
+            if (isOverdue) { status = 'overdue'; statusDetail = `Просрочка ${Math.round((todayMid.getTime() - dueMid.getTime()) / 86400000)} дн.`; statusColor = '#c00'; bgColor = '#fdecea' }
+            else if (waitingForReadings) { statusDetail = 'Ждём показания'; statusColor = '#a80'; bgColor = '#fdf6e3' }
+            else if (daysUntilDue === 0) { statusDetail = firstMonthGrace ? 'Первый месяц — просрочка не начисляется' : 'Сегодня последний день оплаты'; statusColor = '#a80'; bgColor = '#fdf6e3' }
+            else if (daysUntilDue <= reminder) { statusDetail = `До оплаты ${daysUntilDue} дн.`; statusColor = '#a80'; bgColor = '#fdf6e3' }
+            else { statusDetail = `До оплаты ${daysUntilDue} дн.`; statusColor = '#080'; bgColor = '#eaf7ef' }
           } else {
             status = 'paid'
             const periodDate = parseDate(payment.period)
             const nextDue = new Date(periodDate.getFullYear(), periodDate.getMonth() + 1, contract.payment_day || 1)
             const daysLeft = Math.round((nextDue.getTime() - todayMid.getTime()) / 86400000)
-            if (daysLeft < 0) {
-              statusDetail = `Следующий платёж просрочен на ${-daysLeft} дн.`
-              statusColor = '#c00'
-              bgColor = '#fdecea'
-            } else if (daysLeft === 0) {
-              statusDetail = 'Следующая оплата: сегодня последний день'
-              statusColor = '#a80'
-              bgColor = '#fdf6e3'
-            } else if (daysLeft <= reminder) {
-              statusDetail = `${daysLeft} дн. до следующей оплаты`
-              statusColor = '#a80'
-              bgColor = '#fdf6e3'
-            } else {
-              statusDetail = `${daysLeft} дн. до следующей оплаты`
-              statusColor = '#080'
-              bgColor = '#eaf7ef'
-            }
+            if (daysLeft < 0) { statusDetail = `Следующий платёж просрочен на ${-daysLeft} дн.`; statusColor = '#c00'; bgColor = '#fdecea' }
+            else if (daysLeft === 0) { statusDetail = 'Следующая оплата: сегодня последний день'; statusColor = '#a80'; bgColor = '#fdf6e3' }
+            else if (daysLeft <= reminder) { statusDetail = `${daysLeft} дн. до следующей оплаты`; statusColor = '#a80'; bgColor = '#fdf6e3' }
+            else { statusDetail = `${daysLeft} дн. до следующей оплаты`; statusColor = '#080'; bgColor = '#eaf7ef' }
           }
-
-          objectsWithStatus.push({
-            ...obj,
-            status,
-            statusDetail,
-            statusColor,
-            amount: baseAmount + penaltyAmount + utilitiesAmount,
-            baseAmount,
-            penaltyAmount,
-            utilitiesAmount,
-            paymentId,
-            contract,
-            payment,
-            daysOverdue: isOverdue ? Math.round((todayMid.getTime() - dueMid.getTime()) / 86400000) : undefined,
-            waitingForReadings,
-            needUtilitiesReminder,
-            readingsMode,
-            bgColor,
-            frozenTotal,
-            frozenRows: fRows || [],
-            deferredRequests: dReq || [],
-            hasConfirmedCashMeeting: !!cashMeeting
-          })
+          objectsWithStatus.push({ ...obj, status, statusDetail, statusColor, amount: baseAmount + penaltyAmount + utilitiesAmount, baseAmount, penaltyAmount, utilitiesAmount, paymentId, contract, payment, daysOverdue: isOverdue ? Math.round((todayMid.getTime() - dueMid.getTime()) / 86400000) : undefined, waitingForReadings, needUtilitiesReminder, readingsMode, bgColor, frozenTotal, frozenRows: fRows || [], deferredRequests: dReq || [], hasConfirmedCashMeeting: !!cashMeeting })
         }
-
         setHistory(allHistory)
-
         const sortedObjects = objectsWithStatus.sort((a, b) => {
           const order: Record<string, number> = { overdue: 0, pending: 1, no_payment: 1.5, paid: 2, no_contract: 3 }
           const colorOrder = (o: ObjectWithStatus) => o.statusColor === '#c00' ? 0 : o.statusColor === '#a80' ? 1 : 2
           const so = (order[a.status] ?? 9) - (order[b.status] ?? 9)
           return so !== 0 ? so : colorOrder(a) - colorOrder(b)
         })
-
         setObjects(sortedObjects)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Unknown error')
-      } finally {
-        setLoading(false)
-      }
+      } catch (err) { setError(err instanceof Error ? err.message : 'Unknown error') } finally { setLoading(false) }
     }
-
     fetchData()
     const onRefresh = () => fetchData()
     window.addEventListener('rentflow-refresh', onRefresh)
     const interval = setInterval(() => fetchData(), 30000)
-    return () => {
-      window.removeEventListener('rentflow-refresh', onRefresh)
-      clearInterval(interval)
-    }
+    return () => { window.removeEventListener('rentflow-refresh', onRefresh); clearInterval(interval) }
   }, [user])
 
   async function saveUtilities(paymentId: string, value: string) {
-    const { error } = await supabase
-      .from('payments')
-      .update({ utilities_amount: Number(value) || 0 })
-      .eq('id', paymentId)
-    if (error) {
-      alert('Ошибка: ' + error.message)
-    } else {
-      window.dispatchEvent(new Event('rentflow-refresh'))
-    }
+    const { error } = await supabase.from('payments').update({ utilities_amount: Number(value) || 0 }).eq('id', paymentId)
+    if (error) alert('Ошибка: ' + error.message); else window.dispatchEvent(new Event('rentflow-refresh'))
   }
 
-  // Подтверждение: первый месяц + депозит получены очно при подписании
   async function confirmSigning(paymentId: string) {
-    const { error } = await supabase
-      .from('payments')
-      .update({ confirmed_by_landlord: true, confirmed_at: new Date().toISOString() })
-      .eq('id', paymentId)
+    const { error } = await supabase.from('payments').update({ confirmed_by_landlord: true, confirmed_at: new Date().toISOString() }).eq('id', paymentId)
     if (error) { alert('Ошибка: ' + error.message); return }
     const { data: pay } = await supabase.from('payments').select('*').eq('id', paymentId).maybeSingle()
     if (pay) {
       const { data: con } = await supabase.from('contracts').select('*').eq('id', pay.contract_id).maybeSingle()
-      if (con) {
-        await supabase.from('notifications_log').insert({
-          user_id: con.tenant_id, type: 'payment_confirmed', related_id: pay.id,
-          message: '🟢 Арендодатель подтвердил получение первого месяца и депозита при подписании',
-          sent_at: new Date().toISOString(),
-        })
-      }
+      if (con) await supabase.from('notifications_log').insert({ user_id: con.tenant_id, type: 'payment_confirmed', related_id: pay.id, message: '🟢 Арендодатель подтвердил получение первого месяца и депозита при подписании', sent_at: new Date().toISOString() })
     }
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
 
-  // Внести очередной платёж по депозиту (сумма прибавляется к внесённому, не больше общей)
   async function addDepositPayment(contractId: string) {
     const { data: con } = await supabase.from('contracts').select('deposit_amount, deposit_paid').eq('id', contractId).maybeSingle()
     if (!con) return
-    const total = Number(con.deposit_amount || 0)
-    const paid = Number(con.deposit_paid || 0)
+    const total = Number(con.deposit_amount || 0); const paid = Number(con.deposit_paid || 0)
     if (total <= 0) { alert('Сначала укажите общую сумму депозита в редактировании объекта'); return }
     const val = window.prompt(`Внесите платёж по депозиту (внесено ${paid.toFixed(0)} из ${total.toFixed(0)}), ₽:`)
     if (val === null) return
     const amount = Number(val)
     if (isNaN(amount) || amount <= 0) { alert('Некорректная сумма'); return }
-    const newPaid = Math.min(total, paid + amount)
-    const { error } = await supabase.from('contracts').update({ deposit_paid: newPaid }).eq('id', contractId)
+    const { error } = await supabase.from('contracts').update({ deposit_paid: Math.min(total, paid + amount) }).eq('id', contractId)
     if (error) { alert('Ошибка: ' + error.message); return }
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
 
-  // Исправить сумму «внесено» вручную
   async function editDepositPaid(contractId: string) {
     const { data: con } = await supabase.from('contracts').select('deposit_amount, deposit_paid').eq('id', contractId).maybeSingle()
     if (!con) return
-    const val = window.prompt(`Новое значение «внесено» (общая сумма депозита ${Number(con.deposit_amount || 0).toFixed(0)}), ₽:`, String(con.deposit_paid || 0))
+    const val = window.prompt(`Новое значение «внесено» (общая сумма ${Number(con.deposit_amount || 0).toFixed(0)}), ₽:`, String(con.deposit_paid || 0))
     if (val === null) return
     const v = Number(val)
     if (isNaN(v) || v < 0) { alert('Некорректное значение'); return }
@@ -367,25 +178,14 @@ export function LandlordDashboard() {
 
   async function confirmDeferral(requestId: string, contractId: string, paymentId: string, amount: number, tenantId: string) {
     const { data: pay } = await supabase.from('payments').select('*').eq('id', paymentId).maybeSingle()
-    const { error: e1 } = await supabase.from('frozen_penalties').insert({
-      contract_id: contractId,
-      payment_id: paymentId,
-      period: pay ? pay.period : null,
-      amount,
-      original_amount: amount,
-      note: 'отсрочка штрафа подтверждена',
-    })
+    const { error: e1 } = await supabase.from('frozen_penalties').insert({ contract_id: contractId, payment_id: paymentId, period: pay ? pay.period : null, amount, original_amount: amount, note: 'отсрочка штрафа подтверждена' })
     if (e1) { alert('Ошибка: ' + e1.message); return }
     await supabase.from('deferred_requests').update({ status: 'confirmed' }).eq('id', requestId)
     if (paymentId) {
       const newPenalty = Math.max(0, Number(pay?.penalty_amount || 0) - amount)
       await supabase.from('payments').update({ penalty_amount: newPenalty }).eq('id', paymentId)
     }
-    await supabase.from('notifications_log').insert({
-      user_id: tenantId, type: 'deferred_confirmed', related_id: contractId,
-      message: `🧊 Штраф ${Number(amount).toFixed(0)} ₽ заморожен и будет учтён в конце договора`,
-      sent_at: new Date().toISOString(),
-    })
+    await supabase.from('notifications_log').insert({ user_id: tenantId, type: 'deferred_confirmed', related_id: contractId, message: `🧊 Штраф ${Number(amount).toFixed(0)} ₽ заморожен и будет учтён в конце договора`, sent_at: new Date().toISOString() })
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
 
@@ -394,24 +194,11 @@ export function LandlordDashboard() {
     if (!pay) return
     const pen = Number(pay.penalty_amount || 0)
     if (pen <= 0) { alert('Нет штрафа для заморозки'); return }
-    const { error } = await supabase.from('frozen_penalties').insert({
-      contract_id: pay.contract_id,
-      payment_id: pay.id,
-      period: pay.period,
-      amount: pen,
-      original_amount: pen,
-      note: 'штраф заморожен вручную',
-    })
+    const { error } = await supabase.from('frozen_penalties').insert({ contract_id: pay.contract_id, payment_id: pay.id, period: pay.period, amount: pen, original_amount: pen, note: 'штраф заморожен вручную' })
     if (error) { alert('Ошибка: ' + error.message); return }
     await supabase.from('payments').update({ penalty_amount: 0 }).eq('id', paymentId)
     const { data: con } = await supabase.from('contracts').select('*').eq('id', pay.contract_id).maybeSingle()
-    if (con) {
-      await supabase.from('notifications_log').insert({
-        user_id: con.tenant_id, type: 'deferred_confirmed', related_id: pay.id,
-        message: `🧊 Штраф ${pen.toFixed(0)} ₽ заморожен и будет учтён в конце договора`,
-        sent_at: new Date().toISOString(),
-      })
-    }
+    if (con) await supabase.from('notifications_log').insert({ user_id: con.tenant_id, type: 'deferred_confirmed', related_id: pay.id, message: `🧊 Штраф ${pen.toFixed(0)} ₽ заморожен и будет учтён в конце договора`, sent_at: new Date().toISOString() })
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
 
@@ -424,112 +211,47 @@ export function LandlordDashboard() {
     let newAmount = zero ? 0 : Number(first)
     if (!zero && (isNaN(newAmount) || newAmount < 0)) { alert('Некорректная сумма'); return }
     let note = ''
-    if (!zero) {
-      const n = window.prompt('Примечание к изменению (обязательно):')
-      if (n === null) return
-      note = n.trim()
-      if (!note) { alert('Изменение требует примечание'); return }
-    } else {
-      note = first.trim()
-    }
-    const { error } = await supabase.from('frozen_penalties').update({
-      amount: newAmount,
-      adjusted_at: new Date().toISOString(),
-      adjusted_note: zero ? `обнулено: ${note}` : `изменено с ${Number(row.amount).toFixed(0)} на ${newAmount.toFixed(0)}: ${note}`,
-    }).eq('id', id)
+    if (!zero) { const n = window.prompt('Примечание к изменению (обязательно):'); if (n === null) return; note = n.trim(); if (!note) { alert('Изменение требует примечание'); return } } else { note = first.trim() }
+    const { error } = await supabase.from('frozen_penalties').update({ amount: newAmount, adjusted_at: new Date().toISOString(), adjusted_note: zero ? `обнулено: ${note}` : `изменено с ${Number(row.amount).toFixed(0)} на ${newAmount.toFixed(0)}: ${note}` }).eq('id', id)
     if (error) { alert('Ошибка: ' + error.message); return }
-    await supabase.from('notifications_log').insert({
-      user_id: tenantId, type: 'deferred_confirmed', related_id: contractId,
-      message: zero ? '🧊 Замороженный штраф обнулён' : `🧊 Замороженный штраф изменён: теперь ${newAmount.toFixed(0)} ₽`,
-      sent_at: new Date().toISOString(),
-    })
+    await supabase.from('notifications_log').insert({ user_id: tenantId, type: 'deferred_confirmed', related_id: contractId, message: zero ? '🧊 Замороженный штраф обнулён' : `🧊 Замороженный штраф изменён: теперь ${newAmount.toFixed(0)} ₽`, sent_at: new Date().toISOString() })
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
 
   async function updatePaymentMethod(contractId: string, method: 'card' | 'cash' | 'both') {
     const updateData: any = { payment_method: method }
-    if (method === 'cash') {
-      updateData.cash_slots = []
-    }
-
-    const { error } = await supabase
-      .from('contracts')
-      .update(updateData)
-      .eq('id', contractId)
-
+    if (method === 'cash') updateData.cash_slots = []
+    const { error } = await supabase.from('contracts').update(updateData).eq('id', contractId)
     if (!error) {
-      setObjects(prev => prev.map(o =>
-        o.contract?.id === contractId
-          ? { ...o, contract: { ...o.contract!, payment_method: method, cash_slots: method === 'cash' ? [] : o.contract!.cash_slots } }
-          : o
-      ))
-    } else {
-      alert('Ошибка: ' + error.message)
-    }
+      setObjects(prev => prev.map(o => o.contract?.id === contractId ? { ...o, contract: { ...o.contract!, payment_method: method, cash_slots: method === 'cash' ? [] : o.contract!.cash_slots } } : o))
+    } else alert('Ошибка: ' + error.message)
   }
 
   async function confirmChannel(paymentId: string, channel: 'card' | 'cash', close: boolean = false) {
     const { data: pay } = await supabase.from('payments').select('*').eq('id', paymentId).maybeSingle()
     if (!pay) { alert('Платёж не найден'); return }
-
-    const { data: cashMeeting } = await supabase
-      .from('cash_meetings')
-      .select('*')
-      .eq('contract_id', pay.contract_id)
-      .eq('kind', 'meeting')
-      .eq('status', 'confirmed')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
+    const { data: cashMeeting } = await supabase.from('cash_meetings').select('*').eq('contract_id', pay.contract_id).eq('kind', 'meeting').eq('status', 'confirmed').order('created_at', { ascending: false }).limit(1).maybeSingle()
     const cardEngaged = !!pay.card_claimed
-
     const update: any = {}
-    if (channel === 'card') {
-      if (close) return
-      update.confirmed_card = true
-    } else {
-      if (close) update.cash_closed = true
-      else update.confirmed_cash = true
-    }
-
+    if (channel === 'card') { if (close) return; update.confirmed_card = true } else { if (close) update.cash_closed = true; else update.confirmed_cash = true }
     const afterCard = channel === 'card' ? true : pay.confirmed_card
     const afterCashConfirmed = channel === 'cash' && !close ? true : pay.confirmed_cash
     const afterCashClosed = channel === 'cash' && close ? true : pay.cash_closed
     const cashFinalClosed = afterCashClosed || afterCashConfirmed
-
-    const cardEngagedAfter = cardEngaged
-    const cashEngagedAfter = !!cashMeeting && !afterCashClosed
-
-    const cardSatisfied = !cardEngagedAfter || afterCard
-    const cashSatisfied = !cashEngagedAfter || cashFinalClosed
-
-    if (cardSatisfied && cashSatisfied) {
-      update.confirmed_by_landlord = true
-      update.confirmed_at = new Date().toISOString()
-    }
-
+    const cardSatisfied = !cardEngaged || afterCard
+    const cashSatisfied = !(!!cashMeeting && !afterCashClosed) || cashFinalClosed
+    if (cardSatisfied && cashSatisfied) { update.confirmed_by_landlord = true; update.confirmed_at = new Date().toISOString() }
     const { error: e1 } = await supabase.from('payments').update(update).eq('id', paymentId)
     if (e1) { alert('Ошибка: ' + e1.message); return }
-
     const { data: con } = await supabase.from('contracts').select('*').eq('id', pay.contract_id).maybeSingle()
     if (con) {
-      const msg = channel === 'card'
-        ? '🟢 Арендодатель подтвердил получение по безналу'
-        : (close ? '⚪ Наличный канал закрыт' : '🟢 Арендодатель подтвердил получение наличных')
-      await supabase.from('notifications_log').insert({
-        user_id: con.tenant_id, type: 'payment_confirmed', related_id: pay.id, message: msg, sent_at: new Date().toISOString(),
-      })
+      const msg = channel === 'card' ? '🟢 Арендодатель подтвердил получение по безналу' : (close ? '⚪ Наличный канал закрыт' : '🟢 Арендодатель подтвердил получение наличных')
+      await supabase.from('notifications_log').insert({ user_id: con.tenant_id, type: 'payment_confirmed', related_id: pay.id, message: msg, sent_at: new Date().toISOString() })
     }
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
-  const getStatusIcon = (color?: string) => {
-    if (color === '#c00') return '🔴'
-    if (color === '#a80') return '🟡'
-    if (color === '#080') return '🟢'
-    return '⚪'
-  }
 
+  const getStatusIcon = (color?: string) => color === '#c00' ? '🔴' : color === '#a80' ? '🟡' : color === '#080' ? '🟢' : '⚪'
   const getNotificationText = (type: string) => {
     switch (type) {
       case 'payment_claimed': return '✅ Арендатор сообщил об оплате'
@@ -542,7 +264,6 @@ export function LandlordDashboard() {
       default: return type
     }
   }
-
   function amountBreakdown(obj: ObjectWithStatus): string {
     const parts: string[] = [`${(obj.baseAmount ?? obj.amount).toFixed(2)}`]
     if (obj.penaltyAmount && obj.penaltyAmount > 0) parts.push(`${obj.penaltyAmount.toFixed(2)} руб штраф`)
@@ -552,28 +273,17 @@ export function LandlordDashboard() {
 
   const todayNow = new Date()
   const todayMidNow = new Date(todayNow.getFullYear(), todayNow.getMonth(), todayNow.getDate())
-  const periodStart = statsPeriod === '6m'
-    ? new Date(todayMidNow.getFullYear(), todayMidNow.getMonth() - 5, 1)
-    : new Date(todayMidNow.getFullYear() - 1, todayMidNow.getMonth(), 1)
-  const filteredHistory = history
-    .filter(h => (statsObject === 'all' || h.objId === statsObject) && parseDate(h.period) >= periodStart)
-    .sort((a, b) => parseDate(b.period).getTime() - parseDate(a.period).getTime())
-  const collected = filteredHistory
-    .filter(h => h.confirmed_by_landlord)
-    .reduce((s: number, h: any) => s + Number(h.base_amount || 0) + Number(h.penalty_amount || 0) + Number(h.utilities_amount || 0), 0)
+  const periodStart = statsPeriod === '6m' ? new Date(todayMidNow.getFullYear(), todayMidNow.getMonth() - 5, 1) : new Date(todayMidNow.getFullYear() - 1, todayMidNow.getMonth(), 1)
+  const filteredHistory = history.filter(h => (statsObject === 'all' || h.objId === statsObject) && parseDate(h.period) >= periodStart).sort((a, b) => parseDate(b.period).getTime() - parseDate(a.period).getTime())
+  const collected = filteredHistory.filter(h => h.confirmed_by_landlord).reduce((s: number, h: any) => s + Number(h.base_amount || 0) + Number(h.penalty_amount || 0) + Number(h.utilities_amount || 0), 0)
   const penaltiesAccrued = filteredHistory.reduce((s: number, h: any) => s + Number(h.penalty_amount || 0), 0)
   const confirmedCount = filteredHistory.filter(h => h.confirmed_by_landlord).length
   const onTimeCount = filteredHistory.filter(h => h.confirmed_by_landlord && h.confirmed_at && new Date(h.confirmed_at) <= parseDate(h.due_date)).length
   const onTimePct = confirmedCount > 0 ? Math.round((onTimeCount / confirmedCount) * 100) : 0
   const overdueNow = objects.filter(o => o.statusColor === '#c00').length
 
-  if (userLoading || loading) {
-    return <div style={styles.container}>Загрузка...</div>
-  }
-
-  if (error) {
-    return <div style={styles.container}>{error}</div>
-  }
+  if (userLoading || loading) return <div style={styles.container}>Загрузка...</div>
+  if (error) return <div style={styles.container}>{error}</div>
 
   return (
     <div style={styles.container}>
@@ -586,14 +296,17 @@ export function LandlordDashboard() {
           const isExpanded = expandedIds.has(obj.id)
           const tenantChoseCash = contract && (contract.payment_method === 'cash' || (contract.payment_method === 'both' && (contract as any).tenant_pay_method === 'cash'))
           const deposit = Number((contract as any)?.deposit_amount || 0)
+          const depositPaid = Number((contract as any)?.deposit_paid || 0)
           const frozenOpen = expandedFrozen.has(obj.id)
-
+          const periodMid = obj.payment ? parseDate(obj.payment.period) : null
+          const startMid = contract?.start_date ? parseDate(contract.start_date) : null
+          const firstMonthPending = !!(contract && obj.payment && startMid && periodMid && !obj.payment.confirmed_by_landlord && periodMid.getFullYear() === startMid.getFullYear() && periodMid.getMonth() === startMid.getMonth())
           return (
             <div key={obj.id} style={{ ...styles.card, backgroundColor: obj.bgColor || '#fff' }}>
               <div style={styles.cardHeader} onClick={() => toggleExpanded(obj.id)}>
                 <div style={{ flex: 1 }}>
                   <div style={styles.address}>
-                    {deposit > 0 && <span style={{ float: 'right', fontSize: 11, color: 'rgba(0,0,0,0.4)' }}>депозит: {deposit.toFixed(0)} ₽</span>}
+                    {deposit > 0 && <span style={{ float: 'right', fontSize: 11, color: 'rgba(0,0,0,0.4)' }}>депозит: внесено {depositPaid.toFixed(0)} из {deposit.toFixed(0)} ₽</span>}
                     {obj.address}
                     <span style={styles.expandArrow}>{isExpanded ? '▲' : '▼'}</span>
                   </div>
@@ -602,9 +315,7 @@ export function LandlordDashboard() {
                     <span>{getStatusIcon(obj.statusColor)}</span>
                     <span style={{ ...styles.statusText, color: obj.statusColor || '#666' }}>{obj.statusDetail}</span>
                   </div>
-                  {obj.amount > 0 && (
-                    <div style={styles.amount}>{amountBreakdown(obj)}</div>
-                  )}
+                  {obj.amount > 0 && <div style={styles.amount}>{amountBreakdown(obj)}</div>}
                   {!!obj.frozenTotal && obj.frozenTotal > 0 && (
                     <div style={styles.frozenNote} onClick={(e) => { e.stopPropagation(); toggleFrozen(obj.id) }}>
                       🧊 Замороженные штрафы: {obj.frozenTotal.toFixed(0)} ₽ {frozenOpen ? '▲' : '▼'}
@@ -626,67 +337,57 @@ export function LandlordDashboard() {
                   )}
                 </div>
               </div>
-
               {isExpanded && (
                 <>
+                  {contract && (firstMonthPending || deposit > 0) && (
+                    <div style={styles.subCard}>
+                      <div style={styles.subCardTitle}>💰 Первый месяц и депозит</div>
+                      {firstMonthPending && (
+                        <button style={styles.confirmButton} onClick={() => confirmSigning(obj.paymentId!)}>✅ Подтвердить: первый месяц + депозит получены при подписании</button>
+                      )}
+                      {deposit > 0 && (
+                        <div style={styles.slotItem}>
+                          <span>Внесено {depositPaid.toFixed(0)} из {deposit.toFixed(0)} ₽ · остаток {Math.max(0, deposit - depositPaid).toFixed(0)} ₽</span>
+                          <span>
+                            <button style={{ ...styles.addButton, marginRight: 6 }} onClick={() => addDepositPayment(contract.id)}>+ внести</button>
+                            <button style={styles.deleteButton} onClick={() => editDepositPaid(contract.id)}>изменить</button>
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                   {contract && obj.paymentId && !obj.payment?.confirmed_by_landlord && (
                     <div style={styles.subCard}>
                       <div style={styles.subCardTitle}>💰 Подтверждение оплаты по каналам</div>
                       <div style={styles.slotItem}>
                         <span>💳 Безнал: {obj.payment?.confirmed_card ? '🟢 получен' : obj.payment?.card_claimed ? '🟡 заявлен арендатором' : '⚪ не заявлен'}</span>
                         {obj.payment?.card_claimed && !obj.payment?.confirmed_card && (
-                          <button
-                            style={{ ...styles.confirmButton, marginTop: 0, width: 'auto', padding: '6px 12px', fontSize: '13px' }}
-                            onClick={() => confirmChannel(obj.paymentId!, 'card')}
-                          >
-                            Подтвердить
-                          </button>
+                          <button style={{ ...styles.confirmButton, marginTop: 0, width: 'auto', padding: '6px 12px', fontSize: '13px' }} onClick={() => confirmChannel(obj.paymentId!, 'card')}>Подтвердить</button>
                         )}
                       </div>
                       <div style={styles.slotItem}>
                         <span>💵 Нал: {obj.payment?.confirmed_cash ? '🟢 получен' : obj.payment?.cash_closed ? '⚪ канал закрыт' : obj.hasConfirmedCashMeeting ? '🟡 ждёт встречи' : '⚪ не заявлен'}</span>
                         {obj.hasConfirmedCashMeeting && !obj.payment?.cash_closed && !obj.payment?.confirmed_cash && (
                           <span>
-                            <button
-                              style={{ ...styles.confirmButton, marginTop: 0, width: 'auto', padding: '6px 12px', fontSize: '13px', marginRight: 6 }}
-                              onClick={() => confirmChannel(obj.paymentId!, 'cash')}
-                            >
-                              Подтвердить
-                            </button>
-                            <button
-                              style={styles.deleteButton}
-                              onClick={() => confirmChannel(obj.paymentId!, 'cash', true)}
-                            >
-                              закрыть канал
-                            </button>
+                            <button style={{ ...styles.confirmButton, marginTop: 0, width: 'auto', padding: '6px 12px', fontSize: '13px', marginRight: 6 }} onClick={() => confirmChannel(obj.paymentId!, 'cash')}>Подтвердить</button>
+                            <button style={styles.deleteButton} onClick={() => confirmChannel(obj.paymentId!, 'cash', true)}>закрыть канал</button>
                           </span>
                         )}
                       </div>
                       {!obj.payment?.card_claimed && !obj.hasConfirmedCashMeeting && (
-                        <button style={styles.confirmButton} onClick={() => confirmChannel(obj.paymentId!, 'card')}>
-                          ✅ Подтвердить оплату полностью
-                        </button>
+                        <button style={styles.confirmButton} onClick={() => confirmChannel(obj.paymentId!, 'card')}>✅ Подтвердить оплату полностью</button>
                       )}
                     </div>
                   )}
-
                   {contract && ((obj.frozenRows || []).length > 0 || ((obj.penaltyAmount || 0) > 0 && !obj.payment?.confirmed_by_landlord)) && (
                     <div style={styles.subCard}>
                       <div style={styles.subCardTitle}>🧊 Замороженные штрафы — управление</div>
                       {(obj.penaltyAmount || 0) > 0 && !obj.payment?.confirmed_by_landlord && (
-                        <button
-                          style={{ ...styles.confirmButton, marginTop: 0, background: '#26a69a' }}
-                          onClick={() => freezePenalty(obj.paymentId!)}
-                        >
-                          🧊 Заморозить текущий штраф ({(obj.penaltyAmount || 0).toFixed(0)} ₽)
-                        </button>
+                        <button style={{ ...styles.confirmButton, marginTop: 0, background: '#26a69a' }} onClick={() => freezePenalty(obj.paymentId!)}>🧊 Заморозить текущий штраф ({(obj.penaltyAmount || 0).toFixed(0)} ₽)</button>
                       )}
                       {(obj.frozenRows || []).map((f: any) => (
                         <div key={f.id} style={styles.slotItem}>
-                          <span>
-                            {f.period ? parseDate(f.period).toLocaleDateString('ru-RU', { month: 'short', year: 'numeric' }) : '—'} · {Number(f.amount).toFixed(0)} ₽
-                            {f.adjusted_note && <span style={styles.smallNote}><br />{f.adjusted_note}</span>}
-                          </span>
+                          <span>{f.period ? parseDate(f.period).toLocaleDateString('ru-RU', { month: 'short', year: 'numeric' }) : '—'} · {Number(f.amount).toFixed(0)} ₽{f.adjusted_note && <span style={styles.smallNote}><br />{f.adjusted_note}</span>}</span>
                           <span>
                             <button style={{ ...styles.addButton, marginRight: 6 }} onClick={() => adjustFrozen(f.id, contract.id, contract.tenant_id, false)}>изменить</button>
                             <button style={styles.deleteButton} onClick={() => adjustFrozen(f.id, contract.id, contract.tenant_id, true)}>обнулить</button>
@@ -696,114 +397,55 @@ export function LandlordDashboard() {
                       <div style={styles.smallNote}>Записи не удаляются до конца договора; каждое изменение сохраняется с примечанием и датой.</div>
                     </div>
                   )}
-
                   {contract && obj.paymentId && !obj.payment?.confirmed_by_landlord && obj.readingsMode !== 'self' && (
                     <div style={styles.subCard}>
                       <div style={styles.subCardTitle}>🧮 Ресурсы по квитанции</div>
-                      {obj.needUtilitiesReminder && (
-                        <div style={styles.reminderNote}>⏳ Посчитайте ресурсы с квитанции и добавьте сумму к платежу</div>
-                      )}
+                      {obj.needUtilitiesReminder && <div style={styles.reminderNote}>⏳ Посчитайте ресурсы с квитанции и добавьте сумму к платежу</div>}
                       <div style={styles.utilRow}>
-                        <input
-                          type="number"
-                          value={utilInputs[obj.id] ?? String(obj.utilitiesAmount || '')}
-                          onChange={(e) => setUtilInputs({ ...utilInputs, [obj.id]: e.target.value })}
-                          placeholder="Сумма по квитанции, ₽"
-                          style={styles.utilInput}
-                          inputMode="numeric"
-                        />
-                        <button
-                          onClick={() => saveUtilities(obj.paymentId!, utilInputs[obj.id] ?? String(obj.utilitiesAmount || 0))}
-                          style={styles.addButton}
-                        >
-                          Включить в платёж
-                        </button>
+                        <input type="number" value={utilInputs[obj.id] ?? String(obj.utilitiesAmount || '')} onChange={(e) => setUtilInputs({ ...utilInputs, [obj.id]: e.target.value })} placeholder="Сумма по квитанции, ₽" style={styles.utilInput} inputMode="numeric" />
+                        <button onClick={() => saveUtilities(obj.paymentId!, utilInputs[obj.id] ?? String(obj.utilitiesAmount || 0))} style={styles.addButton}>Включить в платёж</button>
                       </div>
                       <div style={styles.smallNote}>Сумма добавляется к платежу отдельно, не растёт при просрочке и не входит в штрафы</div>
                     </div>
                   )}
-
                   {contract && (obj.deferredRequests || []).length > 0 && (
                     <div style={styles.subCard}>
                       <div style={styles.subCardTitle}>🙏 Отсрочка штрафа</div>
                       {(obj.deferredRequests || []).map((r: any) => (
                         <div key={r.id} style={styles.slotItem}>
                           <span>Арендатор просит отсрочить {Number(r.amount).toFixed(2)} ₽</span>
-                          <button
-                            onClick={() => confirmDeferral(r.id, contract.id, r.payment_id, Number(r.amount), contract.tenant_id)}
-                            style={{ ...styles.confirmButton, marginTop: 0, width: 'auto', padding: '6px 12px', fontSize: '13px', background: '#ff9800' }}
-                          >
-                            Подтвердить
-                          </button>
+                          <button onClick={() => confirmDeferral(r.id, contract.id, r.payment_id, Number(r.amount), contract.tenant_id)} style={{ ...styles.confirmButton, marginTop: 0, width: 'auto', padding: '6px 12px', fontSize: '13px', background: '#ff9800' }}>Подтвердить</button>
                         </div>
                       ))}
                     </div>
                   )}
-
                   {contract && (
                     <div style={styles.subCard}>
                       <div style={styles.subCardTitle}>⚙️ Счётчики</div>
                       <MetersEditor objId={obj.id} />
                     </div>
                   )}
-
                   {contract && obj.readingsMode === 'manual' && (
                     <div style={styles.subCard}>
                       <div style={styles.subCardTitle}>💦 Показания за текущий месяц</div>
                       <ReadingsReview contractId={contract.id} tenantId={contract.tenant_id} />
                     </div>
                   )}
-
                   {contract && (
                     <div style={styles.subCard}>
                       <div style={styles.subCardTitle}>💵 Способ оплаты</div>
                       <div style={styles.methodRow}>
-                        <label style={styles.methodLabel}>
-                          <input
-                            type="radio"
-                            name={`payment-method-${obj.id}`}
-                            value="card"
-                            checked={contract.payment_method === 'card'}
-                            onChange={() => updatePaymentMethod(contract.id, 'card')}
-                          />
-                          {' '}Безналичный расчёт
-                        </label>
-                        <label style={styles.methodLabel}>
-                          <input
-                            type="radio"
-                            name={`payment-method-${obj.id}`}
-                            value="cash"
-                            checked={contract.payment_method === 'cash'}
-                            onChange={() => updatePaymentMethod(contract.id, 'cash')}
-                          />
-                          {' '}Наличные
-                        </label>
-                        <label style={styles.methodLabel}>
-                          <input
-                            type="radio"
-                            name={`payment-method-${obj.id}`}
-                            value="both"
-                            checked={contract.payment_method === 'both'}
-                            onChange={() => updatePaymentMethod(contract.id, 'both')}
-                          />
-                          {' '}Наличный и безналичный расчёт
-                        </label>
+                        <label style={styles.methodLabel}><input type="radio" name={`payment-method-${obj.id}`} value="card" checked={contract.payment_method === 'card'} onChange={() => updatePaymentMethod(contract.id, 'card')} />{' '}Безналичный расчёт</label>
+                        <label style={styles.methodLabel}><input type="radio" name={`payment-method-${obj.id}`} value="cash" checked={contract.payment_method === 'cash'} onChange={() => updatePaymentMethod(contract.id, 'cash')} />{' '}Наличные</label>
+                        <label style={styles.methodLabel}><input type="radio" name={`payment-method-${obj.id}`} value="both" checked={contract.payment_method === 'both'} onChange={() => updatePaymentMethod(contract.id, 'both')} />{' '}Наличный и безналичный расчёт</label>
                       </div>
-                      {contract.payment_method === 'both' && (
-                        <div style={styles.smallNote}>💡 Способ оплаты выбирает арендатор: карта или наличные.</div>
-                      )}
+                      {contract.payment_method === 'both' && <div style={styles.smallNote}>💡 Способ оплаты выбирает арендатор: карта или наличные.</div>}
                     </div>
                   )}
-
                   {contract && tenantChoseCash && (
                     <div style={styles.subCard}>
                       <div style={styles.subCardTitle}>🤝 Оплата наличными — договорённость о времени</div>
-                      <CashNegotiation
-                        contractId={contract.id}
-                        myRole="landlord"
-                        tenantId={contract.tenant_id}
-                        landlordId={obj.landlord_id}
-                      />
+                      <CashNegotiation contractId={contract.id} myRole="landlord" tenantId={contract.tenant_id} landlordId={obj.landlord_id} />
                     </div>
                   )}
                 </>
@@ -812,7 +454,6 @@ export function LandlordDashboard() {
           )
         })
       )}
-
       <div style={styles.card}>
         <div style={styles.cardTitle}>📊 Статистика</div>
         <div style={styles.filtersRow}>
@@ -826,22 +467,10 @@ export function LandlordDashboard() {
           </select>
         </div>
         <div style={styles.statsGrid}>
-          <div style={styles.statTile}>
-            <div style={styles.statLabel}>Собрано</div>
-            <div style={styles.statValue}>{collected.toFixed(0)} ₽</div>
-          </div>
-          <div style={styles.statTile}>
-            <div style={styles.statLabel}>Штрафов начислено</div>
-            <div style={{ ...styles.statValue, color: '#c00' }}>{penaltiesAccrued.toFixed(0)} ₽</div>
-          </div>
-          <div style={styles.statTile}>
-            <div style={styles.statLabel}>Оплата вовремя</div>
-            <div style={styles.statValue}>{onTimePct}%</div>
-          </div>
-          <div style={styles.statTile}>
-            <div style={styles.statLabel}>Сейчас просрочено</div>
-            <div style={{ ...styles.statValue, color: overdueNow > 0 ? '#c00' : '#080' }}>{overdueNow} объект(а)</div>
-          </div>
+          <div style={styles.statTile}><div style={styles.statLabel}>Собрано</div><div style={styles.statValue}>{collected.toFixed(0)} ₽</div></div>
+          <div style={styles.statTile}><div style={styles.statLabel}>Штрафов начислено</div><div style={{ ...styles.statValue, color: '#c00' }}>{penaltiesAccrued.toFixed(0)} ₽</div></div>
+          <div style={styles.statTile}><div style={styles.statLabel}>Оплата вовремя</div><div style={styles.statValue}>{onTimePct}%</div></div>
+          <div style={styles.statTile}><div style={styles.statLabel}>Сейчас просрочено</div><div style={{ ...styles.statValue, color: overdueNow > 0 ? '#c00' : '#080' }}>{overdueNow} объект(а)</div></div>
         </div>
         <div style={styles.subCardTitle}>История платежей</div>
         {filteredHistory.length === 0 ? (
@@ -852,26 +481,20 @@ export function LandlordDashboard() {
             const sum = Number(h.base_amount || 0) + Number(h.penalty_amount || 0) + Number(h.utilities_amount || 0)
             return (
               <div key={h.id} style={styles.slotItem}>
-                <span style={{ flex: 1, minWidth: 0 }}>
-                  {h.address}<br />
-                  <span style={styles.smallNote}>{parseDate(h.period).toLocaleDateString('ru-RU')} · {h.confirmed_by_landlord ? (late ? 'просрочка' : 'вовремя') : 'не подтверждён'}</span>
-                </span>
+                <span style={{ flex: 1, minWidth: 0 }}>{h.address}<br /><span style={styles.smallNote}>{parseDate(h.period).toLocaleDateString('ru-RU')} · {h.confirmed_by_landlord ? (late ? 'просрочка' : 'вовремя') : 'не подтверждён'}</span></span>
                 <b style={{ color: late ? '#c00' : '#333', whiteSpace: 'nowrap', marginLeft: 8 }}>{sum.toFixed(0)} ₽</b>
               </div>
             )
           })
         )}
       </div>
-
       <div style={styles.card}>
         <div style={styles.cardTitle}>🔔 Уведомления</div>
         {notifications.length === 0 ? (
           <p style={styles.empty}>Нет уведомлений</p>
         ) : (
           notifications.map(n => (
-            <div key={n.id} style={styles.notificationItem}>
-              {(n as any).message || getNotificationText(n.type)}
-            </div>
+            <div key={n.id} style={styles.notificationItem}>{(n as any).message || getNotificationText(n.type)}</div>
           ))
         )}
       </div>
@@ -880,195 +503,36 @@ export function LandlordDashboard() {
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  container: {
-    fontFamily: 'system-ui, -apple-system, sans-serif',
-    maxWidth: '600px',
-    margin: '0 auto',
-    padding: '16px',
-    backgroundColor: '#f5f5f5',
-  },
-  title: {
-    fontSize: '24px',
-    fontWeight: 'bold',
-    marginBottom: '16px',
-  },
-  empty: {
-    color: '#888',
-    textAlign: 'center',
-  },
-  card: {
-    backgroundColor: '#fff',
-    borderRadius: '12px',
-    padding: '16px',
-    marginBottom: '12px',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-  },
-  cardHeader: {
-    cursor: 'pointer',
-    userSelect: 'none',
-  },
-  expandArrow: {
-    fontSize: '12px',
-    color: '#999',
-    marginLeft: '8px',
-  },
-  frozenNote: {
-    fontSize: '13px',
-    color: '#00695c',
-    marginTop: '6px',
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
-  deferredNote: {
-    fontSize: '13px',
-    color: '#e65100',
-    marginTop: '6px',
-    fontWeight: 600,
-  },
-  reminderNote: {
-    padding: '8px 10px',
-    backgroundColor: '#fff3e0',
-    border: '1px solid #ffb74d',
-    borderRadius: '8px',
-    color: '#e65100',
-    fontSize: '13px',
-    fontWeight: 600,
-    marginBottom: '8px',
-  },
-  smallNote: {
-    fontSize: '12px',
-    color: '#888',
-    marginTop: '6px',
-  },
-  utilRow: {
-    display: 'flex',
-    gap: '8px',
-    alignItems: 'center',
-  },
-  utilInput: {
-    flex: 1,
-    padding: '8px 10px',
-    borderRadius: '8px',
-    border: '1px solid #ddd',
-    fontSize: '14px',
-  },
-  filtersRow: {
-    display: 'flex',
-    gap: '8px',
-    marginBottom: '12px',
-  },
-  statsGrid: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gap: '8px',
-    marginBottom: '12px',
-  },
-  statTile: {
-    backgroundColor: '#f9f9f9',
-    borderRadius: '8px',
-    padding: '10px',
-  },
-  statLabel: {
-    fontSize: '12px',
-    color: '#888',
-    marginBottom: '4px',
-  },
-  statValue: {
-    fontSize: '16px',
-    fontWeight: 700,
-    color: '#333',
-  },
-  cardTitle: {
-    fontSize: '18px',
-    fontWeight: 'bold',
-    marginBottom: '12px',
-  },
-  address: {
-    fontSize: '16px',
-    fontWeight: '600',
-    marginBottom: '8px',
-  },
-  statusRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    marginBottom: '8px',
-  },
-  statusText: {
-    fontSize: '14px',
-    fontWeight: 600,
-  },
-  amount: {
-    fontSize: '18px',
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  confirmButton: {
-    marginTop: '12px',
-    width: '100%',
-    padding: '12px',
-    borderRadius: '10px',
-    border: 'none',
-    background: '#4caf50',
-    color: '#fff',
-    fontSize: '15px',
-    fontWeight: 700,
-    cursor: 'pointer',
-  },
-  subCard: {
-    marginTop: '16px',
-    paddingTop: '16px',
-    borderTop: '1px solid #eee',
-  },
-  subCardTitle: {
-    fontSize: '16px',
-    fontWeight: '600',
-    marginBottom: '12px',
-  },
-  methodRow: {
-    display: 'flex',
-    gap: '12px',
-    marginBottom: '12px',
-    flexWrap: 'wrap' as const,
-  },
-  methodLabel: {
-    fontSize: '14px',
-    cursor: 'pointer',
-  },
-  slotItem: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '8px',
-    backgroundColor: '#f9f9f9',
-    borderRadius: '6px',
-    marginBottom: '6px',
-    fontSize: '14px',
-  },
-  deleteButton: {
-    background: '#ff5252',
-    color: '#fff',
-    border: 'none',
-    borderRadius: '4px',
-    padding: '4px 8px',
-    cursor: 'pointer',
-    fontSize: '12px',
-  },
-  addButton: {
-    padding: '6px 12px',
-    borderRadius: '4px',
-    border: 'none',
-    background: '#2196f3',
-    color: '#fff',
-    cursor: 'pointer',
-    fontSize: '14px',
-  },
-  notificationItem: {
-    padding: '8px',
-    borderBottom: '1px solid #eee',
-    fontSize: '14px',
-    color: '#555',
-  },
+  container: { fontFamily: 'system-ui, -apple-system, sans-serif', maxWidth: '600px', margin: '0 auto', padding: '16px', backgroundColor: '#f5f5f5' },
+  title: { fontSize: '24px', fontWeight: 'bold', marginBottom: '16px' },
+  empty: { color: '#888', textAlign: 'center' },
+  card: { backgroundColor: '#fff', borderRadius: '12px', padding: '16px', marginBottom: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' },
+  cardHeader: { cursor: 'pointer', userSelect: 'none' },
+  expandArrow: { fontSize: '12px', color: '#999', marginLeft: '8px' },
+  frozenNote: { fontSize: '13px', color: '#00695c', marginTop: '6px', fontWeight: 600, cursor: 'pointer' },
+  reminderNote: { padding: '8px 10px', backgroundColor: '#fff3e0', border: '1px solid #ffb74d', borderRadius: '8px', color: '#e65100', fontSize: '13px', fontWeight: 600, marginBottom: '8px' },
+  smallNote: { fontSize: '12px', color: '#888', marginTop: '6px' },
+  utilRow: { display: 'flex', gap: '8px', alignItems: 'center' },
+  utilInput: { flex: 1, padding: '8px 10px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '14px' },
+  filtersRow: { display: 'flex', gap: '8px', marginBottom: '12px' },
+  statsGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' },
+  statTile: { backgroundColor: '#f9f9f9', borderRadius: '8px', padding: '10px' },
+  statLabel: { fontSize: '12px', color: '#888', marginBottom: '4px' },
+  statValue: { fontSize: '16px', fontWeight: 700, color: '#333' },
+  cardTitle: { fontSize: '18px', fontWeight: 'bold', marginBottom: '12px' },
+  address: { fontSize: '16px', fontWeight: '600', marginBottom: '8px' },
+  statusRow: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' },
+  statusText: { fontSize: '14px', fontWeight: 600 },
+  amount: { fontSize: '18px', fontWeight: 'bold', color: '#333' },
+  confirmButton: { marginTop: '12px', width: '100%', padding: '12px', borderRadius: '10px', border: 'none', background: '#4caf50', color: '#fff', fontSize: '15px', fontWeight: 700, cursor: 'pointer' },
+  subCard: { marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #eee' },
+  subCardTitle: { fontSize: '16px', fontWeight: '600', marginBottom: '12px' },
+  methodRow: { display: 'flex', gap: '12px', marginBottom: '12px', flexWrap: 'wrap' as const },
+  methodLabel: { fontSize: '14px', cursor: 'pointer' },
+  slotItem: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px', backgroundColor: '#f9f9f9', borderRadius: '6px', marginBottom: '6px', fontSize: '14px' },
+  deleteButton: { background: '#ff5252', color: '#fff', border: 'none', borderRadius: '4px', padding: '4px 8px', cursor: 'pointer', fontSize: '12px' },
+  addButton: { padding: '6px 12px', borderRadius: '4px', border: 'none', background: '#2196f3', color: '#fff', cursor: 'pointer', fontSize: '14px' },
+  notificationItem: { padding: '8px', borderBottom: '1px solid #eee', fontSize: '14px', color: '#555' },
 }
 
 export default LandlordDashboard
