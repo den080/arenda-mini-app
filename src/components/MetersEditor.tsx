@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 export function MetersEditor({ objId }: { objId: string }) {
   const [types, setTypes] = useState<any[]>([])
   const [rows, setRows] = useState<any[]>([])
+  const [busy, setBusy] = useState(false)
 
   async function load() {
     const { data: t } = await supabase.from('meter_types').select('*')
@@ -25,8 +26,7 @@ export function MetersEditor({ objId }: { objId: string }) {
   const isAct = (code: string) => activeRows(code).length > 0
 
   const waterCodes = ['water_cold', 'water_hot']
-  const isWater = (r: any) => waterCodes.includes(codeOf(r)) && r.is_active
-  const waterRows = rows.filter(isWater)
+  const waterRows = rows.filter(r => waterCodes.includes(codeOf(r)) && r.is_active)
 
   async function setActive(code: string, active: boolean) {
     const mt = typeByCode(code)
@@ -55,16 +55,24 @@ export function MetersEditor({ objId }: { objId: string }) {
   }
 
   async function addWater() {
-    const mt = typeByCode('water_cold')
-    if (!mt) return
-    const inactive = rows.find(r => !r.is_active && waterCodes.includes(codeOf(r)))
-    if (inactive) {
-      await supabase.from('object_meters').update({ is_active: true }).eq('id', inactive.id)
-    } else {
-      await supabase.from('object_meters').insert({ object_id: objId, meter_type_id: mt.id, is_active: true, label: '' })
+    if (busy) return
+    setBusy(true)
+    try {
+      const mt = typeByCode('water_cold')
+      if (!mt) return
+      const inactive = rows.find(r => !r.is_active && waterCodes.includes(codeOf(r)))
+      if (inactive) {
+        const { error } = await supabase.from('object_meters').update({ is_active: true }).eq('id', inactive.id)
+        if (error) { alert('Ошибка: ' + error.message); return }
+      } else {
+        const { error } = await supabase.from('object_meters').insert({ object_id: objId, meter_type_id: mt.id, is_active: true, label: '' })
+        if (error) { alert('Ошибка: ' + error.message); return }
+      }
+      window.dispatchEvent(new Event('rentflow-refresh'))
+      await load()
+    } finally {
+      setBusy(false)
     }
-    window.dispatchEvent(new Event('rentflow-refresh'))
-    load()
   }
 
   async function removeMeter(id: string) {
@@ -109,14 +117,6 @@ export function MetersEditor({ objId }: { objId: string }) {
           </label>
         </div>
       ))}
-      {['electricity_single', 'electricity_day', 'electricity_night', 'electricity_peak', 'electricity_semipeak'].map(code =>
-        activeRows(code).map(r => (
-          <div key={r.id} style={st.serialRow}>
-            <span style={st.idx}>{typeByCode(code)?.label}:</span>
-            <input defaultValue={r.label || ''} placeholder="номер счётчика" style={st.serialInput} onBlur={(e) => setSerial(r.id, e.target.value)} />
-          </div>
-        ))
-      )}
 
       <div style={st.small}>💧 Вода</div>
       {waterRows.length === 0 && <div style={st.note}>счётчиков воды нет</div>}
@@ -135,7 +135,7 @@ export function MetersEditor({ objId }: { objId: string }) {
           <button style={st.del} onClick={() => removeMeter(r.id)}>✕</button>
         </div>
       ))}
-      <button style={st.addBtn} onClick={addWater}>+ Добавить счётчик воды</button>
+      <button style={busy ? st.addBtnOff : st.addBtn} disabled={busy} onClick={addWater}>+ Добавить счётчик воды</button>
 
       <div style={st.small}>🔥 Отопление</div>
       <div style={st.row}>
@@ -175,10 +175,10 @@ const st: Record<string, React.CSSProperties> = {
   half: { width: '38%', padding: 8, borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' },
   input: { flex: 1, minWidth: 120, padding: 8, borderRadius: 8, border: '1px solid #ddd', fontSize: 13, boxSizing: 'border-box' },
   serialRow: { display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 },
-  idx: { fontSize: 12, color: '#888', minWidth: 90 },
   serialInput: { flex: 1, padding: '6px 8px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13 },
   del: { padding: '6px 10px', borderRadius: 8, border: 'none', background: '#e57373', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' },
-  addBtn: { padding: '6px 10px', borderRadius: 8, border: 'none', background: '#90a4ae', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' },
+  addBtn: { padding: '8px 14px', borderRadius: 8, border: 'none', background: '#2196f3', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' },
+  addBtnOff: { padding: '8px 14px', borderRadius: 8, border: 'none', background: '#9e9e9e', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'default' },
 }
 
 export default MetersEditor
