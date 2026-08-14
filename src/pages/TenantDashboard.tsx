@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useTelegramUser } from '../hooks/useTelegramUser'
 import CashNegotiation from '../components/CashNegotiation'
 import { ensureNextPayment } from '../lib/nextPayment'
+import Chat from '../components/Chat'
 import { T, C } from '../theme'
 
 interface PayDetail { type: 'card' | 'sbp'; bank: string; number: string }
@@ -30,6 +31,8 @@ const TABS = [
   { id: 'pay', l: 'Оплата' },
   { id: 'meters', l: 'Счётчики' },
   { id: 'contract', l: 'Договор' },
+  { id: 'chat', l: 'Чат' },
+
 ]
 
 function TabBar({ tab, setTab }: { tab: string; setTab: (t: string) => void }) {
@@ -513,6 +516,18 @@ function TenantRental({ contract, tab }: { contract: any; tab: string }) {
       )}
 
       {msg && <div style={T.msg}>{msg}</div>}
+      {tab === 'chat' && (
+        <div style={T.card}>
+          <div style={T.h2}>Чат с арендодателем</div>
+          <Chat contractId={contract.id} myId={user!.id} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default TenantDashboard
+
     </div>
   )
 }
