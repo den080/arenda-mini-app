@@ -34,16 +34,10 @@ export default function App() {
   useEffect(() => {
     if (!user) { setMode(null); return }
     if (mode !== null) return
-    Promise.all([
-      supabase.from('objects').select('id').eq('landlord_id', user.id).limit(1),
-      supabase.from('contracts').select('id').eq('tenant_id', user.id).eq('status', 'active').limit(1),
-    ]).then(([{ data: o }, { data: c }]) => {
-      const hasO = !!(o && o.length)
-      const hasC = !!(c && c.length)
-      if (isTester) setMode(hasO ? 'landlord' : hasC ? 'tenant' : 'landlord')
-      else setMode(hasO ? 'landlord' : 'tenant')
+    supabase.from('contracts').select('id').eq('tenant_id', user.id).eq('status', 'active').limit(1).then(({ data }) => {
+      setMode(data && data.length > 0 ? 'tenant' : 'landlord')
     })
-  }, [user, isTester])
+  }, [user])
 
   if (loading) return <div style={st.wrap}>⏳ Загрузка...</div>
 
