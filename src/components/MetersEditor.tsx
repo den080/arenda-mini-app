@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { T } from '../theme'
 
 export function MetersEditor({ objId }: { objId: string }) {
   const [types, setTypes] = useState<any[]>([])
@@ -103,82 +104,67 @@ export function MetersEditor({ objId }: { objId: string }) {
 
   return (
     <div>
-      <div style={st.small}>⚡ Электричество</div>
+      <div style={T.tiny}>⚡ Электричество</div>
       {[
         { v: 'none', l: 'Не используется / автопередача данных' },
         { v: '1', l: '1-тарифный' },
         { v: '2', l: '2-тарифный (день/ночь)' },
         { v: '3', l: '3-тарифный (пик/полупик/ночь)' },
       ].map(opt => (
-        <div key={opt.v} style={st.row}>
-          <label style={st.label}>
+        <div key={opt.v} style={{ marginBottom: 6 }}>
+          <label style={{ fontSize: 14, cursor: 'pointer' }}>
             <input type="radio" name={`elec-${objId}`} checked={elecMode === opt.v} onChange={() => setElecMode(opt.v)} />
             {' '}{opt.l}
           </label>
         </div>
       ))}
 
-      <div style={st.small}>💧 Вода</div>
-      {waterRows.length === 0 && <div style={st.note}>счётчиков воды нет</div>}
+      <div style={T.tiny}>💧 Вода</div>
+      {waterRows.length === 0 && <div style={T.tiny}>счётчиков воды нет</div>}
       {waterRows.map(r => (
-        <div key={r.id} style={st.detailRow}>
-          <select value={codeOf(r)} onChange={(e) => setWaterType(r.id, e.target.value)} style={st.half}>
+        <div key={r.id} style={{ ...T.item, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+          <select value={codeOf(r)} onChange={(e) => setWaterType(r.id, e.target.value)} style={{ ...T.select, width: '38%' }}>
             <option value="water_cold">Холодная</option>
             <option value="water_hot">Горячая</option>
           </select>
           <input
             defaultValue={r.label || ''}
             placeholder="номер счётчика"
-            style={st.input}
+            style={{ ...T.select, flex: 1, minWidth: 120 }}
             onBlur={(e) => setSerial(r.id, e.target.value)}
           />
-          <button style={st.del} onClick={() => removeMeter(r.id)}>✕</button>
+          <button style={T.btnDanger} onClick={() => removeMeter(r.id)}>✕</button>
         </div>
       ))}
-      <button style={busy ? st.addBtnOff : st.addBtn} disabled={busy} onClick={addWater}>+ Добавить счётчик воды</button>
+      <button style={busy ? T.btnOff : T.btnSmall} disabled={busy} onClick={addWater}>+ Добавить счётчик воды</button>
 
-      <div style={st.small}>🔥 Отопление</div>
-      <div style={st.row}>
-        <label style={st.label}>
+      <div style={{ ...T.tiny, marginTop: 10 }}>🔥 Отопление</div>
+      <div style={{ marginBottom: 6 }}>
+        <label style={{ fontSize: 14, cursor: 'pointer' }}>
           <input type="checkbox" checked={isAct('heat')} onChange={(e) => setActive('heat', e.target.checked)} />
           {' '}Теплосчётчик установлен
         </label>
       </div>
       {activeRows('heat').map(r => (
-        <div key={r.id} style={st.serialRow}>
-          <input defaultValue={r.label || ''} placeholder="номер теплосчётчика" style={st.serialInput} onBlur={(e) => setSerial(r.id, e.target.value)} />
+        <div key={r.id} style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+          <input defaultValue={r.label || ''} placeholder="номер теплосчётчика" style={{ ...T.select, flex: 1 }} onBlur={(e) => setSerial(r.id, e.target.value)} />
         </div>
       ))}
       {typeByCode('gas') && (
-        <div style={st.row}>
-          <label style={st.label}>
+        <div style={{ marginBottom: 6 }}>
+          <label style={{ fontSize: 14, cursor: 'pointer' }}>
             <input type="checkbox" checked={isAct('gas')} onChange={(e) => setActive('gas', e.target.checked)} />
             {' '}Газ
           </label>
         </div>
       )}
       {activeRows('gas').map(r => (
-        <div key={r.id} style={st.serialRow}>
-          <input defaultValue={r.label || ''} placeholder="номер счётчика газа" style={st.serialInput} onBlur={(e) => setSerial(r.id, e.target.value)} />
+        <div key={r.id} style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+          <input defaultValue={r.label || ''} placeholder="номер счётчика газа" style={{ ...T.select, flex: 1 }} onBlur={(e) => setSerial(r.id, e.target.value)} />
         </div>
       ))}
     </div>
   )
-}
-
-const st: Record<string, React.CSSProperties> = {
-  small: { fontSize: 12, color: '#888', marginTop: 6, marginBottom: 4 },
-  note: { fontSize: 11, color: 'rgba(0,0,0,0.4)', marginBottom: 4 },
-  row: { marginBottom: 8 },
-  label: { fontSize: 14, cursor: 'pointer' },
-  detailRow: { background: '#f9f9f9', borderRadius: 8, padding: 8, marginBottom: 8, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' },
-  half: { width: '38%', padding: 8, borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' },
-  input: { flex: 1, minWidth: 120, padding: 8, borderRadius: 8, border: '1px solid #ddd', fontSize: 13, boxSizing: 'border-box' },
-  serialRow: { display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 },
-  serialInput: { flex: 1, padding: '6px 8px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13 },
-  del: { padding: '6px 10px', borderRadius: 8, border: 'none', background: '#e57373', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' },
-  addBtn: { padding: '8px 14px', borderRadius: 8, border: 'none', background: '#2196f3', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' },
-  addBtnOff: { padding: '8px 14px', borderRadius: 8, border: 'none', background: '#9e9e9e', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'default' },
 }
 
 export default MetersEditor
