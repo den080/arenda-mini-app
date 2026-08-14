@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useTelegramUser } from '../hooks/useTelegramUser'
+import { T, C } from '../theme'
 
 const BANKS = ['Сбербанк', 'Т-Банк (Тинькофф)', 'ВТБ', 'Альфа-Банк', 'Газпромбанк', 'Россельхозбанк', 'Райффайзен Банк', 'Росбанк', 'Открытие', 'Совкомбанк', 'МТС Банк', 'Промсвязьбанк', 'Почта Банк', 'Дом.РФ', 'ЮниКредит Банк']
 
@@ -40,32 +41,36 @@ function DetailsEditor({ list, onChange }: { list: PayDetail[]; onChange: (v: Pa
   return (
     <div>
       {list.map((d, i) => (
-        <div key={i} style={s.detailRow}>
-          <select value={d.type} onChange={e => { const v = [...list]; v[i] = { ...v[i], type: e.target.value as 'card' | 'sbp', number: '' }; onChange(v) }} style={s.half}>
-            <option value="card">Карта банка</option>
-            <option value="sbp">СБП по телефону</option>
-          </select>
-          <select value={d.bank} onChange={e => { const v = [...list]; v[i] = { ...v[i], bank: e.target.value }; onChange(v) }} style={s.half}>
-            {BANKS.map(b => <option key={b} value={b}>{b}</option>)}
-          </select>
-          <input
-            value={d.number}
-            onChange={e => { const v = [...list]; v[i] = { ...v[i], number: d.type === 'card' ? formatCardInput(e.target.value) : formatPhoneInput(e.target.value) }; onChange(v) }}
-            placeholder={d.type === 'card' ? '0000 0000 0000 0000' : '+7 000 000 00-00'}
-            style={s.input}
-            inputMode="numeric"
-          />
-          <button style={s.delButton} onClick={() => onChange(list.filter((_, x) => x !== i))}>✕</button>
+        <div key={i} style={T.item}>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <select value={d.type} onChange={e => { const v = [...list]; v[i] = { ...v[i], type: e.target.value as 'card' | 'sbp', number: '' }; onChange(v) }} style={{ ...T.select, width: '45%' }}>
+              <option value="card">Карта банка</option>
+              <option value="sbp">СБП по телефону</option>
+            </select>
+            <select value={d.bank} onChange={e => { const v = [...list]; v[i] = { ...v[i], bank: e.target.value }; onChange(v) }} style={{ ...T.select, flex: 1 }}>
+              {BANKS.map(b => <option key={b} value={b}>{b}</option>)}
+            </select>
+          </div>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6 }}>
+            <input
+              value={d.number}
+              onChange={e => { const v = [...list]; v[i] = { ...v[i], number: d.type === 'card' ? formatCardInput(e.target.value) : formatPhoneInput(e.target.value) }; onChange(v) }}
+              placeholder={d.type === 'card' ? '0000 0000 0000 0000' : '+7 000 000 00-00'}
+              style={{ ...T.select, flex: 1 }}
+              inputMode="numeric"
+            />
+            <button style={T.btnDanger} onClick={() => onChange(list.filter((_, x) => x !== i))}>✕</button>
+          </div>
         </div>
       ))}
-      <button style={s.addBtn} onClick={() => onChange([...list, { type: 'card', bank: BANKS[0], number: '' }])}>+ Добавить способ оплаты</button>
+      <button style={T.btnSmall} onClick={() => onChange([...list, { type: 'card', bank: BANKS[0], number: '' }])}>+ Добавить способ оплаты</button>
     </div>
   )
 }
 
 function ReadingsModeSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
-    <select style={s.input} value={value} onChange={(e) => onChange(e.target.value)}>
+    <select style={T.input} value={value} onChange={(e) => onChange(e.target.value)}>
       <option value="manual">Арендатор подаёт показания вручную</option>
       <option value="auto">Показания передаются автоматически</option>
       <option value="self">Арендатор платит полную квитанцию сам (показания не нужны)</option>
@@ -130,7 +135,6 @@ export function ObjectManager() {
     load()
   }, [user])
 
-  // Поиск существующего пользователя по последним 10 цифрам телефона
   async function findCounterparty(phoneInput: string): Promise<any | null> {
     const digits = phoneInput.replace(/\D/g, '')
     if (!digits) return null
@@ -195,8 +199,6 @@ export function ObjectManager() {
         { contract_id: contract.id, violation_type: 'payment_overdue', rate: Number(penPay) || 500, rate_unit: 'per_day_rub', starts_after_days: 0 },
         { contract_id: contract.id, violation_type: 'readings_overdue', rate: Number(penRead) || 100, rate_unit: 'per_day_rub', starts_after_days: 0 },
       ])
-      // Первый платёж: если день платежа в этом месяце уже прошёл — ставим его на следующий месяц,
-      // чтобы первый месяц договора был без просрочки
       const now = new Date()
       const payDay = Number(paymentDay) || 1
       let due = new Date(now.getFullYear(), now.getMonth(), payDay)
@@ -306,6 +308,7 @@ export function ObjectManager() {
       await supabase.from('cash_meetings').delete().in('contract_id', ids)
       await supabase.from('deferred_requests').delete().in('contract_id', ids)
       await supabase.from('deferred_debts').delete().in('contract_id', ids)
+      await supabase.from('frozen_penalties').delete().in('contract_id', ids)
       await supabase.from('contracts').delete().in('id', ids)
     }
     await supabase.from('object_meters').delete().eq('object_id', id)
@@ -323,22 +326,22 @@ export function ObjectManager() {
   )
 
   return (
-    <div style={s.card}>
-      <div style={s.h2}>➕ Управление объектами</div>
-      <button style={s.button} onClick={() => setShowForm(!showForm)}>{showForm ? 'Скрыть форму' : 'Добавить объект'}</button>
+    <div style={T.card}>
+      <div style={T.h2}>Управление объектами</div>
+      <button style={T.btn} onClick={() => setShowForm(!showForm)}>{showForm ? 'Скрыть форму' : 'Добавить объект'}</button>
       {showForm && (
-        <div>
-          <div style={s.small}>Адрес объекта *</div>
-          <input style={s.input} value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Квартира, дом, гараж, коммерция" />
-          <div style={s.small}>Заметка</div>
-          <input style={s.input} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Необязательно" />
-          <div style={s.small}>Арендатор (имя)</div>
-          <input style={s.input} value={name} onChange={(e) => setName(e.target.value)} placeholder="Имя" />
-          <div style={s.small}>Телефон арендатора</div>
-          <input style={s.input} value={phone} onChange={(e) => setPhone(formatPhoneInput(e.target.value))} placeholder="+7 905 000-00-00" inputMode="tel" />
-          <div style={s.small}>Начало договора</div>
+        <div style={{ marginTop: 12 }}>
+          <div style={T.tiny}>Адрес объекта *</div>
+          <input style={T.input} value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Квартира, дом, гараж, коммерция" />
+          <div style={T.tiny}>Заметка</div>
+          <input style={T.input} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Необязательно" />
+          <div style={T.tiny}>Арендатор (имя)</div>
+          <input style={T.input} value={name} onChange={(e) => setName(e.target.value)} placeholder="Имя" />
+          <div style={T.tiny}>Телефон арендатора</div>
+          <input style={T.input} value={phone} onChange={(e) => setPhone(formatPhoneInput(e.target.value))} placeholder="+7 905 000-00-00" inputMode="tel" />
+          <div style={T.tiny}>Начало договора</div>
           <input
-            style={s.input}
+            style={T.input}
             type="date"
             value={startDate}
             onChange={(e) => {
@@ -348,60 +351,60 @@ export function ObjectManager() {
               if (d >= 1 && d <= 31) setPaymentDay(String(d))
             }}
           />
-          <div style={s.small}>Сумма аренды, руб</div>
-          <input style={s.input} value={rent} onChange={(e) => setRent(e.target.value)} placeholder="85000" inputMode="numeric" />
-          <div style={s.small}>Залоговый депозит, руб</div>
-          <input style={s.input} value={deposit} onChange={(e) => setDeposit(e.target.value)} placeholder="Например: 85000" inputMode="numeric" />
-          <div style={s.small}>День платежа (число месяца, подставляется из начала договора)</div>
-          <input style={s.input} value={paymentDay} onChange={(e) => setPaymentDay(e.target.value)} placeholder="1" inputMode="numeric" />
-          <div style={s.small}>Режим показаний счётчиков</div>
+          <div style={T.tiny}>Сумма аренды, руб</div>
+          <input style={T.input} value={rent} onChange={(e) => setRent(e.target.value)} placeholder="85000" inputMode="numeric" />
+          <div style={T.tiny}>Залоговый депозит, руб</div>
+          <input style={T.input} value={deposit} onChange={(e) => setDeposit(e.target.value)} placeholder="Например: 85000" inputMode="numeric" />
+          <div style={T.tiny}>День платежа (число месяца, подставляется из начала договора)</div>
+          <input style={T.input} value={paymentDay} onChange={(e) => setPaymentDay(e.target.value)} placeholder="1" inputMode="numeric" />
+          <div style={T.tiny}>Режим показаний счётчиков</div>
           <ReadingsModeSelect value={readingsMode} onChange={setReadingsMode} />
           {readingsMode === 'manual' && (
             <div>
-              <div style={s.small}>Крайний день подачи показаний (число месяца)</div>
-              <input style={s.input} value={meterDay} onChange={(e) => setMeterDay(e.target.value)} placeholder="15" inputMode="numeric" />
+              <div style={T.tiny}>Крайний день подачи показаний (число месяца)</div>
+              <input style={T.input} value={meterDay} onChange={(e) => setMeterDay(e.target.value)} placeholder="15" inputMode="numeric" />
             </div>
           )}
-          <div style={s.small}>Окончание договора</div>
-          <input style={s.input} type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-          <div style={s.small}>Способ оплаты</div>
-          <select style={s.input} value={method} onChange={(e) => setMethod(e.target.value)}>{methodOptions}</select>
+          <div style={T.tiny}>Окончание договора</div>
+          <input style={T.input} type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+          <div style={T.tiny}>Способ оплаты</div>
+          <select style={T.input} value={method} onChange={(e) => setMethod(e.target.value)}>{methodOptions}</select>
           {method !== 'cash' && (
             <div>
-              <div style={s.small}>Способы оплаты (карты банков и СБП) *</div>
+              <div style={T.tiny}>Способы оплаты (карты банков и СБП) *</div>
               <DetailsEditor list={details} onChange={(v) => { setDetails(v); if (v.length > 0) setAddDetailsErr(null) }} />
-              {addDetailsErr && <div style={s.warnNote}>{addDetailsErr}</div>}
+              {addDetailsErr && <div style={T.noteRed}>{addDetailsErr}</div>}
             </div>
           )}
-          <div style={s.small}>Штраф за просрочку оплаты, руб/день</div>
-          <input style={s.input} value={penPay} onChange={(e) => setPenPay(e.target.value)} placeholder="500" inputMode="numeric" />
+          <div style={T.tiny}>Штраф за просрочку оплаты, руб/день</div>
+          <input style={T.input} value={penPay} onChange={(e) => setPenPay(e.target.value)} placeholder="500" inputMode="numeric" />
           {readingsMode === 'manual' && (
             <div>
-              <div style={s.small}>Штраф за просрочку показаний, руб/день</div>
-              <input style={s.input} value={penRead} onChange={(e) => setPenRead(e.target.value)} placeholder="100" inputMode="numeric" />
+              <div style={T.tiny}>Штраф за просрочку показаний, руб/день</div>
+              <input style={T.input} value={penRead} onChange={(e) => setPenRead(e.target.value)} placeholder="100" inputMode="numeric" />
             </div>
           )}
-          <div style={s.small}>Напоминать за сколько дней до срока</div>
-          <input style={s.input} value={remind} onChange={(e) => setRemind(e.target.value)} placeholder="3" inputMode="numeric" />
-          <button style={s.button} onClick={save}>{saving ? 'Сохранение...' : 'Сохранить'}</button>
+          <div style={T.tiny}>Напоминать за сколько дней до срока</div>
+          <input style={T.input} value={remind} onChange={(e) => setRemind(e.target.value)} placeholder="3" inputMode="numeric" />
+          <button style={T.btn} onClick={save}>{saving ? 'Сохранение…' : 'Сохранить'}</button>
         </div>
       )}
-      <div style={s.h2}>✏️ Мои объекты</div>
+      <div style={{ ...T.h2, marginTop: 16 }}>Мои объекты</div>
       {objects.map((o) => (
-        <div key={o.id} style={s.objRow}>
+        <div key={o.id} style={T.item}>
           {editId === o.id ? (
             <div>
-              <div style={s.small}>Адрес</div>
-              <input style={s.input} value={eAddress} onChange={(e) => setEAddress(e.target.value)} />
-              <div style={s.small}>Заметка</div>
-              <input style={s.input} value={eNotes} onChange={(e) => setENotes(e.target.value)} />
-              <div style={s.small}>Арендатор (имя)</div>
-              <input style={s.input} value={eName} onChange={(e) => setEName(e.target.value)} />
-              <div style={s.small}>Телефон арендатора</div>
-              <input style={s.input} value={ePhone} onChange={(e) => setEPhone(formatPhoneInput(e.target.value))} inputMode="tel" />
-              <div style={s.small}>Начало договора</div>
+              <div style={T.tiny}>Адрес</div>
+              <input style={T.input} value={eAddress} onChange={(e) => setEAddress(e.target.value)} />
+              <div style={T.tiny}>Заметка</div>
+              <input style={T.input} value={eNotes} onChange={(e) => setENotes(e.target.value)} />
+              <div style={T.tiny}>Арендатор (имя)</div>
+              <input style={T.input} value={eName} onChange={(e) => setEName(e.target.value)} />
+              <div style={T.tiny}>Телефон арендатора</div>
+              <input style={T.input} value={ePhone} onChange={(e) => setEPhone(formatPhoneInput(e.target.value))} inputMode="tel" />
+              <div style={T.tiny}>Начало договора</div>
               <input
-                style={s.input}
+                style={T.input}
                 type="date"
                 value={eStartDate}
                 onChange={(e) => {
@@ -411,76 +414,60 @@ export function ObjectManager() {
                   if (d >= 1 && d <= 31) setEPaymentDay(String(d))
                 }}
               />
-              <div style={s.small}>Сумма аренды, руб</div>
-              <input style={s.input} value={eRent} onChange={(e) => setERent(e.target.value)} inputMode="numeric" />
-              <div style={s.small}>Залоговый депозит, руб</div>
-              <input style={s.input} value={eDeposit} onChange={(e) => setEDeposit(e.target.value)} inputMode="numeric" />
-              <div style={s.small}>День платежа (число месяца, подставляется из начала договора)</div>
-              <input style={s.input} value={ePaymentDay} onChange={(e) => setEPaymentDay(e.target.value)} inputMode="numeric" />
-              <div style={s.small}>Режим показаний счётчиков</div>
+              <div style={T.tiny}>Сумма аренды, руб</div>
+              <input style={T.input} value={eRent} onChange={(e) => setERent(e.target.value)} inputMode="numeric" />
+              <div style={T.tiny}>Залоговый депозит, руб</div>
+              <input style={T.input} value={eDeposit} onChange={(e) => setEDeposit(e.target.value)} inputMode="numeric" />
+              <div style={T.tiny}>День платежа (число месяца, подставляется из начала договора)</div>
+              <input style={T.input} value={ePaymentDay} onChange={(e) => setEPaymentDay(e.target.value)} inputMode="numeric" />
+              <div style={T.tiny}>Режим показаний счётчиков</div>
               <ReadingsModeSelect value={eReadingsMode} onChange={setEReadingsMode} />
               {eReadingsMode === 'manual' && (
                 <div>
-                  <div style={s.small}>Крайний день показаний</div>
-                  <input style={s.input} value={eMeterDay} onChange={(e) => setEMeterDay(e.target.value)} inputMode="numeric" />
+                  <div style={T.tiny}>Крайний день показаний</div>
+                  <input style={T.input} value={eMeterDay} onChange={(e) => setEMeterDay(e.target.value)} inputMode="numeric" />
                 </div>
               )}
-              <div style={s.small}>Окончание договора</div>
-              <input style={s.input} type="date" value={eEndDate} onChange={(e) => setEEndDate(e.target.value)} />
-              <div style={s.small}>Способ оплаты</div>
-              <select style={s.input} value={eMethod} onChange={(e) => setEMethod(e.target.value)}>{methodOptions}</select>
+              <div style={T.tiny}>Окончание договора</div>
+              <input style={T.input} type="date" value={eEndDate} onChange={(e) => setEEndDate(e.target.value)} />
+              <div style={T.tiny}>Способ оплаты</div>
+              <select style={T.input} value={eMethod} onChange={(e) => setEMethod(e.target.value)}>{methodOptions}</select>
               {eMethod !== 'cash' && (
                 <div>
-                  <div style={s.small}>Способы оплаты (карты банков и СБП) *</div>
+                  <div style={T.tiny}>Способы оплаты (карты банков и СБП) *</div>
                   <DetailsEditor list={eDetails} onChange={(v) => { setEDetails(v); if (v.length > 0) setEditDetailsErr(null) }} />
-                  {editDetailsErr && <div style={s.warnNote}>{editDetailsErr}</div>}
+                  {editDetailsErr && <div style={T.noteRed}>{editDetailsErr}</div>}
                 </div>
               )}
-              <div style={s.small}>Штраф за просрочку оплаты, руб/день</div>
-              <input style={s.input} value={ePenPay} onChange={(e) => setEPenPay(e.target.value)} inputMode="numeric" />
+              <div style={T.tiny}>Штраф за просрочку оплаты, руб/день</div>
+              <input style={T.input} value={ePenPay} onChange={(e) => setEPenPay(e.target.value)} inputMode="numeric" />
               {eReadingsMode === 'manual' && (
                 <div>
-                  <div style={s.small}>Штраф за просрочку показаний, руб/день</div>
-                  <input style={s.input} value={ePenRead} onChange={(e) => setEPenRead(e.target.value)} inputMode="numeric" />
+                  <div style={T.tiny}>Штраф за просрочку показаний, руб/день</div>
+                  <input style={T.input} value={ePenRead} onChange={(e) => setEPenRead(e.target.value)} inputMode="numeric" />
                 </div>
               )}
-              <div style={s.small}>Напоминать за сколько дней</div>
-              <input style={s.input} value={eRemind} onChange={(e) => setERemind(e.target.value)} inputMode="numeric" />
-              <button style={s.blueBtn} onClick={saveEdit}>Сохранить</button>
-              <button style={s.blueBtn} onClick={() => setEditId(null)}>Отмена</button>
+              <div style={T.tiny}>Напоминать за сколько дней</div>
+              <input style={T.input} value={eRemind} onChange={(e) => setERemind(e.target.value)} inputMode="numeric" />
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button style={T.btnSmall} onClick={saveEdit}>Сохранить</button>
+                <button style={T.btnSecondary} onClick={() => setEditId(null)}>Отмена</button>
+              </div>
             </div>
           ) : (
-            <div style={s.row}>
-              <span style={{ flex: 1 }}>{o.address}</span>
-              <span style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
-                <button style={s.smallButton} onClick={() => openEdit(o)}>✏️</button>
-                <button style={s.delButton} onClick={() => removeObject(o.id)}>🗑</button>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start' }}>
+              <span style={{ flex: 1, fontSize: 15, fontWeight: 600 }}>{o.address}</span>
+              <span style={{ display: 'flex', gap: 6 }}>
+                <button style={T.btnSecondary} onClick={() => openEdit(o)}>✏️</button>
+                <button style={T.btnDanger} onClick={() => removeObject(o.id)}>🗑</button>
               </span>
             </div>
           )}
         </div>
       ))}
-      {msg && <div style={s.msg}>{msg}</div>}
+      {msg && <div style={T.msg}>{msg}</div>}
     </div>
   )
-}
-
-const s: Record<string, React.CSSProperties> = {
-  card: { fontFamily: 'system-ui', maxWidth: 600, margin: '0 auto', padding: 16 },
-  h2: { fontSize: 17, fontWeight: 700, margin: '12px 0 8px' },
-  button: { width: '100%', padding: 12, borderRadius: 10, border: 'none', background: '#2196f3', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', marginBottom: 8 },
-  blueBtn: { padding: '8px 14px', borderRadius: 8, border: 'none', background: '#2196f3', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginRight: 8, marginTop: 6 },
-  smallButton: { padding: '6px 10px', borderRadius: 8, border: 'none', background: '#90a4ae', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' },
-  delButton: { padding: '6px 10px', borderRadius: 8, border: 'none', background: '#e57373', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' },
-  addBtn: { padding: '8px 14px', borderRadius: 8, border: 'none', background: '#2196f3', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' },
-  input: { width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 15, marginBottom: 8, boxSizing: 'border-box' },
-  half: { width: '48%', padding: '8px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, marginBottom: 8, boxSizing: 'border-box' },
-  row: { display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start', marginBottom: 8 },
-  small: { fontSize: 13, color: '#666', margin: '4px 0' },
-  msg: { padding: 12, borderRadius: 10, background: '#e8f5e9', color: '#2e7d32', marginTop: 8, fontSize: 14 },
-  warnNote: { padding: '8px 10px', backgroundColor: '#fdecea', border: '1px solid #ef9a9a', borderRadius: 8, color: '#c00', fontSize: 13, fontWeight: 600, marginTop: 4, marginBottom: 8 },
-  objRow: { background: '#fff', borderRadius: 10, padding: 10, marginBottom: 8, boxShadow: '0 1px 4px rgba(0,0,0,0.1)' },
-  detailRow: { background: '#f9f9f9', borderRadius: 8, padding: 8, marginBottom: 8 },
 }
 
 export default ObjectManager
