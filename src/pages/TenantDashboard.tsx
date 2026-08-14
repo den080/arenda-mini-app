@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useTelegramUser } from '../hooks/useTelegramUser'
 import CashNegotiation from '../components/CashNegotiation'
-import CashNegotiation from '../components/CashNegotiation'
 import { ensureNextPayment } from '../lib/nextPayment'
 import { T, C } from '../theme'
 
