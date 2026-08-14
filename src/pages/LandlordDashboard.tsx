@@ -314,6 +314,57 @@ export function LandlordDashboard() {
     }
   }
 
+  // Подтверждение: первый месяц + депозит получены очно при подписании
+  async function confirmSigning(paymentId: string) {
+    const { error } = await supabase
+      .from('payments')
+      .update({ confirmed_by_landlord: true, confirmed_at: new Date().toISOString() })
+      .eq('id', paymentId)
+    if (error) { alert('Ошибка: ' + error.message); return }
+    const { data: pay } = await supabase.from('payments').select('*').eq('id', paymentId).maybeSingle()
+    if (pay) {
+      const { data: con } = await supabase.from('contracts').select('*').eq('id', pay.contract_id).maybeSingle()
+      if (con) {
+        await supabase.from('notifications_log').insert({
+          user_id: con.tenant_id, type: 'payment_confirmed', related_id: pay.id,
+          message: '🟢 Арендодатель подтвердил получение первого месяца и депозита при подписании',
+          sent_at: new Date().toISOString(),
+        })
+      }
+    }
+    window.dispatchEvent(new Event('rentflow-refresh'))
+  }
+
+  // Внести очередной платёж по депозиту (сумма прибавляется к внесённому, не больше общей)
+  async function addDepositPayment(contractId: string) {
+    const { data: con } = await supabase.from('contracts').select('deposit_amount, deposit_paid').eq('id', contractId).maybeSingle()
+    if (!con) return
+    const total = Number(con.deposit_amount || 0)
+    const paid = Number(con.deposit_paid || 0)
+    if (total <= 0) { alert('Сначала укажите общую сумму депозита в редактировании объекта'); return }
+    const val = window.prompt(`Внесите платёж по депозиту (внесено ${paid.toFixed(0)} из ${total.toFixed(0)}), ₽:`)
+    if (val === null) return
+    const amount = Number(val)
+    if (isNaN(amount) || amount <= 0) { alert('Некорректная сумма'); return }
+    const newPaid = Math.min(total, paid + amount)
+    const { error } = await supabase.from('contracts').update({ deposit_paid: newPaid }).eq('id', contractId)
+    if (error) { alert('Ошибка: ' + error.message); return }
+    window.dispatchEvent(new Event('rentflow-refresh'))
+  }
+
+  // Исправить сумму «внесено» вручную
+  async function editDepositPaid(contractId: string) {
+    const { data: con } = await supabase.from('contracts').select('deposit_amount, deposit_paid').eq('id', contractId).maybeSingle()
+    if (!con) return
+    const val = window.prompt(`Новое значение «внесено» (общая сумма депозита ${Number(con.deposit_amount || 0).toFixed(0)}), ₽:`, String(con.deposit_paid || 0))
+    if (val === null) return
+    const v = Number(val)
+    if (isNaN(v) || v < 0) { alert('Некорректное значение'); return }
+    const { error } = await supabase.from('contracts').update({ deposit_paid: Math.min(Number(con.deposit_amount || 0), v) }).eq('id', contractId)
+    if (error) { alert('Ошибка: ' + error.message); return }
+    window.dispatchEvent(new Event('rentflow-refresh'))
+  }
+
   async function confirmDeferral(requestId: string, contractId: string, paymentId: string, amount: number, tenantId: string) {
     const { data: pay } = await supabase.from('payments').select('*').eq('id', paymentId).maybeSingle()
     const { error: e1 } = await supabase.from('frozen_penalties').insert({
