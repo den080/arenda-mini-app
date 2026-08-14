@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useTelegramUser } from '../hooks/useTelegramUser'
-import { T, C } from '../theme'
+import { T } from '../theme'
 
 const BANKS = ['Сбербанк', 'Т-Банк (Тинькофф)', 'ВТБ', 'Альфа-Банк', 'Газпромбанк', 'Россельхозбанк', 'Райффайзен Банк', 'Росбанк', 'Открытие', 'Совкомбанк', 'МТС Банк', 'Промсвязьбанк', 'Почта Банк', 'Дом.РФ', 'ЮниКредит Банк']
 
