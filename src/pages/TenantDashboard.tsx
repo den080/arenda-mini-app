@@ -1,3 +1,139 @@
+import { useState, useEffect } from 'react'
+import { supabase } from '../lib/supabase'
+import { useTelegramUser } from '../hooks/useTelegramUser'
+import CashNegotiation from '../components/CashNegotiation'
+import { T, C } from '../theme'
+
+interface PayDetail { type: 'card' | 'sbp'; bank: string; number: string }
+interface Notification { id: string; user_id: string; type: string; related_id: string; sent_at: string }
+
+function parseDate(d: any): Date {
+  const [y, m, dd] = String(d).slice(0, 10).split('-').map(Number)
+  return new Date(y, (m || 1) - 1, dd || 1)
+}
+
+function formatCardNumber(v: string): string {
+  const d = (v || '').replace(/\D/g, '').slice(0, 16)
+  return d.replace(/(.{4})/g, '$1 ').trim()
+}
+
+function formatPhoneDisplay(v: string): string {
+  const d = (v || '').replace(/\D/g, '')
+  const x = d.length === 11 && (d.startsWith('7') || d.startsWith('8')) ? d.slice(1) : d
+  if (x.length === 10) return `+7 ${x.slice(0, 3)} ${x.slice(3, 6)} ${x.slice(6, 8)} ${x.slice(8, 10)}`
+  return v || ''
+}
+
+const TABS = [
+  { id: 'overview', l: 'Обзор' },
+  { id: 'pay', l: 'Оплата' },
+  { id: 'meters', l: 'Счётчики' },
+  { id: 'contract', l: 'Договор' },
+]
+
+function TabBar({ tab, setTab }: { tab: string; setTab: (t: string) => void }) {
+  return (
+    <div style={{ display: 'flex', background: C.gray, borderRadius: 12, padding: 4, marginBottom: 12 }}>
+      {TABS.map(t => (
+        <button
+          key={t.id}
+          onClick={() => setTab(t.id)}
+          style={{
+            flex: 1, padding: '9px 4px', borderRadius: 9, border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            background: tab === t.id ? '#fff' : 'transparent',
+            color: tab === t.id ? C.text : C.text2,
+            boxShadow: tab === t.id ? '0 1px 3px rgba(0,0,0,0.12)' : 'none',
+          }}
+        >{t.l}</button>
+      ))}
+    </div>
+  )
+}
+
+export function TenantDashboard() {
+  const { user, loading: userLoading } = useTelegramUser()
+  const [contracts, setContracts] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [notifications, setNotifications] = useState<Notification[]>([])
+  const [sel, setSel] = useState(0)
+  const [tab, setTab] = useState('overview')
+
+  async function load() {
+    if (!user) return
+    const { data: cs } = await supabase
+      .from('contracts').select('*')
+      .eq('tenant_id', user.id).eq('status', 'active')
+      .order('created_at', { ascending: true })
+    const list: any[] = []
+    for (const c of cs || []) {
+      const { data: obj } = await supabase.from('objects').select('address').eq('id', c.object_id).maybeSingle()
+      list.push({ ...c, _address: obj?.address || 'Объект' })
+    }
+    setContracts(list)
+    const { data: notifData } = await supabase
+      .from('notifications_log').select('*')
+      .eq('user_id', user.id)
+      .order('sent_at', { ascending: false }).limit(5)
+    setNotifications(notifData || [])
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    load()
+    const interval = setInterval(() => load(), 30000)
+    window.addEventListener('rentflow-refresh', () => load())
+    return () => clearInterval(interval)
+  }, [user])
+
+  const getNotificationText = (type: string) => {
+    switch (type) {
+      case 'payment_claimed': return '✅ Арендатор сообщил об оплате'
+      case 'payment_confirmed': return '🟢 Арендодатель подтвердил оплату'
+      case 'meter_submitted': return '💦 Переданы новые показания'
+      case 'cash_proposed': return '💵 Предложено время встречи наличными'
+      case 'cash_confirmed': return '🤝 Время встречи наличными подтверждено'
+      case 'deferred_proposed': return '🙏 Заявка на отсрочку штрафа отправлена'
+      case 'deferred_confirmed': return '🧊 Замороженный штраф обновлён'
+      default: return type
+    }
+  }
+
+  if (userLoading || loading) return <div style={T.page}>Загрузка…</div>
+
+  const current = contracts[Math.min(sel, contracts.length - 1)]
+
+  return (
+    <div style={T.page}>
+      <h1 style={T.h1}>Моя аренда</h1>
+      {contracts.length === 0 ? (
+        <div style={T.card}>🤝 У вас пока нет активной аренды. Попросите арендодателя добавить объект и указать ваш номер телефона в договоре — после этого аренда появится здесь.</div>
+      ) : (
+        <>
+          {contracts.length > 1 && (
+            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', marginBottom: 10, paddingBottom: 4 }}>
+              {contracts.map((c, i) => (
+                <button key={c.id} style={{ ...(i === sel ? T.btnSmall : T.btnSecondary), whiteSpace: 'nowrap' }} onClick={() => setSel(i)}>{c._address}</button>
+              ))}
+            </div>
+          )}
+          <TabBar tab={tab} setTab={setTab} />
+          <TenantRental contract={current} tab={tab} />
+        </>
+      )}
+
+      <div style={T.card}>
+        <div style={T.h2}>Уведомления</div>
+        {notifications.length === 0 ? (
+          <div style={T.small}>Нет уведомлений</div>
+        ) : (
+          notifications.map(n => (
+            <div key={n.id} style={{ padding: '8px 0', borderBottom: `1px solid ${C.line}`, fontSize: 14 }}>{(n as any).message || getNotificationText(n.type)}</div>
+          ))
+        )}
+      </div>
+    </div>
+  )
+}
 function TenantRental({ contract, tab }: { contract: any; tab: string }) {
   const { user } = useTelegramUser()
   const [data, setData] = useState<any>(null)
