@@ -4,8 +4,8 @@ import { useTelegramUser } from '../hooks/useTelegramUser'
 import CashNegotiation from '../components/CashNegotiation'
 import MetersEditor from '../components/MetersEditor'
 import ReadingsReview from '../components/ReadingsReview'
-import { ensureNextPayment } from '../lib/nextPayment'
 import Chat from '../components/Chat'
+import { ensureNextPayment } from '../lib/nextPayment'
 import { T, C } from '../theme'
 import type { Object as PropertyObject, Contract, NotificationLog, User } from '../types/database'
 
@@ -139,6 +139,7 @@ export function LandlordDashboard() {
     if (error) { alert('Ошибка: ' + error.message); return }
     const { data: pay } = await supabase.from('payments').select('*').eq('id', paymentId).maybeSingle()
     if (pay) {
+      await ensureNextPayment(pay.contract_id)
       const { data: con } = await supabase.from('contracts').select('*').eq('id', pay.contract_id).maybeSingle()
       if (con) await supabase.from('notifications_log').insert({ user_id: con.tenant_id, type: 'payment_confirmed', related_id: pay.id, message: '🟢 Арендодатель подтвердил получение первого месяца и депозита при подписании', sent_at: new Date().toISOString() })
     }
@@ -238,6 +239,7 @@ export function LandlordDashboard() {
     if (cardSatisfied && cashSatisfied) { update.confirmed_by_landlord = true; update.confirmed_at = new Date().toISOString() }
     const { error: e1 } = await supabase.from('payments').update(update).eq('id', paymentId)
     if (e1) { alert('Ошибка: ' + e1.message); return }
+    if (update.confirmed_by_landlord) await ensureNextPayment(pay.contract_id)
     const { data: con } = await supabase.from('contracts').select('*').eq('id', pay.contract_id).maybeSingle()
     if (con) {
       const msg = channel === 'card' ? '🟢 Арендодатель подтвердил получение по безналу' : (close ? '⚪ Наличный канал закрыт' : '🟢 Арендодатель подтвердил получение наличных')
@@ -462,6 +464,7 @@ export function LandlordDashboard() {
               </div>
             </>
           )}
+
           {tab === 'meters' && current && (
             <>
               <div style={T.card}>
@@ -474,7 +477,9 @@ export function LandlordDashboard() {
                   <ReadingsReview contractId={contract.id} tenantId={contract.tenant_id} />
                 </div>
               )}
-             
+            </>
+          )}
+
           {tab === 'contract' && current && contract && (
             <>
               <div style={T.card}>
@@ -518,17 +523,16 @@ export function LandlordDashboard() {
               </div>
             </>
           )}
-        </>
-      )}
-{tab === 'chat' && contract && (
-               <div style={T.card}>
-               <div style={T.h2}>Чат с арендатором</div>
-               <Chat contractId={contract.id} myId={user!.id} />
+
+          {tab === 'chat' && contract && (
+            <div style={T.card}>
+              <div style={T.h2}>Чат с арендатором</div>
+              <Chat contractId={contract.id} myId={user!.id} />
             </div>
           )}
+        </>
+      )}
 
-            </>
-          )}
       <div style={T.card}>
         <div style={T.h2}>Статистика</div>
         <div style={L.filtersRow}>
@@ -584,7 +588,6 @@ function TabBar({ tab, setTab }: { tab: string; setTab: (t: string) => void }) {
     { id: 'meters', l: 'Счётчики' },
     { id: 'contract', l: 'Договор' },
     { id: 'chat', l: 'Чат' },
-
   ]
   return (
     <div style={{ display: 'flex', background: C.gray, borderRadius: 12, padding: 4, marginBottom: 12 }}>
@@ -613,4 +616,3 @@ const L: Record<string, React.CSSProperties> = {
 }
 
 export default LandlordDashboard
-
