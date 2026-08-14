@@ -20,11 +20,13 @@ export function MetersEditor({ objId }: { objId: string }) {
   }, [objId])
 
   const typeByCode = (code: string) => types.find(t => t.code === code)
-  const activeRows = (code: string) => rows.filter(r => {
-    const t = types.find(x => x.id === r.meter_type_id)
-    return t?.code === code && r.is_active
-  })
+  const codeOf = (r: any) => (types.find(t => t.id === r.meter_type_id) || {}).code
+  const activeRows = (code: string) => rows.filter(r => codeOf(r) === code && r.is_active)
   const isAct = (code: string) => activeRows(code).length > 0
+
+  const waterCodes = ['water_cold', 'water_hot']
+  const isWater = (r: any) => waterCodes.includes(codeOf(r)) && r.is_active
+  const waterRows = rows.filter(isWater)
 
   async function setActive(code: string, active: boolean) {
     const mt = typeByCode(code)
@@ -44,11 +46,18 @@ export function MetersEditor({ objId }: { objId: string }) {
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
 
-  async function addMeter(code: string) {
+  async function setWaterType(id: string, code: string) {
     const mt = typeByCode(code)
     if (!mt) return
-    const all = rows.filter(r => r.meter_type_id === mt.id)
-    const inactive = all.find(r => !r.is_active)
+    await supabase.from('object_meters').update({ meter_type_id: mt.id }).eq('id', id)
+    window.dispatchEvent(new Event('rentflow-refresh'))
+    load()
+  }
+
+  async function addWater() {
+    const mt = typeByCode('water_cold')
+    if (!mt) return
+    const inactive = rows.find(r => !r.is_active && waterCodes.includes(codeOf(r)))
     if (inactive) {
       await supabase.from('object_meters').update({ is_active: true }).eq('id', inactive.id)
     } else {
@@ -84,18 +93,6 @@ export function MetersEditor({ objId }: { objId: string }) {
 
   const elecMode = getElecMode()
 
-  const serialRow = (r: any, withDelete: boolean) => (
-    <div key={r.id} style={st.serialRow}>
-      <input
-        defaultValue={r.label || ''}
-        placeholder="номер счётчика"
-        style={st.serialInput}
-        onBlur={(e) => setSerial(r.id, e.target.value)}
-      />
-      {withDelete && <button style={st.del} onClick={() => removeMeter(r.id)}>✕</button>}
-    </div>
-  )
-
   return (
     <div>
       <div style={st.small}>⚡ Электричество</div>
@@ -122,18 +119,23 @@ export function MetersEditor({ objId }: { objId: string }) {
       )}
 
       <div style={st.small}>💧 Вода</div>
-      {['water_cold', 'water_hot'].map(code => {
-        const t = typeByCode(code)
-        const act = activeRows(code)
-        return (
-          <div key={code} style={{ marginBottom: 10 }}>
-            <div style={st.small}>{t?.label || code}</div>
-            {act.length === 0 && <div style={st.note}>счётчиков нет</div>}
-            {act.map(r => serialRow(r, true))}
-            <button style={st.addBtn} onClick={() => addMeter(code)}>+ Добавить счётчик</button>
-          </div>
-        )
-      })}
+      {waterRows.length === 0 && <div style={st.note}>счётчиков воды нет</div>}
+      {waterRows.map(r => (
+        <div key={r.id} style={st.detailRow}>
+          <select value={codeOf(r)} onChange={(e) => setWaterType(r.id, e.target.value)} style={st.half}>
+            <option value="water_cold">Холодная</option>
+            <option value="water_hot">Горячая</option>
+          </select>
+          <input
+            defaultValue={r.label || ''}
+            placeholder="номер счётчика"
+            style={st.input}
+            onBlur={(e) => setSerial(r.id, e.target.value)}
+          />
+          <button style={st.del} onClick={() => removeMeter(r.id)}>✕</button>
+        </div>
+      ))}
+      <button style={st.addBtn} onClick={addWater}>+ Добавить счётчик воды</button>
 
       <div style={st.small}>🔥 Отопление</div>
       <div style={st.row}>
@@ -142,7 +144,11 @@ export function MetersEditor({ objId }: { objId: string }) {
           {' '}Теплосчётчик установлен
         </label>
       </div>
-      {activeRows('heat').map(r => serialRow(r, false))}
+      {activeRows('heat').map(r => (
+        <div key={r.id} style={st.serialRow}>
+          <input defaultValue={r.label || ''} placeholder="номер теплосчётчика" style={st.serialInput} onBlur={(e) => setSerial(r.id, e.target.value)} />
+        </div>
+      ))}
       {typeByCode('gas') && (
         <div style={st.row}>
           <label style={st.label}>
@@ -151,7 +157,11 @@ export function MetersEditor({ objId }: { objId: string }) {
           </label>
         </div>
       )}
-      {activeRows('gas').map(r => serialRow(r, false))}
+      {activeRows('gas').map(r => (
+        <div key={r.id} style={st.serialRow}>
+          <input defaultValue={r.label || ''} placeholder="номер счётчика газа" style={st.serialInput} onBlur={(e) => setSerial(r.id, e.target.value)} />
+        </div>
+      ))}
     </div>
   )
 }
@@ -161,10 +171,13 @@ const st: Record<string, React.CSSProperties> = {
   note: { fontSize: 11, color: 'rgba(0,0,0,0.4)', marginBottom: 4 },
   row: { marginBottom: 8 },
   label: { fontSize: 14, cursor: 'pointer' },
+  detailRow: { background: '#f9f9f9', borderRadius: 8, padding: 8, marginBottom: 8, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' },
+  half: { width: '38%', padding: 8, borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' },
+  input: { flex: 1, minWidth: 120, padding: 8, borderRadius: 8, border: '1px solid #ddd', fontSize: 13, boxSizing: 'border-box' },
   serialRow: { display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 },
   idx: { fontSize: 12, color: '#888', minWidth: 90 },
   serialInput: { flex: 1, padding: '6px 8px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13 },
-  del: { padding: '4px 8px', borderRadius: 6, border: 'none', background: '#ff5252', color: '#fff', fontSize: 12, cursor: 'pointer' },
+  del: { padding: '6px 10px', borderRadius: 8, border: 'none', background: '#e57373', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' },
   addBtn: { padding: '6px 10px', borderRadius: 8, border: 'none', background: '#90a4ae', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' },
 }
 
