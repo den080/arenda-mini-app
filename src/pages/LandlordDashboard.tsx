@@ -22,7 +22,6 @@ interface ObjectWithStatus extends PropertyObject {
   waitingForReadings?: boolean
   needUtilitiesReminder?: boolean
   readingsMode?: string
-  bgColor?: string
   frozenTotal?: number
   frozenRows?: any[]
   deferredRequests?: any[]
@@ -40,19 +39,12 @@ export function LandlordDashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [notifications, setNotifications] = useState<NotificationLog[]>([])
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
-  const [expandedFrozen, setExpandedFrozen] = useState<Set<string>>(new Set())
   const [utilInputs, setUtilInputs] = useState<Record<string, string>>({})
   const [history, setHistory] = useState<any[]>([])
   const [statsPeriod, setStatsPeriod] = useState<'6m' | '12m'>('6m')
   const [statsObject, setStatsObject] = useState<string>('all')
-
-  function toggleExpanded(id: string) {
-    setExpandedIds(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
-  }
-  function toggleFrozen(id: string) {
-    setExpandedFrozen(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
-  }
+  const [sel, setSel] = useState(0)
+  const [tab, setTab] = useState('overview')
 
   useEffect(() => {
     if (!user) return
@@ -70,7 +62,7 @@ export function LandlordDashboard() {
         const currentYear = today.getFullYear()
         for (const obj of objectsData) {
           const { data: contract } = await supabase.from('contracts').select('*, tenant:users!tenant_id(full_name, phone)').eq('object_id', obj.id).eq('status', 'active').maybeSingle()
-          if (!contract) { objectsWithStatus.push({ ...obj, status: 'no_contract', amount: 0, paymentId: null, statusColor: '#888', statusDetail: 'Нет договора', bgColor: '#fff' }); continue }
+          if (!contract) { objectsWithStatus.push({ ...obj, status: 'no_contract', amount: 0, paymentId: null, statusColor: '#888', statusDetail: 'Нет договора' }); continue }
           const readingsMode = contract.readings_mode || 'manual'
           const reminder = contract.reminder_days_before || 3
           const { data: allPays } = await supabase.from('payments').select('*').eq('contract_id', contract.id)
@@ -79,7 +71,7 @@ export function LandlordDashboard() {
           const { data: fRows } = await supabase.from('frozen_penalties').select('*').eq('contract_id', contract.id).order('period', { ascending: true })
           const frozenTotal = (fRows || []).reduce((s2: number, d: any) => s2 + Number(d.amount || 0), 0)
           const { data: payment } = await supabase.from('payments').select('*').eq('contract_id', contract.id).order('period', { ascending: false }).limit(1).maybeSingle()
-          if (!payment) { objectsWithStatus.push({ ...obj, status: 'no_payment', statusDetail: 'Платёж не создан', statusColor: '#a80', amount: contract.rent_amount, baseAmount: contract.rent_amount, penaltyAmount: 0, utilitiesAmount: 0, paymentId: null, contract, bgColor: '#fff', readingsMode, frozenTotal, frozenRows: fRows || [], deferredRequests: dReq || [] }); continue }
+          if (!payment) { objectsWithStatus.push({ ...obj, status: 'no_payment', statusDetail: 'Платёж не создан', statusColor: '#a80', amount: contract.rent_amount, baseAmount: contract.rent_amount, penaltyAmount: 0, utilitiesAmount: 0, paymentId: null, contract, readingsMode, frozenTotal, frozenRows: fRows || [], deferredRequests: dReq || [] }); continue }
           const { data: cashMeeting } = await supabase.from('cash_meetings').select('*').eq('contract_id', contract.id).eq('kind', 'meeting').eq('status', 'confirmed').order('created_at', { ascending: false }).limit(1).maybeSingle()
           const dueMid = parseDate(payment.due_date)
           const sd = contract.start_date ? parseDate(contract.start_date) : null
@@ -283,6 +275,17 @@ export function LandlordDashboard() {
   const onTimePct = confirmedCount > 0 ? Math.round((onTimeCount / confirmedCount) * 100) : 0
   const overdueNow = objects.filter(o => o.statusColor === '#c00').length
 
+  const selIdx = Math.min(sel, Math.max(0, objects.length - 1))
+  const current = objects[selIdx]
+  const contract = current?.contract
+  const deposit = Number((contract as any)?.deposit_amount || 0)
+  const depositPaid = Number((contract as any)?.deposit_paid || 0)
+  const periodMid = current?.payment ? parseDate(current.payment.period) : null
+  const sd = (contract as any)?.start_date ? parseDate((contract as any).start_date) : null
+  const firstMonthPending = !!(contract && current?.payment && sd && periodMid && !current.payment.confirmed_by_landlord && periodMid.getFullYear() === sd.getFullYear() && periodMid.getMonth() === sd.getMonth())
+  const tenantChoseCash = contract && (contract.payment_method === 'cash' || (contract.payment_method === 'both' && (contract as any).tenant_pay_method === 'cash'))
+  const objHistory = history.filter(h => h.objId === current?.id).slice(0, 10)
+
   if (userLoading || loading) return <div style={T.page}>Загрузка…</div>
   if (error) return <div style={T.page}><div style={T.card}>{error}</div></div>
 
@@ -290,206 +293,231 @@ export function LandlordDashboard() {
     <div style={T.page}>
       <h1 style={T.h1}>Мои объекты</h1>
       {objects.length === 0 ? (
-        <div style={T.card}>Объектов нет</div>
+        <div style={T.card}>Объектов нет. Добавьте первый объект в блоке «Управление объектами» ниже.</div>
       ) : (
-        objects.map((obj) => {
-          const contract = obj.contract
-          const isExpanded = expandedIds.has(obj.id)
-          const tenantChoseCash = contract && (contract.payment_method === 'cash' || (contract.payment_method === 'both' && (contract as any).tenant_pay_method === 'cash'))
-          const deposit = Number((contract as any)?.deposit_amount || 0)
-          const depositPaid = Number((contract as any)?.deposit_paid || 0)
-          const frozenOpen = expandedFrozen.has(obj.id)
-          const periodMid = obj.payment ? parseDate(obj.payment.period) : null
-          const sd = (contract as any).start_date ? parseDate((contract as any).start_date) : null
-          const firstMonthPending = !!(contract && obj.payment && sd && periodMid && !obj.payment.confirmed_by_landlord && periodMid.getFullYear() === sd.getFullYear() && periodMid.getMonth() === sd.getMonth())
+        <>
+          {objects.length > 1 && (
+            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', marginBottom: 10, paddingBottom: 4 }}>
+              {objects.map((o, i) => (
+                <button key={o.id} style={{ ...(i === selIdx ? T.btnSmall : T.btnSecondary), whiteSpace: 'nowrap' }} onClick={() => setSel(i)}>{o.address}</button>
+              ))}
+            </div>
+          )}
+          <TabBar tab={tab} setTab={setTab} />
 
-          return (
-            <div key={obj.id} style={T.card}>
-              <div style={{ cursor: 'pointer' }} onClick={() => toggleExpanded(obj.id)}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                  <div style={{ fontSize: 17, fontWeight: 600 }}>{obj.address}</div>
-                  {deposit > 0 && <div style={{ fontSize: 11, color: C.text2, whiteSpace: 'nowrap' }}>депозит: внесено {depositPaid.toFixed(0)} из {deposit.toFixed(0)} ₽</div>}
-                </div>
-                {contract && (contract as any).start_date && (contract as any).end_date && <div style={T.tiny}>Срок аренды: с {parseDate((contract as any).start_date).toLocaleDateString('ru-RU')} по {parseDate((contract as any).end_date).toLocaleDateString('ru-RU')} ({Math.max(1, Math.round((parseDate((contract as any).end_date).getTime() - parseDate((contract as any).start_date).getTime()) / 2629800000))} мес.)</div>}
-                <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={chipOf(obj.statusColor)}>{obj.statusDetail}</span>
-                  <span style={{ fontSize: 12, color: C.text2 }}>{isExpanded ? '▲' : '▼'}</span>
-                </div>
-                {obj.amount > 0 && <div style={{ ...T.total, marginTop: 8 }}>{amountBreakdown(obj)}</div>}
-                {!!obj.frozenTotal && obj.frozenTotal > 0 && (
-                  <div style={T.link} onClick={(e) => { e.stopPropagation(); toggleFrozen(obj.id) }}>
-                    🧊 Замороженные штрафы: {obj.frozenTotal.toFixed(0)} ₽ {frozenOpen ? '▲' : '▼'}
+          {tab === 'overview' && (
+            <>
+              {objects.map((o, i) => (
+                <div key={o.id} style={{ ...T.card, outline: i === selIdx ? `2px solid ${C.blue}` : 'none', cursor: 'pointer' }} onClick={() => setSel(i)}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                    <div style={{ fontSize: 17, fontWeight: 600 }}>{o.address}</div>
+                    {Number((o.contract as any)?.deposit_amount || 0) > 0 && <div style={{ fontSize: 11, color: C.text2, whiteSpace: 'nowrap' }}>депозит: {Number((o.contract as any).deposit_paid || 0).toFixed(0)}/{Number((o.contract as any).deposit_amount).toFixed(0)} ₽</div>}
                   </div>
-                )}
-                {frozenOpen && !!obj.frozenTotal && obj.frozenTotal > 0 && (
-                  <div style={{ marginTop: 6 }} onClick={(e) => e.stopPropagation()}>
-                    {(obj.frozenRows || []).map((f: any) => (
-                      <div key={f.id} style={T.tiny}>
-                        {f.period ? parseDate(f.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : 'без месяца'} — {Number(f.amount).toFixed(0)} ₽{f.adjusted_note ? ` (${f.adjusted_note})` : ''}
+                  <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={chipOf(o.statusColor)}>{o.statusDetail}</span>
+                  </div>
+                  {o.amount > 0 && <div style={{ ...T.total, marginTop: 8 }}>{amountBreakdown(o)}</div>}
+                  {!!o.frozenTotal && o.frozenTotal > 0 && <div style={T.tiny}>🧊 Замороженные штрафы: {o.frozenTotal.toFixed(0)} ₽</div>}
+                  {i !== selIdx && <div style={T.link}>Выбрать объект</div>}
+                </div>
+              ))}
+            </>
+          )}
+
+          {tab === 'pay' && current && (
+            <>
+              {contract && (firstMonthPending || deposit > 0) && (
+                <div style={T.card}>
+                  <div style={T.h2}>Первый месяц и депозит</div>
+                  {firstMonthPending && (
+                    <button style={T.btn} onClick={() => confirmSigning(current.paymentId!)}>✅ Подтвердить: первый месяц + депозит получены при подписании</button>
+                  )}
+                  {deposit > 0 && (
+                    <div style={T.item}>
+                      <div style={{ fontSize: 14, marginBottom: 8 }}>Внесено {depositPaid.toFixed(0)} из {deposit.toFixed(0)} ₽ · остаток {Math.max(0, deposit - depositPaid).toFixed(0)} ₽</div>
+                      <span style={{ display: 'flex', gap: 8 }}>
+                        <button style={T.btnSmall} onClick={() => addDepositPayment(contract.id)}>+ внести</button>
+                        <button style={T.btnDanger} onClick={() => editDepositPaid(contract.id)}>изменить</button>
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {contract && current.paymentId && !current.payment?.confirmed_by_landlord && (
+                <div style={T.card}>
+                  <div style={T.h2}>Подтверждение оплаты по каналам</div>
+                  <div style={T.item}>
+                    <div style={{ fontSize: 14, marginBottom: 8 }}>💳 Безнал: {current.payment?.confirmed_card ? '🟢 получен' : current.payment?.card_claimed ? '🟡 заявлен арендатором' : '⚪ не заявлен'}</div>
+                    {current.payment?.card_claimed && !current.payment?.confirmed_card && (
+                      <button style={T.btnSmall} onClick={() => confirmChannel(current.paymentId!, 'card')}>Подтвердить</button>
+                    )}
+                  </div>
+                  <div style={T.item}>
+                    <div style={{ fontSize: 14, marginBottom: 8 }}>💵 Нал: {current.payment?.confirmed_cash ? '🟢 получен' : current.payment?.cash_closed ? '⚪ канал закрыт' : current.hasConfirmedCashMeeting ? '🟡 ждёт встречи' : '⚪ не заявлен'}</div>
+                    {current.hasConfirmedCashMeeting && !current.payment?.cash_closed && !current.payment?.confirmed_cash && (
+                      <span style={{ display: 'flex', gap: 8 }}>
+                        <button style={T.btnSmall} onClick={() => confirmChannel(current.paymentId!, 'cash')}>Подтвердить</button>
+                        <button style={T.btnDanger} onClick={() => confirmChannel(current.paymentId!, 'cash', true)}>закрыть канал</button>
+                      </span>
+                    )}
+                  </div>
+                  {!current.payment?.card_claimed && !current.hasConfirmedCashMeeting && (
+                    <button style={T.btn} onClick={() => confirmChannel(current.paymentId!, 'card')}>✅ Подтвердить оплату полностью</button>
+                  )}
+                </div>
+              )}
+
+              {contract && current.paymentId && !current.payment?.confirmed_by_landlord && current.readingsMode !== 'self' && (
+                <div style={T.card}>
+                  <div style={T.h2}>Ресурсы по квитанции</div>
+                  {current.needUtilitiesReminder && (
+                    <div style={T.note}>⏳ Посчитайте ресурсы с квитанции и добавьте сумму к платежу</div>
+                  )}
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <input
+                      type="number"
+                      value={utilInputs[current.id] ?? String(current.utilitiesAmount || '')}
+                      onChange={(e) => setUtilInputs({ ...utilInputs, [current.id]: e.target.value })}
+                      placeholder="Сумма по квитанции, ₽"
+                      style={{ ...T.input, marginBottom: 0, flex: 1 }}
+                      inputMode="numeric"
+                    />
+                    <button
+                      onClick={() => saveUtilities(current.paymentId!, utilInputs[current.id] ?? String(current.utilitiesAmount || 0))}
+                      style={T.btnSmall}
+                    >
+                      Включить в платёж
+                    </button>
+                  </div>
+                  <div style={T.tiny}>Сумма добавляется к платежу отдельно, не растёт при просрочке и не входит в штрафы</div>
+                </div>
+              )}
+
+              {contract && (current.deferredRequests || []).length > 0 && (
+                <div style={T.card}>
+                  <div style={T.h2}>Отсрочка штрафа</div>
+                  {(current.deferredRequests || []).map((r: any) => (
+                    <div key={r.id} style={T.item}>
+                      <div style={{ fontSize: 14, marginBottom: 8 }}>Арендатор просит отсрочить {Number(r.amount).toFixed(2)} ₽</div>
+                      <button
+                        onClick={() => confirmDeferral(r.id, contract.id, r.payment_id, Number(r.amount), contract.tenant_id)}
+                        style={T.btnWarn}
+                      >
+                        Подтвердить отсрочку
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {contract && (
+                <div style={T.card}>
+                  <div style={T.h2}>Способ оплаты</div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button style={contract.payment_method === 'card' ? T.btnSmall : T.btnSecondary} onClick={() => updatePaymentMethod(contract.id, 'card')}>Безналичный расчёт</button>
+                    <button style={contract.payment_method === 'cash' ? T.btnSmall : T.btnSecondary} onClick={() => updatePaymentMethod(contract.id, 'cash')}>Наличные</button>
+                    <button style={contract.payment_method === 'both' ? T.btnSmall : T.btnSecondary} onClick={() => updatePaymentMethod(contract.id, 'both')}>Оба способа</button>
+                  </div>
+                  {contract.payment_method === 'both' && (
+                    <div style={T.tiny}>💡 Способ оплаты выбирает арендатор: карта или наличные.</div>
+                  )}
+                </div>
+              )}
+
+              {contract && tenantChoseCash && (
+                <div style={T.card}>
+                  <div style={T.h2}>Оплата наличными — договорённость о времени</div>
+                  <CashNegotiation
+                    contractId={contract.id}
+                    myRole="landlord"
+                    tenantId={contract.tenant_id}
+                    landlordId={current.landlord_id}
+                  />
+                </div>
+              )}
+
+              <div style={T.card}>
+                <div style={T.h2}>История платежей объекта</div>
+                {objHistory.length === 0 ? (
+                  <div style={T.small}>Платежей пока нет</div>
+                ) : (
+                  objHistory.map((h: any) => {
+                    const late = h.confirmed_by_landlord && h.confirmed_at && new Date(h.confirmed_at) > parseDate(h.due_date)
+                    const sum = Number(h.base_amount || 0) + Number(h.penalty_amount || 0) + Number(h.utilities_amount || 0)
+                    return (
+                      <div key={h.id} style={T.item}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                          <span style={{ fontSize: 14 }}>{parseDate(h.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}</span>
+                          <b style={{ color: late ? C.red : C.text, whiteSpace: 'nowrap' }}>{sum.toFixed(0)} ₽</b>
+                        </div>
+                        <div style={T.tiny}>{h.confirmed_by_landlord ? (late ? 'просрочка' : 'оплачен вовремя') : 'не подтверждён'}</div>
                       </div>
-                    ))}
-                    {deposit > 0
-                      ? (deposit >= (obj.frozenTotal || 0)
-                        ? <div style={T.tiny}>будет удержано из депозита; остаток депозита: {(deposit - (obj.frozenTotal || 0)).toFixed(0)} ₽</div>
-                        : <div style={{ ...T.tiny, color: C.red }}>сверх депозита долг: {((obj.frozenTotal || 0) - deposit).toFixed(0)} ₽</div>)
-                      : <div style={{ ...T.tiny, color: C.red }}>долг арендатора (депозита нет)</div>}
-                  </div>
+                    )
+                  })
                 )}
               </div>
-
-              {isExpanded && (
-                <>
-                  {contract && (firstMonthPending || deposit > 0) && (
-                    <div style={T.sub}>
-                      <div style={T.h3}>Первый месяц и депозит</div>
-                      {firstMonthPending && (
-                        <button style={T.btn} onClick={() => confirmSigning(obj.paymentId!)}>✅ Подтвердить: первый месяц + депозит получены при подписании</button>
-                      )}
-                      {deposit > 0 && (
-                        <div style={T.item}>
-                          <div style={{ fontSize: 14, marginBottom: 8 }}>Внесено {depositPaid.toFixed(0)} из {deposit.toFixed(0)} ₽ · остаток {Math.max(0, deposit - depositPaid).toFixed(0)} ₽</div>
-                          <span style={{ display: 'flex', gap: 8 }}>
-                            <button style={T.btnSmall} onClick={() => addDepositPayment(contract.id)}>+ внести</button>
-                            <button style={{ ...T.btnDanger, padding: '8px 14px', fontSize: 13 }} onClick={() => editDepositPaid(contract.id)}>изменить</button>
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {contract && obj.paymentId && !obj.payment?.confirmed_by_landlord && (
-                    <div style={T.sub}>
-                      <div style={T.h3}>Подтверждение оплаты по каналам</div>
-                      <div style={T.item}>
-                        <div style={{ fontSize: 14, marginBottom: 8 }}>💳 Безнал: {obj.payment?.confirmed_card ? '🟢 получен' : obj.payment?.card_claimed ? '🟡 заявлен арендатором' : '⚪ не заявлен'}</div>
-                        {obj.payment?.card_claimed && !obj.payment?.confirmed_card && (
-                          <button style={T.btnSmall} onClick={() => confirmChannel(obj.paymentId!, 'card')}>Подтвердить</button>
-                        )}
-                      </div>
-                      <div style={T.item}>
-                        <div style={{ fontSize: 14, marginBottom: 8 }}>💵 Нал: {obj.payment?.confirmed_cash ? '🟢 получен' : obj.payment?.cash_closed ? '⚪ канал закрыт' : obj.hasConfirmedCashMeeting ? '🟡 ждёт встречи' : '⚪ не заявлен'}</div>
-                        {obj.hasConfirmedCashMeeting && !obj.payment?.cash_closed && !obj.payment?.confirmed_cash && (
-                          <span style={{ display: 'flex', gap: 8 }}>
-                            <button style={T.btnSmall} onClick={() => confirmChannel(obj.paymentId!, 'cash')}>Подтвердить</button>
-                            <button style={T.btnDanger} onClick={() => confirmChannel(obj.paymentId!, 'cash', true)}>закрыть канал</button>
-                          </span>
-                        )}
-                      </div>
-                      {!obj.payment?.card_claimed && !obj.hasConfirmedCashMeeting && (
-                        <button style={T.btn} onClick={() => confirmChannel(obj.paymentId!, 'card')}>✅ Подтвердить оплату полностью</button>
-                      )}
-                    </div>
-                  )}
-
-                  {contract && ((obj.frozenRows || []).length > 0 || ((obj.penaltyAmount || 0) > 0 && !obj.payment?.confirmed_by_landlord)) && (
-                    <div style={T.sub}>
-                      <div style={T.h3}>Замороженные штрафы — управление</div>
-                      {(obj.penaltyAmount || 0) > 0 && !obj.payment?.confirmed_by_landlord && (
-                        <button style={T.btnSmall} onClick={() => freezePenalty(obj.paymentId!)}>🧊 Заморозить текущий штраф ({(obj.penaltyAmount || 0).toFixed(0)} ₽)</button>
-                      )}
-                      {(obj.frozenRows || []).map((f: any) => (
-                        <div key={f.id} style={T.item}>
-                          <div style={{ fontSize: 14 }}>
-                            {f.period ? parseDate(f.period).toLocaleDateString('ru-RU', { month: 'short', year: 'numeric' }) : '—'} · {Number(f.amount).toFixed(0)} ₽
-                            {f.adjusted_note && <div style={T.tiny}>{f.adjusted_note}</div>}
-                          </div>
-                          <span style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-                            <button style={T.btnSecondary} onClick={() => adjustFrozen(f.id, contract.id, contract.tenant_id, false)}>изменить</button>
-                            <button style={T.btnDanger} onClick={() => adjustFrozen(f.id, contract.id, contract.tenant_id, true)}>обнулить</button>
-                          </span>
-                        </div>
-                      ))}
-                      <div style={T.tiny}>Записи не удаляются до конца договора; каждое изменение сохраняется с примечанием и датой.</div>
-                    </div>
-                  )}
-
-                  {contract && obj.paymentId && !obj.payment?.confirmed_by_landlord && obj.readingsMode !== 'self' && (
-                    <div style={T.sub}>
-                      <div style={T.h3}>Ресурсы по квитанции</div>
-                      {obj.needUtilitiesReminder && (
-                        <div style={T.note}>⏳ Посчитайте ресурсы с квитанции и добавьте сумму к платежу</div>
-                      )}
-                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                        <input
-                          type="number"
-                          value={utilInputs[obj.id] ?? String(obj.utilitiesAmount || '')}
-                          onChange={(e) => setUtilInputs({ ...utilInputs, [obj.id]: e.target.value })}
-                          placeholder="Сумма по квитанции, ₽"
-                          style={{ ...T.input, marginBottom: 0, flex: 1 }}
-                          inputMode="numeric"
-                        />
-                        <button
-                          onClick={() => saveUtilities(obj.paymentId!, utilInputs[obj.id] ?? String(obj.utilitiesAmount || 0))}
-                          style={T.btnSmall}
-                        >
-                          Включить в платёж
-                        </button>
-                      </div>
-                      <div style={T.tiny}>Сумма добавляется к платежу отдельно, не растёт при просрочке и не входит в штрафы</div>
-                    </div>
-                  )}
-
-                  {contract && (obj.deferredRequests || []).length > 0 && (
-                    <div style={T.sub}>
-                      <div style={T.h3}>Отсрочка штрафа</div>
-                      {(obj.deferredRequests || []).map((r: any) => (
-                        <div key={r.id} style={T.item}>
-                          <div style={{ fontSize: 14, marginBottom: 8 }}>Арендатор просит отсрочить {Number(r.amount).toFixed(2)} ₽</div>
-                          <button
-                            onClick={() => confirmDeferral(r.id, contract.id, r.payment_id, Number(r.amount), contract.tenant_id)}
-                            style={T.btnWarn}
-                          >
-                            Подтвердить отсрочку
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {contract && (
-                    <div style={T.sub}>
-                      <div style={T.h3}>Счётчики</div>
-                      <MetersEditor objId={obj.id} />
-                    </div>
-                  )}
-
-                  {contract && obj.readingsMode === 'manual' && (
-                    <div style={T.sub}>
-                      <div style={T.h3}>Показания за текущий месяц</div>
-                      <ReadingsReview contractId={contract.id} tenantId={contract.tenant_id} />
-                    </div>
-                  )}
-
-                  {contract && (
-                    <div style={T.sub}>
-                      <div style={T.h3}>Способ оплаты</div>
-                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                        <button style={contract.payment_method === 'card' ? T.btnSmall : T.btnSecondary} onClick={() => updatePaymentMethod(contract.id, 'card')}>Безналичный расчёт</button>
-                        <button style={contract.payment_method === 'cash' ? T.btnSmall : T.btnSecondary} onClick={() => updatePaymentMethod(contract.id, 'cash')}>Наличные</button>
-                        <button style={contract.payment_method === 'both' ? T.btnSmall : T.btnSecondary} onClick={() => updatePaymentMethod(contract.id, 'both')}>Оба способа</button>
-                      </div>
-                      {contract.payment_method === 'both' && (
-                        <div style={T.tiny}>💡 Способ оплаты выбирает арендатор: карта или наличные.</div>
-                      )}
-                    </div>
-                  )}
-
-                  {contract && tenantChoseCash && (
-                    <div style={T.sub}>
-                      <div style={T.h3}>Оплата наличными — договорённость о времени</div>
-                      <CashNegotiation
-                        contractId={contract.id}
-                        myRole="landlord"
-                        tenantId={contract.tenant_id}
-                        landlordId={obj.landlord_id}
-                      />
-                    </div>
-                  )}
-                </>
+            </>
+          )}
+          {tab === 'meters' && current && (
+            <>
+              <div style={T.card}>
+                <div style={T.h2}>Счётчики объекта</div>
+                <MetersEditor objId={current.id} />
+              </div>
+              {current.readingsMode === 'manual' && contract && (
+                <div style={T.card}>
+                  <div style={T.h2}>Показания за текущий месяц</div>
+                  <ReadingsReview contractId={contract.id} tenantId={contract.tenant_id} />
+                </div>
               )}
-            </div>
-          )
-        })
+            </>
+          )}
+
+          {tab === 'contract' && current && contract && (
+            <>
+              <div style={T.card}>
+                <div style={T.h2}>Договор</div>
+                <div style={T.row}><span style={{ color: C.text2 }}>Арендатор</span><b>{(contract as any).tenant?.full_name || '—'}</b></div>
+                {(contract as any).tenant?.phone && <div style={T.row}><span style={{ color: C.text2 }}>Телефон</span><b>{(contract as any).tenant.phone}</b></div>}
+                {(contract as any).start_date && (contract as any).end_date && (
+                  <div style={T.row}><span style={{ color: C.text2 }}>Срок</span><b>{parseDate((contract as any).start_date).toLocaleDateString('ru-RU')} — {parseDate((contract as any).end_date).toLocaleDateString('ru-RU')}</b></div>
+                )}
+                <div style={T.row}><span style={{ color: C.text2 }}>Аренда</span><b>{Number(contract.rent_amount).toFixed(0)} ₽/мес</b></div>
+                <div style={T.row}><span style={{ color: C.text2 }}>День платежа</span><b>{contract.payment_day} число</b></div>
+                {deposit > 0 && <div style={T.row}><span style={{ color: C.text2 }}>Депозит</span><b>внесено {depositPaid.toFixed(0)} из {deposit.toFixed(0)} ₽</b></div>}
+              </div>
+
+              <div style={T.card}>
+                <div style={T.h2}>🧊 Замороженные штрафы</div>
+                {(current.penaltyAmount || 0) > 0 && !current.payment?.confirmed_by_landlord && (
+                  <button style={T.btnSmall} onClick={() => freezePenalty(current.paymentId!)}>🧊 Заморозить текущий штраф ({(current.penaltyAmount || 0).toFixed(0)} ₽)</button>
+                )}
+                {(current.frozenRows || []).length === 0 && <div style={T.small}>Замороженных штрафов нет</div>}
+                {(current.frozenRows || []).map((f: any) => (
+                  <div key={f.id} style={T.item}>
+                    <div style={{ fontSize: 14 }}>
+                      {f.period ? parseDate(f.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : 'без месяца'} · {Number(f.amount).toFixed(0)} ₽
+                      {f.adjusted_note && <div style={T.tiny}>{f.adjusted_note}</div>}
+                    </div>
+                    <span style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                      <button style={T.btnSecondary} onClick={() => adjustFrozen(f.id, contract.id, contract.tenant_id, false)}>изменить</button>
+                      <button style={T.btnDanger} onClick={() => adjustFrozen(f.id, contract.id, contract.tenant_id, true)}>обнулить</button>
+                    </span>
+                  </div>
+                ))}
+                {!!current.frozenTotal && current.frozenTotal > 0 && (
+                  deposit > 0
+                    ? (deposit >= (current.frozenTotal || 0)
+                      ? <div style={T.small}>Будет удержано из депозита; остаток депозита: {(deposit - (current.frozenTotal || 0)).toFixed(0)} ₽</div>
+                      : <div style={{ ...T.small, color: C.red }}>Сверх депозита долг: {((current.frozenTotal || 0) - deposit).toFixed(0)} ₽</div>)
+                    : <div style={{ ...T.small, color: C.red }}>Долг арендатора (депозита нет)</div>
+                )}
+                <div style={T.tiny}>Записи не удаляются до конца договора; каждое изменение сохраняется с примечанием и датой.</div>
+              </div>
+            </>
+          )}
+        </>
       )}
 
       <div style={T.card}>
@@ -522,24 +550,6 @@ export function LandlordDashboard() {
             <div style={{ ...L.statValue, color: overdueNow > 0 ? C.red : C.green }}>{overdueNow} объект(а)</div>
           </div>
         </div>
-        <div style={T.h3}>История платежей</div>
-        {filteredHistory.length === 0 ? (
-          <div style={T.small}>Платежей за период нет</div>
-        ) : (
-          filteredHistory.slice(0, 20).map((h: any) => {
-            const late = h.confirmed_by_landlord && h.confirmed_at && new Date(h.confirmed_at) > parseDate(h.due_date)
-            const sum = Number(h.base_amount || 0) + Number(h.penalty_amount || 0) + Number(h.utilities_amount || 0)
-            return (
-              <div key={h.id} style={T.item}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                  <span style={{ fontSize: 14 }}>{h.address}</span>
-                  <b style={{ color: late ? C.red : C.text, whiteSpace: 'nowrap' }}>{sum.toFixed(0)} ₽</b>
-                </div>
-                <div style={T.tiny}>{parseDate(h.period).toLocaleDateString('ru-RU')} · {h.confirmed_by_landlord ? (late ? 'просрочка' : 'вовремя') : 'не подтверждён'}</div>
-              </div>
-            )
-          })
-        )}
       </div>
 
       <div style={T.card}>
@@ -558,6 +568,31 @@ export function LandlordDashboard() {
   )
 }
 
+function TabBar({ tab, setTab }: { tab: string; setTab: (t: string) => void }) {
+  const tabs = [
+    { id: 'overview', l: 'Обзор' },
+    { id: 'pay', l: 'Оплата' },
+    { id: 'meters', l: 'Счётчики' },
+    { id: 'contract', l: 'Договор' },
+  ]
+  return (
+    <div style={{ display: 'flex', background: C.gray, borderRadius: 12, padding: 4, marginBottom: 12 }}>
+      {tabs.map(t => (
+        <button
+          key={t.id}
+          onClick={() => setTab(t.id)}
+          style={{
+            flex: 1, padding: '9px 4px', borderRadius: 9, border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            background: tab === t.id ? '#fff' : 'transparent',
+            color: tab === t.id ? C.text : C.text2,
+            boxShadow: tab === t.id ? '0 1px 3px rgba(0,0,0,0.12)' : 'none',
+          }}
+        >{t.l}</button>
+      ))}
+    </div>
+  )
+}
+
 const L: Record<string, React.CSSProperties> = {
   filtersRow: { display: 'flex', gap: 8, marginBottom: 12 },
   statsGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 },
@@ -567,3 +602,4 @@ const L: Record<string, React.CSSProperties> = {
 }
 
 export default LandlordDashboard
+
