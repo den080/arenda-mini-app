@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useTelegramUser } from '../hooks/useTelegramUser'
 import CashNegotiation from '../components/CashNegotiation'
+import CashNegotiation from '../components/CashNegotiation'
+import { ensureNextPayment } from '../lib/nextPayment'
 import { T, C } from '../theme'
 
 interface PayDetail { type: 'card' | 'sbp'; bank: string; number: string }
@@ -145,6 +147,7 @@ function TenantRental({ contract, tab }: { contract: any; tab: string }) {
     if (!user) return
     const { data: obj } = await supabase.from('objects').select('*').eq('id', contract.object_id).maybeSingle()
     const { data: landlord } = await supabase.from('users').select('*').eq('id', obj?.landlord_id).maybeSingle()
+    await ensureNextPayment(contract.id)
     const { data: payments } = await supabase.from('payments').select('*').eq('contract_id', contract.id).order('period', { ascending: false })
     const { data: meters } = await supabase.from('object_meters').select('*').eq('object_id', contract.object_id).eq('is_active', true)
     const { data: meterTypes } = await supabase.from('meter_types').select('*')
