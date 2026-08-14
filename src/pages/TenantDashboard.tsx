@@ -139,7 +139,6 @@ function TenantRental({ contract, tab }: { contract: any; tab: string }) {
   const [data, setData] = useState<any>(null)
   const [vals, setVals] = useState<Record<string, string>>({})
   const [msg, setMsg] = useState<string | null>(null)
-  const [frozenOpen, setFrozenOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState<Record<string, boolean>>({})
 
   async function load() {
