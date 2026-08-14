@@ -474,16 +474,7 @@ export function LandlordDashboard() {
                   <ReadingsReview contractId={contract.id} tenantId={contract.tenant_id} />
                 </div>
               )}
-             {tab === 'chat' && contract && (
-               <div style={T.card}>
-               <div style={T.h2}>Чат с арендатором</div>
-               <Chat contractId={contract.id} myId={user!.id} />
-            </div>
-          )}
-
-            </>
-          )}
-
+             
           {tab === 'contract' && current && contract && (
             <>
               <div style={T.card}>
@@ -529,7 +520,15 @@ export function LandlordDashboard() {
           )}
         </>
       )}
+{tab === 'chat' && contract && (
+               <div style={T.card}>
+               <div style={T.h2}>Чат с арендатором</div>
+               <Chat contractId={contract.id} myId={user!.id} />
+            </div>
+          )}
 
+            </>
+          )}
       <div style={T.card}>
         <div style={T.h2}>Статистика</div>
         <div style={L.filtersRow}>
