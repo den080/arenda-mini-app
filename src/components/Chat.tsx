@@ -10,7 +10,7 @@ export function Chat({ contractId, myId }: { contractId: string; myId: string })
 
   async function load() {
     const { data } = await supabase
-      .from('messages').select('*, sender:users!sender_id(full_name)')
+      .from('messages').select('*')
       .eq('contract_id', contractId)
       .order('created_at', { ascending: true })
       .limit(200)
@@ -49,7 +49,7 @@ export function Chat({ contractId, myId }: { contractId: string; myId: string })
             <div key={m.id} style={{ ...st.bubble, ...(mine ? st.mine : st.their) }}>
               <div style={st.body}>{m.body}</div>
               <div style={st.meta}>
-                {mine ? 'вы' : m.sender?.full_name || '—'} · {new Date(m.created_at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                {mine ? 'вы' : 'собеседник'} · {new Date(m.created_at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
               </div>
             </div>
           )
