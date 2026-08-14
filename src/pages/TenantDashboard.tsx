@@ -528,8 +528,3 @@ function TenantRental({ contract, tab }: { contract: any; tab: string }) {
 
 export default TenantDashboard
 
-    </div>
-  )
-}
-
-export default TenantDashboard
