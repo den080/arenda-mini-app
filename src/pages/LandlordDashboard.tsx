@@ -299,7 +299,7 @@ export function LandlordDashboard() {
           const depositPaid = Number((contract as any)?.deposit_paid || 0)
           const frozenOpen = expandedFrozen.has(obj.id)
           const periodMid = obj.payment ? parseDate(obj.payment.period) : null
-          const startMid = contract?.start_date ? parseDate(contract.start_date) : null
+          const sd = (contract as any).start_date ? parseDate((contract as any).start_date) : null
           const firstMonthPending = !!(contract && obj.payment && startMid && periodMid && !obj.payment.confirmed_by_landlord && periodMid.getFullYear() === startMid.getFullYear() && periodMid.getMonth() === startMid.getMonth())
           return (
             <div key={obj.id} style={{ ...styles.card, backgroundColor: obj.bgColor || '#fff' }}>
