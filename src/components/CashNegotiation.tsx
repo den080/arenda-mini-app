@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { T, C } from '../theme'
 
 interface Meeting {
   id: string
@@ -167,18 +168,20 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
     const opts = TIME_OPTIONS.filter(t => t >= w.time_from && t <= w.time_to)
     const s = sub[w.id] || { from: '', to: '' }
     return (
-      <div key={w.id} style={st.box}>
-        <div style={st.boxTitle}>{fmtDate(w.meeting_date)} · {w.time_from}–{w.time_to}{w.proposer === myRole ? ' (моё окно)' : ''}</div>
-        <div style={st.form}>
-          <select value={s.from} onChange={(e) => setSub({ ...sub, [w.id]: { ...s, from: e.target.value } })} style={st.input}>
+      <div key={w.id} style={T.item}>
+        <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>
+          {fmtDate(w.meeting_date)} · {w.time_from}–{w.time_to}{w.proposer === myRole ? ' · моё окно' : ''}
+        </div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+          <select value={s.from} onChange={(e) => setSub({ ...sub, [w.id]: { ...s, from: e.target.value } })} style={T.select}>
             <option value="">с --:--</option>
             {opts.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
-          <select value={s.to} onChange={(e) => setSub({ ...sub, [w.id]: { ...s, to: e.target.value } })} style={st.input}>
+          <select value={s.to} onChange={(e) => setSub({ ...sub, [w.id]: { ...s, to: e.target.value } })} style={T.select}>
             <option value="">по --:--</option>
             {opts.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
-          <button style={busy ? st.btnOff : st.btn} disabled={busy} onClick={() => propose(w, resched && confirmed ? confirmed.id : undefined)}>{resched ? 'Перенести' : 'Предложить'}</button>
+          <button style={busy ? T.btnOff : T.btnSmall} disabled={busy} onClick={() => propose(w, resched && confirmed ? confirmed.id : undefined)}>{resched ? 'Перенести' : 'Предложить'}</button>
         </div>
       </div>
     )
@@ -186,23 +189,23 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
 
   return (
     <div>
-      <div style={st.note}>Место встречи по умолчанию — арендуемый объект, если не обсуждалось иное.</div>
+      <div style={T.tiny}>Место встречи по умолчанию — арендуемый объект, если не обсуждалось иное.</div>
 
       {confirmed && (
-        <div style={st.ok}>
+        <div style={T.noteGreen}>
           ✅ Встреча согласована: {fmtDate(confirmed.meeting_date)}, {confirmed.time_from}–{confirmed.time_to}
           <div style={{ marginTop: 8 }}>
             {canResched ? (
-              <button style={st.btn} onClick={() => setResched(!resched)}>{resched ? 'Отменить перенос' : 'Изменить время'}</button>
+              <button style={T.btnSecondary} onClick={() => setResched(!resched)}>{resched ? 'Отменить перенос' : 'Изменить время'}</button>
             ) : (
-              <div style={st.note}>Перенос возможен не позже чем за 24 ч до встречи — дальше только по договорённости по телефону.</div>
+              <div style={T.tiny}>Перенос возможен не позже чем за 24 ч до встречи — дальше только по договорённости по телефону.</div>
             )}
           </div>
         </div>
       )}
 
       {pauseActive && D && (
-        <div style={st.pause}>
+        <div style={T.note}>
           ⏸ Штраф на паузе до встречи {fmtDate(confirmed?.meeting_date)}: встреча в пределах 3 дней после срока оплаты.
           Если встреча пройдёт без оплаты — штраф начислится с {D.toLocaleDateString('ru-RU')} полностью.
           Переключение на безнал тоже вернёт штраф за пропущенные дни.
@@ -211,50 +214,50 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
 
       {resched && (
         <>
-          <div style={st.h}>🔁 Выберите новое время (внутри любого открытого окна)</div>
-          {windows.length === 0 && <div style={st.note}>Нет открытых окон — добавьте новое ниже.</div>}
+          <div style={T.h3}>🔁 Выберите новое время (внутри любого открытого окна)</div>
+          {windows.length === 0 && <div style={T.tiny}>Нет открытых окон — добавьте новое ниже.</div>}
           {windowPicker(windows)}
         </>
       )}
 
       {!resched && (
         <>
-          <div style={st.h}>🕐 Мои окна, когда я могу</div>
-          {myWindows.length === 0 && <div style={st.note}>Пока нет. Добавьте окно ниже — вторая сторона выберет внутри него точное время.</div>}
+          <div style={T.h3}>🕐 Мои окна, когда я могу</div>
+          {myWindows.length === 0 && <div style={T.tiny}>Пока нет. Добавьте окно ниже — вторая сторона выберет внутри него точное время.</div>}
           {myWindows.map(w => (
-            <div key={w.id} style={st.row}>
-              <span>{fmtDate(w.meeting_date)} · {w.time_from}–{w.time_to}</span>
-              <button style={st.del} onClick={() => removeWindow(w.id)}>✕</button>
+            <div key={w.id} style={{ ...T.item, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 14 }}>{fmtDate(w.meeting_date)} · {w.time_from}–{w.time_to}</span>
+              <button style={T.btnDanger} onClick={() => removeWindow(w.id)}>✕</button>
             </div>
           ))}
-          <div style={st.form}>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={st.input} />
-            <select value={from} onChange={(e) => setFrom(e.target.value)} style={st.input}>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginTop: 6 }}>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={T.select} />
+            <select value={from} onChange={(e) => setFrom(e.target.value)} style={T.select}>
               <option value="">с --:--</option>
               {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
-            <select value={to} onChange={(e) => setTo(e.target.value)} style={st.input}>
+            <select value={to} onChange={(e) => setTo(e.target.value)} style={T.select}>
               <option value="">по --:--</option>
               {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
-            <button style={busy ? st.btnOff : st.btn} disabled={busy} onClick={addWindow}>Добавить окно</button>
+            <button style={busy ? T.btnOff : T.btnSmall} disabled={busy} onClick={addWindow}>Добавить окно</button>
           </div>
 
-          <div style={st.h}>🕐 Окна второй стороны — выберите время внутри</div>
-          {theirWindows.length === 0 && <div style={st.note}>Вторая сторона ещё не добавила окна.</div>}
+          <div style={T.h3}>🕐 Окна второй стороны — выберите время внутри</div>
+          {theirWindows.length === 0 && <div style={T.tiny}>Вторая сторона ещё не добавила окна.</div>}
           {windowPicker(theirWindows)}
         </>
       )}
 
       {incoming.length > 0 && (
         <>
-          <div style={st.h}>📥 Ждут моего подтверждения</div>
+          <div style={T.h3}>📥 Ждут моего подтверждения</div>
           {incoming.map(m => (
-            <div key={m.id} style={st.row}>
-              <span>{fmtDate(m.meeting_date)} · {m.time_from}–{m.time_to}</span>
-              <span>
-                <button style={st.okBtn} onClick={() => confirmMeeting(m.id)}>Подтвердить</button>
-                <button style={st.del} onClick={() => decline(m.id)}>✕</button>
+            <div key={m.id} style={{ ...T.item, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 14 }}>{fmtDate(m.meeting_date)} · {m.time_from}–{m.time_to}</span>
+              <span style={{ display: 'flex', gap: 6 }}>
+                <button style={{ ...T.btnSmall, background: C.green }} onClick={() => confirmMeeting(m.id)}>Подтвердить</button>
+                <button style={T.btnDanger} onClick={() => decline(m.id)}>✕</button>
               </span>
             </div>
           ))}
@@ -263,34 +266,17 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
 
       {myProposals.length > 0 && (
         <>
-          <div style={st.h}>📤 Мои заявки</div>
+          <div style={T.h3}>📤 Мои заявки</div>
           {myProposals.map(m => (
-            <div key={m.id} style={st.row}>
-              <span>{fmtDate(m.meeting_date)} · {m.time_from}–{m.time_to}</span>
-              <span style={st.wait}>🟡 ждёт подтверждения</span>
+            <div key={m.id} style={{ ...T.item, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 14 }}>{fmtDate(m.meeting_date)} · {m.time_from}–{m.time_to}</span>
+              <span style={T.chipOrange}>🟡 ждёт подтверждения</span>
             </div>
           ))}
         </>
       )}
     </div>
   )
-}
-
-const st: Record<string, React.CSSProperties> = {
-  note: { fontSize: 12, color: '#888', marginTop: 6 },
-  ok: { padding: 10, background: '#eaf7ef', border: '1px solid #a5d6a7', borderRadius: 8, color: '#080', fontSize: 14, fontWeight: 600, marginTop: 8 },
-  pause: { padding: 10, background: '#fff3e0', border: '1px solid #ffb74d', borderRadius: 8, color: '#e65100', fontSize: 13, fontWeight: 600, marginTop: 8 },
-  h: { fontSize: 15, fontWeight: 600, margin: '14px 0 8px' },
-  row: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 8, background: '#f9f9f9', borderRadius: 6, marginBottom: 6, fontSize: 14 },
-  box: { padding: 10, background: '#f9f9f9', borderRadius: 8, marginBottom: 8 },
-  boxTitle: { fontSize: 14, fontWeight: 600, marginBottom: 6 },
-  form: { display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginTop: 6 },
-  input: { flex: 1, minWidth: 90, padding: 6, borderRadius: 6, border: '1px solid #ddd', fontSize: 13 },
-  btn: { padding: '6px 12px', borderRadius: 6, border: 'none', background: '#2196f3', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' },
-  btnOff: { padding: '6px 12px', borderRadius: 6, border: 'none', background: '#9e9e9e', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'default' },
-  okBtn: { padding: '4px 10px', borderRadius: 6, border: 'none', background: '#4caf50', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', marginRight: 6 },
-  del: { padding: '4px 8px', borderRadius: 6, border: 'none', background: '#ff5252', color: '#fff', fontSize: 12, cursor: 'pointer' },
-  wait: { fontSize: 12, color: '#a80' },
 }
 
 export default CashNegotiation
