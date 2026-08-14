@@ -350,7 +350,7 @@ export function LandlordDashboard() {
                           <span>Внесено {depositPaid.toFixed(0)} из {deposit.toFixed(0)} ₽ · остаток {Math.max(0, deposit - depositPaid).toFixed(0)} ₽</span>
                           <span>
                             <button style={{ ...styles.addButton, marginRight: 6 }} onClick={() => addDepositPayment(contract.id)}>+ внести</button>
-                            <button style={styles.deleteButton} onClick={() => editDepositPaid(contract.id)}>изменить</button>
+                            <button style={{ ...styles.deleteButton, padding: '6px 12px', fontSize: '14px' }} onClick={() => editDepositPaid(contract.id)}>изменить</button>
                           </span>
                         </div>
                       )}
