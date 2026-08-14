@@ -46,6 +46,7 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
   const [to, setTo] = useState('')
   const [sub, setSub] = useState<Record<string, { from: string; to: string }>>({})
   const [resched, setResched] = useState(false)
+  const [busy, setBusy] = useState(false)
 
   async function load() {
     const { data } = await supabase
@@ -93,16 +94,23 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
   }
 
   async function addWindow() {
+    if (busy) return
     if (!date || !from || !to || from >= to) {
       alert('Укажите дату и время: начало должно быть раньше конца')
       return
     }
-    await supabase.from('cash_meetings').insert({
-      contract_id: contractId, proposer: myRole, kind: 'window', status: 'open',
-      meeting_date: date, day: parseDate(date).getDay(), time_from: from, time_to: to,
-    })
-    setDate(''); setFrom(''); setTo('')
-    window.dispatchEvent(new Event('rentflow-refresh'))
+    setBusy(true)
+    try {
+      const { error } = await supabase.from('cash_meetings').insert({
+        contract_id: contractId, proposer: myRole, kind: 'window', status: 'open',
+        meeting_date: date, day: parseDate(date).getDay(), time_from: from, time_to: to,
+      })
+      if (error) { alert('Ошибка: ' + error.message); return }
+      setDate(''); setFrom(''); setTo('')
+      window.dispatchEvent(new Event('rentflow-refresh'))
+    } finally {
+      setBusy(false)
+    }
   }
 
   async function removeWindow(id: string) {
@@ -112,6 +120,7 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
   }
 
   async function propose(w: Meeting, cancelConfirmedId?: string) {
+    if (busy) return
     const s = sub[w.id] || { from: '', to: '' }
     if (!s.from || !s.to || s.from >= s.to) {
       alert('Выберите время начала и окончания внутри окна')
@@ -121,16 +130,22 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
       alert(`Время должно быть внутри окна ${w.time_from}–${w.time_to}`)
       return
     }
-    if (cancelConfirmedId) {
-      await supabase.from('cash_meetings').update({ status: 'cancelled' }).eq('id', cancelConfirmedId)
+    setBusy(true)
+    try {
+      if (cancelConfirmedId) {
+        await supabase.from('cash_meetings').update({ status: 'cancelled' }).eq('id', cancelConfirmedId)
+      }
+      const { error } = await supabase.from('cash_meetings').insert({
+        contract_id: contractId, proposer: myRole, kind: 'meeting', status: 'proposed',
+        parent_id: w.id, meeting_date: w.meeting_date, day: w.day, time_from: s.from, time_to: s.to,
+      })
+      if (error) { alert('Ошибка: ' + error.message); return }
+      await notifyOther()
+      setResched(false)
+      window.dispatchEvent(new Event('rentflow-refresh'))
+    } finally {
+      setBusy(false)
     }
-    await supabase.from('cash_meetings').insert({
-      contract_id: contractId, proposer: myRole, kind: 'meeting', status: 'proposed',
-      parent_id: w.id, meeting_date: w.meeting_date, day: w.day, time_from: s.from, time_to: s.to,
-    })
-    await notifyOther()
-    setResched(false)
-    window.dispatchEvent(new Event('rentflow-refresh'))
   }
 
   async function confirmMeeting(id: string) {
@@ -163,7 +178,7 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
             <option value="">по --:--</option>
             {opts.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
-          <button style={st.btn} onClick={() => propose(w, resched && confirmed ? confirmed.id : undefined)}>{resched ? 'Перенести' : 'Предложить'}</button>
+          <button style={busy ? st.btnOff : st.btn} disabled={busy} onClick={() => propose(w, resched && confirmed ? confirmed.id : undefined)}>{resched ? 'Перенести' : 'Предложить'}</button>
         </div>
       </div>
     )
@@ -222,7 +237,7 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
               <option value="">по --:--</option>
               {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
-            <button style={st.btn} onClick={addWindow}>Добавить окно</button>
+            <button style={busy ? st.btnOff : st.btn} disabled={busy} onClick={addWindow}>Добавить окно</button>
           </div>
 
           <div style={st.h}>🕐 Окна второй стороны — выберите время внутри</div>
@@ -272,6 +287,7 @@ const st: Record<string, React.CSSProperties> = {
   form: { display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginTop: 6 },
   input: { flex: 1, minWidth: 90, padding: 6, borderRadius: 6, border: '1px solid #ddd', fontSize: 13 },
   btn: { padding: '6px 12px', borderRadius: 6, border: 'none', background: '#2196f3', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' },
+  btnOff: { padding: '6px 12px', borderRadius: 6, border: 'none', background: '#9e9e9e', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'default' },
   okBtn: { padding: '4px 10px', borderRadius: 6, border: 'none', background: '#4caf50', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', marginRight: 6 },
   del: { padding: '4px 8px', borderRadius: 6, border: 'none', background: '#ff5252', color: '#fff', fontSize: 12, cursor: 'pointer' },
   wait: { fontSize: 12, color: '#a80' },
