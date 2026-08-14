@@ -17,11 +17,6 @@ function normalizePhone(input: string): string {
   return cleaned
 }
 
-function formatCardInput(v: string): string {
-  const d = (v || '').replace(/\D/g, '').slice(0, 16)
-  return d.replace(/(.{4})/g, '$1 ').trim()
-}
-
 function formatPhoneInput(v: string): string {
   const digits = (v || '').replace(/\D/g, '').slice(0, 11)
   if (digits.length === 11 && (digits.startsWith('7') || digits.startsWith('8'))) {
@@ -34,6 +29,11 @@ function formatPhoneInput(v: string): string {
     return out
   }
   return v
+}
+
+function formatCardInput(v: string): string {
+  const d = (v || '').replace(/\D/g, '').slice(0, 16)
+  return d.replace(/(.{4})/g, '$1 ').trim()
 }
 
 function DetailsEditor({ list, onChange }: { list: PayDetail[]; onChange: (v: PayDetail[]) => void }) {
@@ -58,7 +58,7 @@ function DetailsEditor({ list, onChange }: { list: PayDetail[]; onChange: (v: Pa
           <button style={s.delButton} onClick={() => onChange(list.filter((_, x) => x !== i))}>✕</button>
         </div>
       ))}
-      <button style={s.smallButton} onClick={() => onChange([...list, { type: 'card', bank: BANKS[0], number: '' }])}>+ Добавить способ оплаты</button>
+      <button style={s.addBtn} onClick={() => onChange([...list, { type: 'card', bank: BANKS[0], number: '' }])}>+ Добавить способ оплаты</button>
     </div>
   )
 }
@@ -87,7 +87,6 @@ export function ObjectManager() {
   const [startDate, setStartDate] = useState('')
   const [rent, setRent] = useState('')
   const [deposit, setDeposit] = useState('')
-  const [depositPaid, setDepositPaid] = useState('')
   const [paymentDay, setPaymentDay] = useState('')
   const [endDate, setEndDate] = useState('')
   const [meterDay, setMeterDay] = useState('15')
@@ -109,7 +108,6 @@ export function ObjectManager() {
   const [eStartDate, setEStartDate] = useState('')
   const [eRent, setERent] = useState('')
   const [eDeposit, setEDeposit] = useState('')
-  const [eDepositPaid, setEDepositPaid] = useState('')
   const [ePaymentDay, setEPaymentDay] = useState('')
   const [eMeterDay, setEMeterDay] = useState('15')
   const [eReadingsMode, setEReadingsMode] = useState('manual')
@@ -132,9 +130,23 @@ export function ObjectManager() {
     load()
   }, [user])
 
+  // Поиск существующего пользователя по последним 10 цифрам телефона
+  async function findCounterparty(phoneInput: string): Promise<any | null> {
+    const digits = phoneInput.replace(/\D/g, '')
+    if (!digits) return null
+    const { data: users } = await supabase.from('users').select('*').not('phone', 'is', null)
+    return (users || []).find((u: any) => (u.phone || '').replace(/\D/g, '').slice(-10) === digits.slice(-10)) || null
+  }
+
+  function validPhone(phoneInput: string): boolean {
+    if (!phoneInput) return true
+    return phoneInput.replace(/\D/g, '').length === 11
+  }
+
   async function save() {
     if (saving) return
     if (!user || !address) { setMsg('Укажите адрес объекта'); return }
+    if (!validPhone(phone)) { setMsg('⚠️ Проверьте номер телефона арендатора: 11 цифр, начинается с 7 или 8'); return }
     if (method !== 'cash' && details.length === 0) {
       setAddDetailsErr('⚠️ Добавьте хотя бы один способ безналичной оплаты: карту банка или СБП')
       return
@@ -145,8 +157,7 @@ export function ObjectManager() {
       const normalizedPhone = phone ? normalizePhone(phone) : null
       let counter: any = null
       if (normalizedPhone) {
-        const { data } = await supabase.from('users').select('*').eq('phone', normalizedPhone).limit(1)
-        counter = data && data[0]
+        counter = await findCounterparty(normalizedPhone)
       }
       if (!counter) {
         const { data, error } = await supabase.from('users').insert({
@@ -156,6 +167,8 @@ export function ObjectManager() {
         }).select().single()
         if (error) { setMsg('Ошибка арендатора: ' + error.message); return }
         counter = data
+      } else if (name) {
+        await supabase.from('users').update({ full_name: name }).eq('id', counter.id)
       }
       const { data: obj, error: objErr } = await supabase.from('objects')
         .insert({ landlord_id: user.id, address, notes: notes || null }).select().single()
@@ -166,7 +179,6 @@ export function ObjectManager() {
         object_id: obj.id, tenant_id: counter.id,
         rent_amount: Number(rent) || 0,
         deposit_amount: Number(deposit) || 0,
-        deposit_paid: Number(depositPaid) || 0,
         payment_day: Number(paymentDay) || 1,
         meter_deadline_day: Number(meterDay) || 15,
         readings_mode: readingsMode,
@@ -183,6 +195,8 @@ export function ObjectManager() {
         { contract_id: contract.id, violation_type: 'payment_overdue', rate: Number(penPay) || 500, rate_unit: 'per_day_rub', starts_after_days: 0 },
         { contract_id: contract.id, violation_type: 'readings_overdue', rate: Number(penRead) || 100, rate_unit: 'per_day_rub', starts_after_days: 0 },
       ])
+      // Первый платёж: если день платежа в этом месяце уже прошёл — ставим его на следующий месяц,
+      // чтобы первый месяц договора был без просрочки
       const now = new Date()
       const payDay = Number(paymentDay) || 1
       let due = new Date(now.getFullYear(), now.getMonth(), payDay)
@@ -195,7 +209,7 @@ export function ObjectManager() {
       })
       setMsg('✅ Объект, договор и первый платёж сохранены')
       setShowForm(false)
-      setAddress(''); setNotes(''); setName(''); setPhone(''); setRent(''); setDeposit(''); setDepositPaid(''); setStartDate(''); setPaymentDay(''); setMeterDay('15'); setDetails([]); setReadingsMode('manual'); setMethod('both'); setAddDetailsErr(null)
+      setAddress(''); setNotes(''); setName(''); setPhone(''); setRent(''); setDeposit(''); setStartDate(''); setPaymentDay(''); setMeterDay('15'); setDetails([]); setReadingsMode('manual'); setMethod('both'); setAddDetailsErr(null)
       load()
     } finally {
       setSaving(false)
@@ -212,7 +226,6 @@ export function ObjectManager() {
       setEStartDate(contract.start_date || '')
       setERent(String(contract.rent_amount ?? ''))
       setEDeposit(String(contract.deposit_amount ?? ''))
-      setEDepositPaid(String(contract.deposit_paid ?? 0))
       setEPaymentDay(String(contract.payment_day ?? ''))
       setEMeterDay(String(contract.meter_deadline_day || 15))
       setEReadingsMode(contract.readings_mode || 'manual')
@@ -239,6 +252,7 @@ export function ObjectManager() {
 
   async function saveEdit() {
     if (!editId || !user) return
+    if (!validPhone(ePhone)) { setMsg('⚠️ Проверьте номер телефона арендатора: 11 цифр, начинается с 7 или 8'); return }
     if (eMethod !== 'cash' && eDetails.length === 0) {
       setEditDetailsErr('⚠️ Добавьте хотя бы один способ безналичной оплаты: карту банка или СБП')
       return
@@ -251,7 +265,6 @@ export function ObjectManager() {
       const { error: ce } = await supabase.from('contracts').update({
         rent_amount: Number(eRent) || 0,
         deposit_amount: Number(eDeposit) || 0,
-        deposit_paid: Number(eDepositPaid) || 0,
         payment_day: Number(ePaymentDay) || 1,
         meter_deadline_day: Number(eMeterDay) || 15,
         readings_mode: eReadingsMode,
@@ -309,9 +322,6 @@ export function ObjectManager() {
     </>
   )
 
-  const addRest = Math.max(0, (Number(deposit) || 0) - (Number(depositPaid) || 0))
-  const eRest = Math.max(0, (Number(eDeposit) || 0) - (Number(eDepositPaid) || 0))
-
   return (
     <div style={s.card}>
       <div style={s.h2}>➕ Управление объектами</div>
@@ -325,7 +335,7 @@ export function ObjectManager() {
           <div style={s.small}>Арендатор (имя)</div>
           <input style={s.input} value={name} onChange={(e) => setName(e.target.value)} placeholder="Имя" />
           <div style={s.small}>Телефон арендатора</div>
-          <input style={s.input} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+79995553322 или 89995553322" />
+          <input style={s.input} value={phone} onChange={(e) => setPhone(formatPhoneInput(e.target.value))} placeholder="+7 905 000-00-00" inputMode="tel" />
           <div style={s.small}>Начало договора</div>
           <input
             style={s.input}
@@ -340,11 +350,8 @@ export function ObjectManager() {
           />
           <div style={s.small}>Сумма аренды, руб</div>
           <input style={s.input} value={rent} onChange={(e) => setRent(e.target.value)} placeholder="85000" inputMode="numeric" />
-          <div style={s.small}>Депозит общая сумма, руб</div>
+          <div style={s.small}>Залоговый депозит, руб</div>
           <input style={s.input} value={deposit} onChange={(e) => setDeposit(e.target.value)} placeholder="Например: 85000" inputMode="numeric" />
-          <div style={s.small}>Депозит внесено, руб</div>
-          <input style={s.input} value={depositPaid} onChange={(e) => setDepositPaid(e.target.value)} placeholder="0" inputMode="numeric" />
-          <div style={s.small}>Остаток депозита: {addRest.toFixed(0)} ₽</div>
           <div style={s.small}>День платежа (число месяца, подставляется из начала договора)</div>
           <input style={s.input} value={paymentDay} onChange={(e) => setPaymentDay(e.target.value)} placeholder="1" inputMode="numeric" />
           <div style={s.small}>Режим показаний счётчиков</div>
@@ -391,7 +398,7 @@ export function ObjectManager() {
               <div style={s.small}>Арендатор (имя)</div>
               <input style={s.input} value={eName} onChange={(e) => setEName(e.target.value)} />
               <div style={s.small}>Телефон арендатора</div>
-              <input style={s.input} value={ePhone} onChange={(e) => setEPhone(e.target.value)} />
+              <input style={s.input} value={ePhone} onChange={(e) => setEPhone(formatPhoneInput(e.target.value))} inputMode="tel" />
               <div style={s.small}>Начало договора</div>
               <input
                 style={s.input}
@@ -406,11 +413,8 @@ export function ObjectManager() {
               />
               <div style={s.small}>Сумма аренды, руб</div>
               <input style={s.input} value={eRent} onChange={(e) => setERent(e.target.value)} inputMode="numeric" />
-              <div style={s.small}>Депозит общая сумма, руб</div>
+              <div style={s.small}>Залоговый депозит, руб</div>
               <input style={s.input} value={eDeposit} onChange={(e) => setEDeposit(e.target.value)} inputMode="numeric" />
-              <div style={s.small}>Депозит внесено, руб</div>
-              <input style={s.input} value={eDepositPaid} onChange={(e) => setEDepositPaid(e.target.value)} inputMode="numeric" />
-              <div style={s.small}>Остаток депозита: {eRest.toFixed(0)} ₽</div>
               <div style={s.small}>День платежа (число месяца, подставляется из начала договора)</div>
               <input style={s.input} value={ePaymentDay} onChange={(e) => setEPaymentDay(e.target.value)} inputMode="numeric" />
               <div style={s.small}>Режим показаний счётчиков</div>
@@ -468,6 +472,7 @@ const s: Record<string, React.CSSProperties> = {
   blueBtn: { padding: '8px 14px', borderRadius: 8, border: 'none', background: '#2196f3', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginRight: 8, marginTop: 6 },
   smallButton: { padding: '6px 10px', borderRadius: 8, border: 'none', background: '#90a4ae', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' },
   delButton: { padding: '6px 10px', borderRadius: 8, border: 'none', background: '#e57373', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' },
+  addBtn: { padding: '8px 14px', borderRadius: 8, border: 'none', background: '#2196f3', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' },
   input: { width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 15, marginBottom: 8, boxSizing: 'border-box' },
   half: { width: '48%', padding: '8px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, marginBottom: 8, boxSizing: 'border-box' },
   row: { display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start', marginBottom: 8 },
