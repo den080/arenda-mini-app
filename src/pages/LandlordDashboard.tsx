@@ -300,7 +300,7 @@ export function LandlordDashboard() {
           const frozenOpen = expandedFrozen.has(obj.id)
           const periodMid = obj.payment ? parseDate(obj.payment.period) : null
           const sd = (contract as any).start_date ? parseDate((contract as any).start_date) : null
-          const firstMonthPending = !!(contract && obj.payment && startMid && periodMid && !obj.payment.confirmed_by_landlord && periodMid.getFullYear() === startMid.getFullYear() && periodMid.getMonth() === startMid.getMonth())
+          const firstMonthPending = !!(contract && obj.payment && sd && periodMid && !obj.payment.confirmed_by_landlord && periodMid.getFullYear() === sd.getFullYear() && periodMid.getMonth() === sd.getMonth())
           return (
             <div key={obj.id} style={{ ...styles.card, backgroundColor: obj.bgColor || '#fff' }}>
               <div style={styles.cardHeader} onClick={() => toggleExpanded(obj.id)}>
