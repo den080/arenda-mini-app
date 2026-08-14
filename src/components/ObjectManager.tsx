@@ -87,6 +87,7 @@ export function ObjectManager() {
   const [startDate, setStartDate] = useState('')
   const [rent, setRent] = useState('')
   const [deposit, setDeposit] = useState('')
+  const [depositPaid, setDepositPaid] = useState('')
   const [paymentDay, setPaymentDay] = useState('')
   const [endDate, setEndDate] = useState('')
   const [meterDay, setMeterDay] = useState('15')
@@ -108,6 +109,7 @@ export function ObjectManager() {
   const [eStartDate, setEStartDate] = useState('')
   const [eRent, setERent] = useState('')
   const [eDeposit, setEDeposit] = useState('')
+  const [eDepositPaid, setEDepositPaid] = useState('')
   const [ePaymentDay, setEPaymentDay] = useState('')
   const [eMeterDay, setEMeterDay] = useState('15')
   const [eReadingsMode, setEReadingsMode] = useState('manual')
@@ -164,6 +166,7 @@ export function ObjectManager() {
         object_id: obj.id, tenant_id: counter.id,
         rent_amount: Number(rent) || 0,
         deposit_amount: Number(deposit) || 0,
+        deposit_paid: Number(depositPaid) || 0,
         payment_day: Number(paymentDay) || 1,
         meter_deadline_day: Number(meterDay) || 15,
         readings_mode: readingsMode,
@@ -180,8 +183,6 @@ export function ObjectManager() {
         { contract_id: contract.id, violation_type: 'payment_overdue', rate: Number(penPay) || 500, rate_unit: 'per_day_rub', starts_after_days: 0 },
         { contract_id: contract.id, violation_type: 'readings_overdue', rate: Number(penRead) || 100, rate_unit: 'per_day_rub', starts_after_days: 0 },
       ])
-      // Первый платёж: если день платежа в этом месяце уже прошёл — ставим его на следующий месяц,
-      // чтобы первый месяц договора был без просрочки
       const now = new Date()
       const payDay = Number(paymentDay) || 1
       let due = new Date(now.getFullYear(), now.getMonth(), payDay)
@@ -194,7 +195,7 @@ export function ObjectManager() {
       })
       setMsg('✅ Объект, договор и первый платёж сохранены')
       setShowForm(false)
-      setAddress(''); setNotes(''); setName(''); setPhone(''); setRent(''); setDeposit(''); setStartDate(''); setPaymentDay(''); setMeterDay('15'); setDetails([]); setReadingsMode('manual'); setMethod('both'); setAddDetailsErr(null)
+      setAddress(''); setNotes(''); setName(''); setPhone(''); setRent(''); setDeposit(''); setDepositPaid(''); setStartDate(''); setPaymentDay(''); setMeterDay('15'); setDetails([]); setReadingsMode('manual'); setMethod('both'); setAddDetailsErr(null)
       load()
     } finally {
       setSaving(false)
@@ -211,6 +212,7 @@ export function ObjectManager() {
       setEStartDate(contract.start_date || '')
       setERent(String(contract.rent_amount ?? ''))
       setEDeposit(String(contract.deposit_amount ?? ''))
+      setEDepositPaid(String(contract.deposit_paid ?? 0))
       setEPaymentDay(String(contract.payment_day ?? ''))
       setEMeterDay(String(contract.meter_deadline_day || 15))
       setEReadingsMode(contract.readings_mode || 'manual')
@@ -249,6 +251,7 @@ export function ObjectManager() {
       const { error: ce } = await supabase.from('contracts').update({
         rent_amount: Number(eRent) || 0,
         deposit_amount: Number(eDeposit) || 0,
+        deposit_paid: Number(eDepositPaid) || 0,
         payment_day: Number(ePaymentDay) || 1,
         meter_deadline_day: Number(eMeterDay) || 15,
         readings_mode: eReadingsMode,
@@ -306,6 +309,9 @@ export function ObjectManager() {
     </>
   )
 
+  const addRest = Math.max(0, (Number(deposit) || 0) - (Number(depositPaid) || 0))
+  const eRest = Math.max(0, (Number(eDeposit) || 0) - (Number(eDepositPaid) || 0))
+
   return (
     <div style={s.card}>
       <div style={s.h2}>➕ Управление объектами</div>
@@ -334,8 +340,11 @@ export function ObjectManager() {
           />
           <div style={s.small}>Сумма аренды, руб</div>
           <input style={s.input} value={rent} onChange={(e) => setRent(e.target.value)} placeholder="85000" inputMode="numeric" />
-          <div style={s.small}>Залоговый депозит, руб</div>
+          <div style={s.small}>Депозит общая сумма, руб</div>
           <input style={s.input} value={deposit} onChange={(e) => setDeposit(e.target.value)} placeholder="Например: 85000" inputMode="numeric" />
+          <div style={s.small}>Депозит внесено, руб</div>
+          <input style={s.input} value={depositPaid} onChange={(e) => setDepositPaid(e.target.value)} placeholder="0" inputMode="numeric" />
+          <div style={s.small}>Остаток депозита: {addRest.toFixed(0)} ₽</div>
           <div style={s.small}>День платежа (число месяца, подставляется из начала договора)</div>
           <input style={s.input} value={paymentDay} onChange={(e) => setPaymentDay(e.target.value)} placeholder="1" inputMode="numeric" />
           <div style={s.small}>Режим показаний счётчиков</div>
@@ -397,8 +406,11 @@ export function ObjectManager() {
               />
               <div style={s.small}>Сумма аренды, руб</div>
               <input style={s.input} value={eRent} onChange={(e) => setERent(e.target.value)} inputMode="numeric" />
-              <div style={s.small}>Залоговый депозит, руб</div>
+              <div style={s.small}>Депозит общая сумма, руб</div>
               <input style={s.input} value={eDeposit} onChange={(e) => setEDeposit(e.target.value)} inputMode="numeric" />
+              <div style={s.small}>Депозит внесено, руб</div>
+              <input style={s.input} value={eDepositPaid} onChange={(e) => setEDepositPaid(e.target.value)} inputMode="numeric" />
+              <div style={s.small}>Остаток депозита: {eRest.toFixed(0)} ₽</div>
               <div style={s.small}>День платежа (число месяца, подставляется из начала договора)</div>
               <input style={s.input} value={ePaymentDay} onChange={(e) => setEPaymentDay(e.target.value)} inputMode="numeric" />
               <div style={s.small}>Режим показаний счётчиков</div>
