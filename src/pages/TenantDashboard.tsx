@@ -26,64 +26,23 @@ function formatPhoneDisplay(v: string): string {
 
 export function TenantDashboard() {
   const { user, loading: userLoading } = useTelegramUser()
-  const [data, setData] = useState<any>(null)
+  const [contracts, setContracts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [vals, setVals] = useState<Record<string, string>>({})
-  const [msg, setMsg] = useState<string | null>(null)
   const [notifications, setNotifications] = useState<Notification[]>([])
-  const [frozenOpen, setFrozenOpen] = useState(false)
-  const [historyOpen, setHistoryOpen] = useState<Record<string, boolean>>({})
 
   async function load() {
     if (!user) return
-    try {
-      const { data: contract } = await supabase
-        .from('contracts').select('*')
-        .eq('tenant_id', user!.id).eq('status', 'active').maybeSingle()
-      if (!contract) { setError('🤝 У вас пока нет активной аренды. Попросите арендодателя добавить объект и указать ваш номер телефона в договоре — после этого аренда появится здесь.'); setLoading(false); return }
-
-      const { data: obj } = await supabase.from('objects').select('*').eq('id', contract.object_id).maybeSingle()
-      const { data: landlord } = await supabase.from('users').select('*').eq('id', obj?.landlord_id).maybeSingle()
-      const { data: payments } = await supabase.from('payments').select('*').eq('contract_id', contract.id).order('period', { ascending: false })
-      const { data: meters } = await supabase.from('object_meters').select('*').eq('object_id', contract.object_id).eq('is_active', true)
-      const { data: meterTypes } = await supabase.from('meter_types').select('*')
-      const { data: penaltyRules } = await supabase.from('penalty_rules').select('*').eq('contract_id', contract.id)
-      const { data: frozenRows } = await supabase.from('frozen_penalties').select('*').eq('contract_id', contract.id).order('period', { ascending: true })
-      const { data: deferredReqs } = await supabase.from('deferred_requests').select('*').eq('contract_id', contract.id).order('created_at', { ascending: false }).limit(1)
-
-      const ids = (meters || []).map((m: any) => m.id)
-      const readingsByMeter: Record<string, any[]> = {}
-      if (ids.length) {
-        const { data: rd } = await supabase
-          .from('meter_readings').select('*')
-          .in('object_meter_id', ids)
-          .order('submitted_at', { ascending: false })
-        for (const r of rd || []) {
-          if (!readingsByMeter[r.object_meter_id]) readingsByMeter[r.object_meter_id] = []
-          readingsByMeter[r.object_meter_id].push(r)
-        }
-      }
-
-      const { data: notifData } = await supabase
-        .from('notifications_log').select('*')
-        .eq('user_id', user!.id)
-        .order('sent_at', { ascending: false }).limit(5)
-      setNotifications(notifData || [])
-
-      setData({
-        contract, obj, landlord,
-        payments: payments || [], meters: meters || [], meterTypes: meterTypes || [],
-        penaltyRules: penaltyRules || [],
-        frozenRows: frozenRows || [],
-        deferredReqs: deferredReqs || [],
-        readingsByMeter
-      })
-    } catch (e) {
-      setError('Ошибка загрузки: ' + String(e))
-    } finally {
-      setLoading(false)
-    }
+    const { data: cs } = await supabase
+      .from('contracts').select('*')
+      .eq('tenant_id', user.id).eq('status', 'active')
+      .order('created_at', { ascending: true })
+    setContracts(cs || [])
+    const { data: notifData } = await supabase
+      .from('notifications_log').select('*')
+      .eq('user_id', user.id)
+      .order('sent_at', { ascending: false }).limit(5)
+    setNotifications(notifData || [])
+    setLoading(false)
   }
 
   useEffect(() => {
@@ -93,15 +52,94 @@ export function TenantDashboard() {
     return () => clearInterval(interval)
   }, [user])
 
+  const getNotificationText = (type: string) => {
+    switch (type) {
+      case 'payment_claimed': return '✅ Арендатор сообщил об оплате'
+      case 'payment_confirmed': return '🟢 Арендодатель подтвердил оплату'
+      case 'meter_submitted': return '💦 Переданы новые показания'
+      case 'cash_proposed': return '💵 Предложено время встречи наличными'
+      case 'cash_confirmed': return '🤝 Время встречи наличными подтверждено'
+      case 'deferred_proposed': return '🙏 Заявка на отсрочку штрафа отправлена'
+      case 'deferred_confirmed': return '🧊 Замороженный штраф обновлён'
+      default: return type
+    }
+  }
+
+  if (userLoading || loading) return <div style={T.page}>Загрузка…</div>
+
+  return (
+    <div style={T.page}>
+      <h1 style={T.h1}>Моя аренда</h1>
+      {contracts.length === 0 ? (
+        <div style={T.card}>🤝 У вас пока нет активной аренды. Попросите арендодателя добавить объект и указать ваш номер телефона в договоре — после этого аренда появится здесь.</div>
+      ) : (
+        contracts.map(c => <TenantRental key={c.id} contract={c} />)
+      )}
+
+      <div style={T.card}>
+        <div style={T.h2}>Уведомления</div>
+        {notifications.length === 0 ? (
+          <div style={T.small}>Нет уведомлений</div>
+        ) : (
+          notifications.map(n => (
+            <div key={n.id} style={{ padding: '8px 0', borderBottom: `1px solid ${C.line}`, fontSize: 14 }}>{(n as any).message || getNotificationText(n.type)}</div>
+          ))
+        )}
+      </div>
+    </div>
+  )
+}
+
+function TenantRental({ contract }: { contract: any }) {
+  const { user } = useTelegramUser()
+  const [data, setData] = useState<any>(null)
+  const [vals, setVals] = useState<Record<string, string>>({})
+  const [msg, setMsg] = useState<string | null>(null)
+  const [frozenOpen, setFrozenOpen] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState<Record<string, boolean>>({})
+
+  async function load() {
+    if (!user) return
+    const { data: obj } = await supabase.from('objects').select('*').eq('id', contract.object_id).maybeSingle()
+    const { data: landlord } = await supabase.from('users').select('*').eq('id', obj?.landlord_id).maybeSingle()
+    const { data: payments } = await supabase.from('payments').select('*').eq('contract_id', contract.id).order('period', { ascending: false })
+    const { data: meters } = await supabase.from('object_meters').select('*').eq('object_id', contract.object_id).eq('is_active', true)
+    const { data: meterTypes } = await supabase.from('meter_types').select('*')
+    const { data: penaltyRules } = await supabase.from('penalty_rules').select('*').eq('contract_id', contract.id)
+    const { data: frozenRows } = await supabase.from('frozen_penalties').select('*').eq('contract_id', contract.id).order('period', { ascending: true })
+    const { data: deferredReqs } = await supabase.from('deferred_requests').select('*').eq('contract_id', contract.id).order('created_at', { ascending: false }).limit(1)
+
+    const ids = (meters || []).map((m: any) => m.id)
+    const readingsByMeter: Record<string, any[]> = {}
+    if (ids.length) {
+      const { data: rd } = await supabase
+        .from('meter_readings').select('*')
+        .in('object_meter_id', ids)
+        .order('submitted_at', { ascending: false })
+      for (const r of rd || []) {
+        if (!readingsByMeter[r.object_meter_id]) readingsByMeter[r.object_meter_id] = []
+        readingsByMeter[r.object_meter_id].push(r)
+      }
+    }
+
+    setData({ obj, landlord, payments: payments || [], meters: meters || [], meterTypes: meterTypes || [], penaltyRules: penaltyRules || [], frozenRows: frozenRows || [], deferredReqs: deferredReqs || [], readingsByMeter })
+  }
+
+  useEffect(() => {
+    load()
+    const on = () => load()
+    window.addEventListener('rentflow-refresh', on)
+    return () => window.removeEventListener('rentflow-refresh', on)
+  }, [contract.id])
+
   async function choosePayMethod(m: string) {
-    if (!data) return
-    const { error: e } = await supabase.from('contracts').update({ tenant_pay_method: m }).eq('id', data.contract.id)
+    const { error: e } = await supabase.from('contracts').update({ tenant_pay_method: m }).eq('id', contract.id)
     if (e) setMsg('Ошибка: ' + e.message)
     else load()
   }
 
   async function claimPaid() {
-    if (!data || !data.landlord) return
+    if (!data?.landlord) return
     const payment = data.payments[0]
     if (!payment) return
     const { error: e } = await supabase.from('payments').update({ card_claimed: true }).eq('id', payment.id)
@@ -114,16 +152,16 @@ export function TenantDashboard() {
   }
 
   async function requestDeferral() {
-    if (!data || !data.landlord) return
+    if (!data?.landlord) return
     const payment = data.payments[0]
     if (!payment || Number(payment.penalty_amount) <= 0) return
     const { error: e } = await supabase.from('deferred_requests').insert({
-      contract_id: data.contract.id, payment_id: payment.id,
+      contract_id: contract.id, payment_id: payment.id,
       amount: Number(payment.penalty_amount), status: 'proposed',
     })
     if (e) { setMsg('Ошибка: ' + e.message); return }
     await supabase.from('notifications_log').insert({
-      user_id: data.landlord.id, type: 'deferred_proposed', related_id: data.contract.id, sent_at: new Date().toISOString(),
+      user_id: data.landlord.id, type: 'deferred_proposed', related_id: contract.id, sent_at: new Date().toISOString(),
     })
     setMsg('✅ Заявка на отсрочку штрафа отправлена арендодателю')
     load()
@@ -135,7 +173,7 @@ export function TenantDashboard() {
     const rows: any[] = []
     for (const m of data.meters) {
       const v = vals[m.id]
-      if (v) rows.push({ object_meter_id: m.id, contract_id: data.contract.id, value: Number(v), period, submitted_at: new Date().toISOString(), status: 'proposed' })
+      if (v) rows.push({ object_meter_id: m.id, contract_id: contract.id, value: Number(v), period, submitted_at: new Date().toISOString(), status: 'proposed' })
     }
     if (rows.length === 0) { setMsg('Введите показания счётчиков'); return }
     const { error: e } = await supabase.from('meter_readings').insert(rows)
@@ -143,7 +181,7 @@ export function TenantDashboard() {
     setVals({})
     if (!e) {
       await supabase.from('notifications_log').insert({
-        user_id: user!.id, type: 'meter_submitted', related_id: data.contract.id, sent_at: new Date().toISOString()
+        user_id: user!.id, type: 'meter_submitted', related_id: contract.id, sent_at: new Date().toISOString()
       })
       load()
     }
@@ -159,11 +197,9 @@ export function TenantDashboard() {
     }
   }
 
-  if (userLoading || loading) return <div style={T.page}>Загрузка…</div>
-  if (error) return <div style={T.page}><div style={T.card}>{error}</div></div>
-  if (!data) return <div style={T.page}><div style={T.card}>Нет данных</div></div>
+  if (!data) return <div style={T.card}>Загрузка…</div>
 
-  const { contract, obj, landlord, payments, meters, meterTypes, penaltyRules, frozenRows, deferredReqs, readingsByMeter } = data
+  const { obj, landlord, payments, meters, meterTypes, penaltyRules, frozenRows, deferredReqs, readingsByMeter } = data
   const readingsMode = contract.readings_mode || 'manual'
   const reminder = contract.reminder_days_before || 3
   const payment = payments[0]
@@ -200,20 +236,10 @@ export function TenantDashboard() {
       const sd = contract.start_date ? parseDate(contract.start_date) : null
       const firstMonthGrace = !!sd && dueMid.getMonth() === sd.getMonth() && dueMid.getFullYear() === sd.getFullYear() && todayMid < new Date(sd.getFullYear(), sd.getMonth() + 1, 1)
       const daysUntilDue = firstMonthGrace && todayMid > dueMid ? 0 : Math.round((dueMid.getTime() - todayMid.getTime()) / 86400000)
-      if (todayMid > dueMid && !firstMonthGrace) {
-        isOverdue = true
-        statusChip = T.chipRed
-        statusText = `Просрочка ${-daysUntilDue} дн.`
-      } else if (daysUntilDue === 0) {
-        statusChip = T.chipOrange
-        statusText = firstMonthGrace ? 'Первый месяц — просрочка не начисляется' : 'Сегодня последний день оплаты'
-      } else if (daysUntilDue <= reminder) {
-        statusChip = T.chipOrange
-        statusText = `До оплаты ${daysUntilDue} дн.`
-      } else {
-        statusChip = T.chipGreen
-        statusText = `До оплаты ${daysUntilDue} дн.`
-      }
+      if (todayMid > dueMid && !firstMonthGrace) { isOverdue = true; statusChip = T.chipRed; statusText = `Просрочка ${-daysUntilDue} дн.` }
+      else if (daysUntilDue === 0) { statusChip = T.chipOrange; statusText = firstMonthGrace ? 'Первый месяц — просрочка не начисляется' : 'Сегодня последний день оплаты' }
+      else if (daysUntilDue <= reminder) { statusChip = T.chipOrange; statusText = `До оплаты ${daysUntilDue} дн.` }
+      else { statusChip = T.chipGreen; statusText = `До оплаты ${daysUntilDue} дн.` }
     } else {
       const periodDate = parseDate(payment.period)
       const nextDue = new Date(periodDate.getFullYear(), periodDate.getMonth() + 1, contract.payment_day || 1)
@@ -235,23 +261,8 @@ export function TenantDashboard() {
     ? contract.payment_details
     : (contract.card_number ? [{ type: 'card', bank: 'Банк не указан', number: contract.card_number }] : [])
 
-  const getNotificationText = (type: string) => {
-    switch (type) {
-      case 'payment_claimed': return '✅ Арендатор сообщил об оплате'
-      case 'payment_confirmed': return '🟢 Арендодатель подтвердил оплату'
-      case 'meter_submitted': return '💦 Переданы новые показания'
-      case 'cash_proposed': return '💵 Предложено время встречи наличными'
-      case 'cash_confirmed': return '🤝 Время встречи наличными подтверждено'
-      case 'deferred_proposed': return '🙏 Заявка на отсрочку штрафа отправлена'
-      case 'deferred_confirmed': return '🧊 Замороженный штраф обновлён'
-      default: return type
-    }
-  }
-
   return (
-    <div style={T.page}>
-      <h1 style={T.h1}>Моя аренда</h1>
-
+    <div>
       <div style={T.card}>
         <div style={{ fontSize: 17, fontWeight: 600 }}>{obj?.address}</div>
         <div style={T.small}>Арендодатель: {landlord?.full_name}{landlord?.phone ? ', ' + formatPhoneDisplay(landlord.phone) : ''}</div>
@@ -417,17 +428,6 @@ export function TenantDashboard() {
             <b>{(Number(p.base_amount) + Number(p.penalty_amount || 0) + Number(p.utilities_amount || 0)).toFixed(2)} ₽</b>
           </div>
         ))}
-      </div>
-
-      <div style={T.card}>
-        <div style={T.h2}>Уведомления</div>
-        {notifications.length === 0 ? (
-          <div style={T.small}>Нет уведомлений</div>
-        ) : (
-          notifications.map(n => (
-            <div key={n.id} style={{ padding: '8px 0', borderBottom: `1px solid ${C.line}`, fontSize: 14 }}>{(n as any).message || getNotificationText(n.type)}</div>
-          ))
-        )}
       </div>
     </div>
   )
