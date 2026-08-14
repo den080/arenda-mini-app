@@ -44,27 +44,22 @@ export function MetersEditor({ objId }: { objId: string }) {
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
 
-  async function setCount(code: string, n: number) {
+  async function addMeter(code: string) {
     const mt = typeByCode(code)
-    if (!mt || n < 0 || n > 4) return
-    const cur = activeRows(code)
-    if (n > cur.length) {
-      const all = rows.filter(r => r.meter_type_id === mt.id)
-      const inactive = all.filter(r => !r.is_active)
-      let toAdd = n - cur.length
-      for (const r of inactive) {
-        if (toAdd <= 0) break
-        await supabase.from('object_meters').update({ is_active: true }).eq('id', r.id)
-        toAdd--
-      }
-      for (let i = 0; i < toAdd; i++) {
-        await supabase.from('object_meters').insert({ object_id: objId, meter_type_id: mt.id, is_active: true, label: '' })
-      }
-    } else if (n < cur.length) {
-      for (let i = cur.length - 1; i >= n; i--) {
-        await supabase.from('object_meters').update({ is_active: false }).eq('id', cur[i].id)
-      }
+    if (!mt) return
+    const all = rows.filter(r => r.meter_type_id === mt.id)
+    const inactive = all.find(r => !r.is_active)
+    if (inactive) {
+      await supabase.from('object_meters').update({ is_active: true }).eq('id', inactive.id)
+    } else {
+      await supabase.from('object_meters').insert({ object_id: objId, meter_type_id: mt.id, is_active: true, label: '' })
     }
+    window.dispatchEvent(new Event('rentflow-refresh'))
+    load()
+  }
+
+  async function removeMeter(id: string) {
+    await supabase.from('object_meters').update({ is_active: false }).eq('id', id)
     window.dispatchEvent(new Event('rentflow-refresh'))
     load()
   }
@@ -87,7 +82,9 @@ export function MetersEditor({ objId }: { objId: string }) {
     for (const code of all) await setActive(code, (need[mode] || []).includes(code))
   }
 
-  const serialInput = (r: any) => (
+  const elecMode = getElecMode()
+
+  const serialRow = (r: any, withDelete: boolean) => (
     <div key={r.id} style={st.serialRow}>
       <input
         defaultValue={r.label || ''}
@@ -95,16 +92,15 @@ export function MetersEditor({ objId }: { objId: string }) {
         style={st.serialInput}
         onBlur={(e) => setSerial(r.id, e.target.value)}
       />
+      {withDelete && <button style={st.del} onClick={() => removeMeter(r.id)}>✕</button>}
     </div>
   )
-
-  const elecMode = getElecMode()
 
   return (
     <div>
       <div style={st.small}>⚡ Электричество</div>
       {[
-        { v: 'none', l: 'Не установлено' },
+        { v: 'none', l: 'Не используется / автопередача данных' },
         { v: '1', l: '1-тарифный' },
         { v: '2', l: '2-тарифный (день/ночь)' },
         { v: '3', l: '3-тарифный (пик/полупик/ночь)' },
@@ -125,20 +121,16 @@ export function MetersEditor({ objId }: { objId: string }) {
         ))
       )}
 
-      <div style={st.small}>💧 Вода (можно несколько счётчиков)</div>
+      <div style={st.small}>💧 Вода</div>
       {['water_cold', 'water_hot'].map(code => {
         const t = typeByCode(code)
         const act = activeRows(code)
         return (
-          <div key={code}>
-            <div style={st.countRow}>
-              <span>{t?.label || code}: {act.length === 0 ? 'не установлено' : `${act.length} счётчик(а)`}</span>
-              <span>
-                <button style={st.miniBtn} onClick={() => setCount(code, act.length - 1)}>−</button>
-                <button style={st.miniBtn} onClick={() => setCount(code, act.length + 1)}>+</button>
-              </span>
-            </div>
-            {act.map(serialInput)}
+          <div key={code} style={{ marginBottom: 10 }}>
+            <div style={st.small}>{t?.label || code}</div>
+            {act.length === 0 && <div style={st.note}>счётчиков нет</div>}
+            {act.map(r => serialRow(r, true))}
+            <button style={st.addBtn} onClick={() => addMeter(code)}>+ Добавить счётчик</button>
           </div>
         )
       })}
@@ -150,7 +142,7 @@ export function MetersEditor({ objId }: { objId: string }) {
           {' '}Теплосчётчик установлен
         </label>
       </div>
-      {activeRows('heat').map(serialInput)}
+      {activeRows('heat').map(r => serialRow(r, false))}
       {typeByCode('gas') && (
         <div style={st.row}>
           <label style={st.label}>
@@ -159,20 +151,21 @@ export function MetersEditor({ objId }: { objId: string }) {
           </label>
         </div>
       )}
-      {activeRows('gas').map(serialInput)}
+      {activeRows('gas').map(r => serialRow(r, false))}
     </div>
   )
 }
 
 const st: Record<string, React.CSSProperties> = {
   small: { fontSize: 12, color: '#888', marginTop: 6, marginBottom: 4 },
+  note: { fontSize: 11, color: 'rgba(0,0,0,0.4)', marginBottom: 4 },
   row: { marginBottom: 8 },
   label: { fontSize: 14, cursor: 'pointer' },
-  countRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 14, marginBottom: 8 },
-  miniBtn: { padding: '4px 10px', borderRadius: 6, border: 'none', background: '#2196f3', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', marginLeft: 6 },
   serialRow: { display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 },
   idx: { fontSize: 12, color: '#888', minWidth: 90 },
   serialInput: { flex: 1, padding: '6px 8px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13 },
+  del: { padding: '4px 8px', borderRadius: 6, border: 'none', background: '#ff5252', color: '#fff', fontSize: 12, cursor: 'pointer' },
+  addBtn: { padding: '6px 10px', borderRadius: 8, border: 'none', background: '#90a4ae', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' },
 }
 
 export default MetersEditor
