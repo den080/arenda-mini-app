@@ -362,7 +362,7 @@ function TenantRental({ contract, tab }: { contract: any; tab: string }) {
                 <div style={T.note}>🟡 Отсрочка штрафа: заявка на рассмотрении</div>
               ) : (
                 <button onClick={requestDeferral} style={T.btnWarn}>Попросить отсрочку штрафа</button>
-              )}
+              )
             )}
             {contract.payment_method === 'both' && (
               <div style={T.sub}>
