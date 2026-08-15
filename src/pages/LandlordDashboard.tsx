@@ -5,6 +5,7 @@ import CashNegotiation from '../components/CashNegotiation'
 import MetersEditor from '../components/MetersEditor'
 import ReadingsReview from '../components/ReadingsReview'
 import Chat from '../components/Chat'
+import ObjectManager from '../components/ObjectManager'
 import { ensureNextPayment } from '../lib/nextPayment'
 import { BottomNav, Modal, PromptNumber, Progress, showToast } from '../components/ui'
 import { T, C } from '../theme'
@@ -188,10 +189,9 @@ export function LandlordDashboard() {
 
   async function doAddDeposit(amount: number) {
     if (!contract) return
-    const total = deposit; const paid = depositPaid
-    if (total <= 0) { showToast('Сначала укажите общую сумму депозита'); return }
+    if (deposit <= 0) { showToast('Сначала укажите общую сумму депозита'); return }
     if (isNaN(amount) || amount <= 0) { showToast('Некорректная сумма'); return }
-    const { error } = await supabase.from('contracts').update({ deposit_paid: Math.min(total, paid + amount) }).eq('id', contract.id)
+    const { error } = await supabase.from('contracts').update({ deposit_paid: Math.min(deposit, depositPaid + amount) }).eq('id', contract.id)
     if (error) { showToast('Ошибка: ' + error.message); return }
     showToast('✅ Платёж по депозиту внесён')
     window.dispatchEvent(new Event('rentflow-refresh'))
@@ -315,8 +315,6 @@ export function LandlordDashboard() {
     return parts.join(' + ')
   }
 
-  const chipOf = (color?: string) => color === '#c00' ? T.chipRed : color === '#a80' ? T.chipOrange : color === '#080' ? T.chipGreen : T.chipGray
-
   const iosBlue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: 4, flexShrink: 0 }
   const iosRed: React.CSSProperties = { border: 'none', background: 'transparent', color: '#ff3b30', fontSize: 15, cursor: 'pointer', padding: 4, flexShrink: 0 }
   const iosOk: React.CSSProperties = { color: '#1e7e34', fontSize: 14, fontWeight: 600 }
@@ -358,7 +356,7 @@ export function LandlordDashboard() {
     <div style={{ ...T.page, paddingBottom: 90 }}>
       <h1 style={T.h1}>Мои объекты</h1>
       {objects.length === 0 ? (
-        <div style={T.card}>Объектов нет. Добавьте первый объект в блоке «Управление объектами» ниже.</div>
+        <div style={T.card}>Объектов нет — добавьте первый в блоке «Управление объектами» ниже.</div>
       ) : (
         <>
           {objects.length > 1 && (
@@ -371,19 +369,28 @@ export function LandlordDashboard() {
 
           {tab === 'overview' && (
             <>
-              {objects.map((o, i) => (
-                <div key={o.id} style={{ ...T.card, outline: i === selIdx ? `2px solid ${C.blue}` : 'none', cursor: 'pointer' }} onClick={() => setSel(i)}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '10px 0', borderBottom: `1px solid ${C.line}` }}>
-                    <div style={{ fontSize: 16, fontWeight: 600 }}>{o.address}</div>
-                    {Number((o.contract as any)?.deposit_amount || 0) > 0 && <div style={{ fontSize: 12, color: C.text2, whiteSpace: 'nowrap' }}>депозит {Number((o.contract as any).deposit_paid || 0).toFixed(0)}/{Number((o.contract as any).deposit_amount).toFixed(0)}</div>}
+              <div style={T.card}>
+                {objects.map((o, i) => (
+                  <div key={o.id}>
+                    {i > 0 && <div style={{ height: 1, background: 'rgba(60,60,67,0.12)' }} />}
+                    <button
+                      onClick={() => setSel(i)}
+                      style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 52, border: 'none', background: 'transparent', cursor: 'pointer', padding: '8px 0', textAlign: 'left', boxSizing: 'border-box' }}
+                    >
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f' }}>{o.address}</div>
+                        <div style={{ fontSize: 13, color: o.statusColor || '#8e8e93', marginTop: 2 }}>
+                          {o.statusDetail}{o.amount > 0 ? ` · ${o.amount.toFixed(0)} ₽` : ''}
+                        </div>
+                      </div>
+                      {Number((o.contract as any)?.deposit_amount || 0) > 0 && (
+                        <span style={{ fontSize: 12, color: '#8e8e93', flexShrink: 0 }}>депозит {Number((o.contract as any).deposit_paid || 0).toFixed(0)}/{Number((o.contract as any).deposit_amount).toFixed(0)}</span>
+                      )}
+                      {i === selIdx && <span style={{ color: '#0071e3', fontSize: 17, fontWeight: 600, flexShrink: 0 }}>✓</span>}
+                    </button>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '10px 0' }}>
-                    <span style={chipOf(o.statusColor)}>{o.statusDetail}</span>
-                    {o.amount > 0 && <b style={{ fontSize: 16 }}>{amountBreakdown(o)}</b>}
-                  </div>
-                  {!!o.frozenTotal && o.frozenTotal > 0 && <div style={{ ...T.tiny, marginTop: 0 }}>Замороженные штрафы: {o.frozenTotal.toFixed(0)} ₽</div>}
-                </div>
-              ))}
+                ))}
+              </div>
 
               <div style={T.card}>
                 <div style={T.h2}>Статистика</div>
@@ -416,6 +423,8 @@ export function LandlordDashboard() {
                   </div>
                 </div>
               </div>
+
+              <ObjectManager />
             </>
           )}
 
@@ -578,13 +587,13 @@ export function LandlordDashboard() {
             <>
               <div style={T.card}>
                 <div style={T.h2}>Договор</div>
-                <div style={T.row}><span style={{ color: C.text2 }}>Арендатор</span><b>{(contract as any).tenant?.full_name || '—'}</b></div>
-                {(contract as any).tenant?.phone && <div style={T.row}><span style={{ color: C.text2 }}>Телефон</span><b>{(contract as any).tenant.phone}</b></div>}
+                <div style={T.row}><span style={iosMuted}>Арендатор</span><b>{(contract as any).tenant?.full_name || '—'}</b></div>
+                {(contract as any).tenant?.phone && <div style={T.row}><span style={iosMuted}>Телефон</span><b>{(contract as any).tenant.phone}</b></div>}
                 {(contract as any).start_date && (contract as any).end_date && (
-                  <div style={T.row}><span style={{ color: C.text2 }}>Срок</span><b>{parseDate((contract as any).start_date).toLocaleDateString('ru-RU')} — {parseDate((contract as any).end_date).toLocaleDateString('ru-RU')}</b></div>
+                  <div style={T.row}><span style={iosMuted}>Срок</span><b>{parseDate((contract as any).start_date).toLocaleDateString('ru-RU')} — {parseDate((contract as any).end_date).toLocaleDateString('ru-RU')}</b></div>
                 )}
-                <div style={T.row}><span style={{ color: C.text2 }}>Аренда</span><b>{Number(contract.rent_amount).toFixed(0)} ₽/мес</b></div>
-                <div style={T.row}><span style={{ color: C.text2 }}>Оплата</span><b>до {contract.payment_day} числа</b></div>
+                <div style={T.row}><span style={iosMuted}>Аренда</span><b>{Number(contract.rent_amount).toFixed(0)} ₽/мес</b></div>
+                <div style={T.row}><span style={iosMuted}>Оплата</span><b>до {contract.payment_day} числа</b></div>
                 {deposit > 0 && (
                   <div style={{ padding: '8px 0 4px' }}>
                     <Progress value={depositPaid} max={deposit} />
