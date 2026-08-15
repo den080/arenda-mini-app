@@ -1,121 +1,115 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { T, C } from '../theme'
+import { showToast } from './ui'
+
+const S: Record<string, React.CSSProperties> = {
+  card: { background: '#fff', borderRadius: 12, margin: '0 0 10px', padding: '0 16px' },
+  row: { display: 'flex', alignItems: 'center', gap: 10, minHeight: 44, padding: '6px 0', boxSizing: 'border-box' },
+  rowBtn: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, minHeight: 40, padding: '4px 0', boxSizing: 'border-box', width: '100%', border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left' },
+  sep: { height: 1, background: 'rgba(60,60,67,0.12)' },
+  title: { fontSize: 15, fontWeight: 600, color: '#1d1d1f' },
+  sub: { fontSize: 13, color: '#8e8e93', marginTop: 2 },
+  blue: { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: 4, flexShrink: 0 },
+  red: { border: 'none', background: 'transparent', color: '#ff3b30', fontSize: 15, fontWeight: 500, cursor: 'pointer', padding: 4, flexShrink: 0 },
+  check: { color: '#0071e3', fontSize: 17, fontWeight: 600, flexShrink: 0 },
+  gray: { color: '#8e8e93', fontSize: 14, flexShrink: 0 },
+  hist: { fontSize: 13, color: '#8e8e93', padding: '6px 0' },
+  foot: { fontSize: 12, color: '#8e8e93', margin: '4px 16px 12px' },
+}
 
 export function ReadingsReview({ contractId, tenantId }: { contractId: string; tenantId: string }) {
   const [meters, setMeters] = useState<any[]>([])
   const [types, setTypes] = useState<any[]>([])
-  const [readings, setReadings] = useState<any[]>([])
-  const [historyOpen, setHistoryOpen] = useState<Record<string, boolean>>({})
+  const [reads, setReads] = useState<Record<string, any[]>>({})
+  const [open, setOpen] = useState<Record<string, boolean>>({})
 
   async function load() {
-    const { data: c } = await supabase.from('contracts').select('object_id').eq('id', contractId).maybeSingle()
-    if (!c) return
-    const { data: m } = await supabase.from('object_meters').select('*').eq('object_id', c.object_id).eq('is_active', true)
-    setMeters(m || [])
+    const { data: con } = await supabase.from('contracts').select('object_id').eq('id', contractId).maybeSingle()
+    if (!con) return
+    const { data: m } = await supabase.from('object_meters').select('*').eq('object_id', con.object_id).eq('is_active', true)
     const { data: t } = await supabase.from('meter_types').select('*')
+    const ids = (m || []).map((x: any) => x.id)
+    let rd: any[] = []
+    if (ids.length) {
+      const { data } = await supabase.from('meter_readings').select('*').in('object_meter_id', ids).order('submitted_at', { ascending: false })
+      rd = data || []
+    }
+    const byMeter: Record<string, any[]> = {}
+    for (const r of rd) { (byMeter[r.object_meter_id] = byMeter[r.object_meter_id] || []).push(r) }
+    setMeters(m || [])
     setTypes(t || [])
-    const { data: r } = await supabase
-      .from('meter_readings').select('*')
-      .eq('contract_id', contractId)
-      .order('submitted_at', { ascending: false })
-    setReadings(r || [])
+    setReads(byMeter)
   }
 
   useEffect(() => {
     load()
     const on = () => load()
     window.addEventListener('rentflow-refresh', on)
-    const iv = setInterval(() => load(), 30000)
-    return () => { window.removeEventListener('rentflow-refresh', on); clearInterval(iv) }
+    return () => window.removeEventListener('rentflow-refresh', on)
   }, [contractId])
 
   const now = new Date()
-  const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
-  const end = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString()
-  const monthReadings = readings.filter(r => r.submitted_at >= start && r.submitted_at < end)
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1)
 
-  const latestByMeter: Record<string, any> = {}
-  for (const r of readings) if (!latestByMeter[r.object_meter_id]) latestByMeter[r.object_meter_id] = r
-  const monthByMeter: Record<string, any> = {}
-  for (const r of monthReadings) if (!monthByMeter[r.object_meter_id]) monthByMeter[r.object_meter_id] = r
-
-  const hasAny = monthReadings.length > 0
-  const overall = !hasAny
-    ? 'none'
-    : Object.values(monthByMeter).some(r => (r.status || 'proposed') === 'incomplete')
-      ? 'incomplete'
-      : Object.values(monthByMeter).every(r => (r.status || 'proposed') === 'confirmed')
-        ? 'confirmed'
-        : 'proposed'
-
-  async function reviewMeter(meterId: string, status: 'confirmed' | 'incomplete') {
-    const r = monthByMeter[meterId]
-    if (!r) return
-    const m = meters.find(x => x.id === meterId)
-    const t = types.find(x => x.id === m?.meter_type_id)
-    const label = (t?.label || 'Счётчик') + (m?.label ? ` · № ${m.label}` : '')
-    await supabase.from('meter_readings').update({ status, reviewed_at: new Date().toISOString() }).eq('id', r.id)
+  async function setStatus(readingId: string, status: string) {
+    const { error } = await supabase.from('meter_readings').update({ status, reviewed_at: new Date().toISOString() }).eq('id', readingId)
+    if (error) { showToast('Ошибка: ' + error.message); return }
     await supabase.from('notifications_log').insert({
       user_id: tenantId, type: 'meter_submitted', related_id: contractId,
-      message: status === 'confirmed'
-        ? `🟢 ${label}: показания получены`
-        : `🔴 ${label}: показания получены не полностью — передайте ещё раз`,
+      message: status === 'confirmed' ? '🟢 Показания подтверждены арендодателем' : '🔴 Показания отмечены неполными — передайте их ещё раз',
       sent_at: new Date().toISOString(),
     })
+    showToast(status === 'confirmed' ? '✅ Подтверждено' : 'Отмечено: не полностью')
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
 
-  const chip = (stt: string) => (stt || 'proposed') === 'confirmed' ? T.chipGreen : (stt || 'proposed') === 'incomplete' ? T.chipRed : T.chipOrange
+  const fmt = (d: any) => new Date(d).toLocaleDateString('ru-RU')
+
+  if (meters.length === 0) return <div style={S.foot}>На объекте нет счётчиков с ручной подачей.</div>
 
   return (
     <div>
-      {meters.length === 0 && <div style={T.tiny}>На объекте нет активных счётчиков.</div>}
       {meters.map(m => {
-        const t = types.find(x => x.id === m.meter_type_id)
-        const last = latestByMeter[m.id]
-        const month = monthByMeter[m.id]
-        const hist = readings.filter(r => r.object_meter_id === m.id)
-        const open = !!historyOpen[m.id]
+        const t = types.find((x: any) => x.id === m.meter_type_id)
+        const hist = reads[m.id] || []
+        const cur = hist.find(r => { const d = new Date(r.submitted_at); return d >= monthStart && d < monthEnd })
+        const isOpen = !!open[m.id]
         return (
-          <div key={m.id} style={{ ...T.item, display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 14, fontWeight: 600 }}>{t?.label || 'Счётчик'}{m.label ? ` · № ${m.label}` : ''}</div>
-              <div style={T.tiny}>
-                {month
-                  ? `за этот месяц: ${month.value} · подано ${new Date(month.submitted_at).toLocaleDateString('ru-RU')}`
-                  : 'нет данных в этом месяце'}
+          <div key={m.id} style={S.card}>
+            <div style={S.row}>
+              <div style={{ minWidth: 0 }}>
+                <div style={S.title}>{t?.label || 'Счётчик'}{m.label ? ` · № ${m.label}` : ''}</div>
+                <div style={S.sub}>{cur ? `за этот месяц: ${cur.value} · подано ${fmt(cur.submitted_at)}` : 'нет данных в этом месяце'}</div>
               </div>
-              {month && <div style={{ marginTop: 4 }}><span style={chip(month.status)}>{(month.status || 'proposed') === 'confirmed' ? '🟢 получены' : (month.status || 'proposed') === 'incomplete' ? '🔴 не полностью' : '🟡 ждут'}</span></div>}
-              {last && (
-                <div style={T.link} onClick={() => setHistoryOpen({ ...historyOpen, [m.id]: !open })}>
-                  🕐 последнее: {last.value} · подано {new Date(last.submitted_at).toLocaleDateString('ru-RU')} {open ? '▲' : '▼'}
-                </div>
+              <span style={{ flex: 1 }} />
+              {cur && cur.status === 'confirmed' && <span style={S.check}>✓</span>}
+              {cur && cur.status === 'incomplete' && <span style={{ ...S.gray, color: '#ff3b30' }}>не полностью</span>}
+              {cur && cur.status === 'proposed' && (
+                <>
+                  <button style={S.red} onClick={() => setStatus(cur.id, 'incomplete')}>Не полностью</button>
+                  <button style={S.blue} onClick={() => setStatus(cur.id, 'confirmed')}>Подтвердить</button>
+                </>
               )}
-              {open && hist.slice(0, 10).map((r: any) => (
-                <div key={r.id} style={T.tiny}>{r.value} · подано {new Date(r.submitted_at).toLocaleDateString('ru-RU')}</div>
-              ))}
             </div>
-            {month && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <button
-                  style={{ ...T.btnSmall, background: month.status === 'confirmed' ? C.green : T.btnSmall.background, opacity: month.status === 'confirmed' ? 1 : 0.85 }}
-                  title="Подтвердить этот счётчик"
-                  onClick={() => reviewMeter(m.id, 'confirmed')}
-                >✅</button>
-                <button
-                  style={{ ...T.btnDanger, opacity: month.status === 'incomplete' ? 1 : 0.7 }}
-                  title="Не полностью по этому счётчику"
-                  onClick={() => reviewMeter(m.id, 'incomplete')}
-                >⚠️</button>
-              </div>
+            {hist.length > 0 && (
+              <>
+                <div style={S.sep} />
+                <button style={S.rowBtn} onClick={() => setOpen({ ...open, [m.id]: !isOpen })}>
+                  <span style={{ fontSize: 14, color: '#0071e3' }}>История · последнее: {hist[0].value}</span>
+                  <span style={{ color: '#8e8e93', fontSize: 13 }}>{isOpen ? '▲' : '▼'}</span>
+                </button>
+                {isOpen && hist.slice(0, 10).map((r: any) => (
+                  <div key={r.id} style={{ ...S.hist, borderTop: '1px solid rgba(60,60,67,0.08)' }}>
+                    {r.value} · подано {fmt(r.submitted_at)} · {r.status === 'confirmed' ? 'подтверждены' : r.status === 'incomplete' ? 'не полностью' : 'ждут'}
+                  </div>
+                ))}
+              </>
             )}
           </div>
         )
       })}
-      <div style={T.tiny}>
-        {overall === 'confirmed' ? 'Все показания этого месяца подтверждены.' : overall === 'incomplete' ? 'Часть счётчиков отмечена «не полностью» — арендатор видит, какие именно.' : overall === 'proposed' ? 'Показания отправлены арендатором и ждут вашего подтверждения по каждому счётчику.' : 'Арендатор ещё не подавал показания в этом месяце.'}
-      </div>
+      <div style={S.foot}>Показания отправлены арендатором и ждут вашего подтверждения по каждому счётчику.</div>
     </div>
   )
 }
