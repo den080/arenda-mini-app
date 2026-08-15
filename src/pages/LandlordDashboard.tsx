@@ -67,13 +67,14 @@ export function LandlordDashboard() {
           if (!contract) { objectsWithStatus.push({ ...obj, status: 'no_contract', amount: 0, paymentId: null, statusColor: '#888', statusDetail: 'Нет договора' }); continue }
           const readingsMode = contract.readings_mode || 'manual'
           const reminder = contract.reminder_days_before || 3
-          const { data: allPays } = await supabase.from('payments').select('*').eq('contract_id', contract.id)
+          const { data: allPays } = await supabase.from('payments').select('*').eq('contract_id', contract.id).order('period', { ascending: false })
           for (const p of allPays || []) allHistory.push({ ...p, objId: obj.id, address: obj.address })
           const { data: dReq } = await supabase.from('deferred_requests').select('*').eq('contract_id', contract.id).eq('status', 'proposed')
           const { data: fRows } = await supabase.from('frozen_penalties').select('*').eq('contract_id', contract.id).order('period', { ascending: true })
           const frozenTotal = (fRows || []).reduce((s2: number, d: any) => s2 + Number(d.amount || 0), 0)
           await ensureNextPayment(contract.id)
-          const { data: payment } = await supabase.from('payments').select('*').eq('contract_id', contract.id).order('period', { ascending: false }).limit(1).maybeSingle()
+          const openPays = (allPays || []).filter((p: any) => !p.confirmed_by_landlord)
+          const payment = openPays.length ? openPays[openPays.length - 1] : (allPays || [])[0]
           if (!payment) { objectsWithStatus.push({ ...obj, status: 'no_payment', statusDetail: 'Платёж не создан', statusColor: '#a80', amount: contract.rent_amount, baseAmount: contract.rent_amount, penaltyAmount: 0, utilitiesAmount: 0, paymentId: null, contract, readingsMode, frozenTotal, frozenRows: fRows || [], deferredRequests: dReq || [] }); continue }
           const { data: cashMeeting } = await supabase.from('cash_meetings').select('*').eq('contract_id', contract.id).eq('kind', 'meeting').eq('status', 'confirmed').order('created_at', { ascending: false }).limit(1).maybeSingle()
           const dueMid = parseDate(payment.due_date)
