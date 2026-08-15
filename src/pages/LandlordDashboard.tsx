@@ -542,10 +542,10 @@ export function LandlordDashboard() {
 }
 
 function TabBar({ tab, setTab }: { tab: string; setTab: (t: string) => void }) {
-  const tabs = [
+   const tabs = [
     { id: 'overview', l: 'Обзор' },
-    { id: 'pay', l: 'Оплата' },
     { id: 'meters', l: 'Счётчики' },
+    { id: 'pay', l: 'Оплата' },
     { id: 'contract', l: 'Договор' },
     { id: 'chat', l: 'Чат' },
   ]
