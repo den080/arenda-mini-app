@@ -1,6 +1,7 @@
 import { supabase } from './supabase'
 
-// Если последний платёж подтверждён, а следующего нет — создаёт счёт за следующий месяц
+// Следующий месячный счёт появляется за 7 дней до его срока оплаты
+// (и только если текущий счёт подтверждён арендодателем)
 export async function ensureNextPayment(contractId: string) {
   const { data: pays } = await supabase
     .from('payments').select('*')
@@ -17,6 +18,10 @@ export async function ensureNextPayment(contractId: string) {
   if (pays.some(p => toISO(parsePeriod(p.period)) === nextISO)) return
   const payDay = Number(con.payment_day) || 1
   const due = new Date(nextPeriod.getFullYear(), nextPeriod.getMonth(), payDay)
+  const today = new Date()
+  const todayMid = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  const daysToDue = Math.round((due.getTime() - todayMid.getTime()) / 86400000)
+  if (daysToDue > 7) return
   await supabase.from('payments').insert({
     contract_id: contractId,
     period: nextISO,
@@ -24,7 +29,7 @@ export async function ensureNextPayment(contractId: string) {
     base_amount: Number(con.rent_amount) || Number(last.base_amount) || 0,
     penalty_amount: 0,
     utilities_amount: 0,
-  })
+  }, { ignoreDuplicates: true })
   window.dispatchEvent(new Event('rentflow-refresh'))
 }
 
