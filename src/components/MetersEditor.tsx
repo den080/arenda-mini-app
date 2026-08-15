@@ -28,6 +28,8 @@ export function MetersEditor({ objId }: { objId: string }) {
 
   const waterCodes = ['water_cold', 'water_hot']
   const waterRows = rows.filter(r => waterCodes.includes(codeOf(r)) && r.is_active)
+  const elecCodes = ['electricity_single', 'electricity_day', 'electricity_night', 'electricity_peak', 'electricity_semipeak']
+  const activeElecRows = rows.filter(r => elecCodes.includes(codeOf(r)) && r.is_active)
 
   async function setActive(code: string, active: boolean) {
     const mt = typeByCode(code)
@@ -136,6 +138,17 @@ export function MetersEditor({ objId }: { objId: string }) {
           </label>
         </div>
       ))}
+      {activeElecRows.length > 0 && (
+        <div style={{ marginBottom: 8 }}>
+          {activeElecRows.map(r => (
+            <div key={r.id} style={{ ...T.item, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 13, flex: 1, minWidth: 100 }}>⚡ {typeByCode(codeOf(r))?.label || 'Электро'}</span>
+              <input defaultValue={r.label || ''} placeholder="номер счётчика" style={{ ...T.select, flex: 1, minWidth: 110 }} onBlur={(e) => setSerial(r.id, e.target.value)} />
+              {startInput(r)}
+            </div>
+          ))}
+        </div>
+      )}
 
       <div style={T.tiny}>💧 Вода</div>
       {waterRows.length === 0 && <div style={T.tiny}>счётчиков воды нет</div>}
