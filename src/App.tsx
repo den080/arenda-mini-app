@@ -3,7 +3,6 @@ import { supabase } from './lib/supabase'
 import { useTelegramUser } from './hooks/useTelegramUser'
 import LandlordDashboard from './pages/LandlordDashboard'
 import TenantDashboard from './pages/TenantDashboard'
-import ObjectManager from './components/ObjectManager'
 
 const GLOBAL_CSS = `
   button:active { opacity: 0.55; }
@@ -70,7 +69,6 @@ export default function App() {
         )}
       </div>
       {mode === 'landlord' ? <LandlordDashboard /> : <TenantDashboard />}
-      {mode === 'landlord' && <ObjectManager />}
     </div>
   )
 }
@@ -81,7 +79,7 @@ const st: Record<string, React.CSSProperties> = {
   p: { color: '#555', fontSize: 14 },
   input: { width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box' },
   button: { marginTop: 12, width: '100%', padding: 14, borderRadius: 10, border: 'none', background: '#2196f3', color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer' },
-  topbar: { display: 'flex', gap: 8, padding: '10px 12px', background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,0.1)', position: 'sticky', top: 0, zIndex: 10 },
+  topbar: { display: 'flex', gap: 8, padding: '10px 12px', maxWidth: 600, margin: '0 auto', boxSizing: 'border-box' },
   logout: { padding: '8px 12px', borderRadius: 8, border: 'none', background: '#eceff1', fontSize: 14, cursor: 'pointer' },
   tab: { flex: 1, padding: 10, borderRadius: 10, border: '1px solid #ddd', background: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', textAlign: 'center' },
   tabActive: { flex: 1, padding: 10, borderRadius: 10, border: '1px solid #2196f3', background: '#2196f3', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', textAlign: 'center' },
