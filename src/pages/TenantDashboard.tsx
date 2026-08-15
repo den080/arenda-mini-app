@@ -32,7 +32,6 @@ const TABS = [
   { id: 'meters', l: 'Счётчики' },
   { id: 'contract', l: 'Договор' },
   { id: 'chat', l: 'Чат' },
-
 ]
 
 function TabBar({ tab, setTab }: { tab: string; setTab: (t: string) => void }) {
@@ -316,10 +315,6 @@ function TenantRental({ contract, tab }: { contract: any; tab: string }) {
         <>
           <div style={T.card}>
             <div style={{ fontSize: 17, fontWeight: 600 }}>{obj?.address}</div>
-            <div style={T.small}>Арендодатель: {landlord?.full_name}{landlord?.phone ? ', ' + formatPhoneDisplay(landlord.phone) : ''}</div>
-            {contract.start_date && contract.end_date && <div style={T.tiny}>Срок аренды: с {parseDate(contract.start_date).toLocaleDateString('ru-RU')} по {parseDate(contract.end_date).toLocaleDateString('ru-RU')}</div>}
-            {deposit > 0 && <div style={T.tiny}>Депозит: {deposit.toFixed(0)} ₽</div>}
-            {frozenTotal > 0 && <div style={T.tiny}>🧊 Замороженные штрафы: {frozenTotal.toFixed(0)} ₽ (подробнее во вкладке «Договор»)</div>}
           </div>
           <div style={T.card}>
             <div style={T.h2}>Счёт за {monthLabel}</div>
@@ -443,6 +438,7 @@ function TenantRental({ contract, tab }: { contract: any; tab: string }) {
                       inputMode="decimal"
                     />
                     {m.label && <div style={T.tiny}>номер счётчика: {m.label}</div>}
+                    {m.initial_value != null && <div style={T.tiny}>стартовое показание: {Number(m.initial_value).toFixed(0)}</div>}
                     {last && (
                       <div style={T.link} onClick={() => setHistoryOpen({ ...historyOpen, [m.id]: !open })}>
                         🕐 последнее: {last.value} · подано {new Date(last.submitted_at).toLocaleDateString('ru-RU')} · {chip(last.status)} {open ? '▲' : '▼'}
@@ -485,7 +481,7 @@ function TenantRental({ contract, tab }: { contract: any; tab: string }) {
               <div style={T.row}><span style={{ color: C.text2 }}>Срок</span><b>{parseDate(contract.start_date).toLocaleDateString('ru-RU')} — {parseDate(contract.end_date).toLocaleDateString('ru-RU')}</b></div>
             )}
             <div style={T.row}><span style={{ color: C.text2 }}>Аренда</span><b>{Number(contract.rent_amount).toFixed(0)} ₽/мес</b></div>
-            <div style={T.row}><span style={{ color: C.text2 }}>День платежа</span><b>{contract.payment_day} число</b></div>
+            <div style={T.row}><span style={{ color: C.text2 }}>Оплата</span><b>до {contract.payment_day} числа</b></div>
             {deposit > 0 && <div style={T.row}><span style={{ color: C.text2 }}>Депозит</span><b>{deposit.toFixed(0)} ₽</b></div>}
           </div>
           <div style={T.card}>
@@ -515,16 +511,16 @@ function TenantRental({ contract, tab }: { contract: any; tab: string }) {
         </>
       )}
 
-      {msg && <div style={T.msg}>{msg}</div>}
       {tab === 'chat' && (
         <div style={T.card}>
           <div style={T.h2}>Чат с арендодателем</div>
           <Chat contractId={contract.id} myId={user!.id} />
         </div>
       )}
+
+      {msg && <div style={T.msg}>{msg}</div>}
     </div>
   )
 }
 
 export default TenantDashboard
-
