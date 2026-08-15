@@ -3,6 +3,8 @@ import { supabase } from '../lib/supabase'
 import { ConfirmDelete, showToast } from './ui'
 
 const S: Record<string, React.CSSProperties> = {
+  editRow: { display: 'flex', justifyContent: 'flex-end', margin: '10px 16px 0' },
+  editBtn: { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: 4 },
   head: { fontSize: 13, color: '#8e8e93', margin: '16px 16px 6px', textTransform: 'uppercase', letterSpacing: 0.3 },
   card: { background: '#fff', borderRadius: 12, margin: '0 0 10px', padding: '0 16px' },
   row: { display: 'flex', alignItems: 'center', gap: 10, minHeight: 44, padding: '4px 0', boxSizing: 'border-box' },
@@ -22,6 +24,7 @@ export function MetersEditor({ objId }: { objId: string }) {
   const [types, setTypes] = useState<any[]>([])
   const [rows, setRows] = useState<any[]>([])
   const [busy, setBusy] = useState(false)
+  const [edit, setEdit] = useState(false)
   const [del, setDel] = useState<string | null>(null)
   const [elecPending, setElecPending] = useState<string | null>(null)
 
@@ -146,7 +149,7 @@ export function MetersEditor({ objId }: { objId: string }) {
       <div style={S.row}>
         <span style={S.title}>{title}</span>
         <span style={{ flex: 1 }} />
-        <button style={S.minus} onClick={() => setDel(r.id)}>−</button>
+        {edit && <button style={S.minus} onClick={() => setDel(r.id)}>−</button>}
       </div>
       {extraRow && (<><div style={S.sep} />{extraRow}</>)}
       <div style={S.sep} />
@@ -164,6 +167,10 @@ export function MetersEditor({ objId }: { objId: string }) {
 
   return (
     <div>
+      <div style={S.editRow}>
+        <button style={S.editBtn} onClick={() => setEdit(!edit)}>{edit ? 'Готово' : 'Изменить'}</button>
+      </div>
+
       <div style={S.head}>Электричество</div>
       <div style={S.card}>
         {[
@@ -185,7 +192,7 @@ export function MetersEditor({ objId }: { objId: string }) {
 
       <div style={S.head}>Вода</div>
       {waterRows.length === 0 && <div style={S.hint}>Счётчиков воды нет</div>}
-      {waterRows.map(r => meterCard(r, r && codeOf(r) === 'water_hot' ? 'Горячая вода' : 'Холодная вода', (
+      {waterRows.map(r => meterCard(r, codeOf(r) === 'water_hot' ? 'Горячая вода' : 'Холодная вода', (
         <div style={S.row}>
           <span style={S.label}>Тип</span>
           <select value={codeOf(r)} onChange={(e) => setWaterType(r.id, e.target.value)} style={S.select}>
@@ -216,7 +223,7 @@ export function MetersEditor({ objId }: { objId: string }) {
       )}
       {activeRows('gas').map(r => meterCard(r, 'Счётчик газа'))}
 
-      <div style={S.hint}>Стартовые показания видит арендатор. Отключение счётчика — только с подтверждением.</div>
+      <div style={S.hint}>Стартовые показания видит арендатор. Отключение счётчика — в режиме «Изменить», с подтверждением.</div>
 
       <ConfirmDelete
         open={!!del}
