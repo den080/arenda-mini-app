@@ -3,6 +3,7 @@ import { supabase } from './lib/supabase'
 import { useTelegramUser } from './hooks/useTelegramUser'
 import LandlordDashboard from './pages/LandlordDashboard'
 import TenantDashboard from './pages/TenantDashboard'
+import { Toaster } from './components/ui'
 import { C } from './theme'
 
 const GLOBAL_CSS = `
@@ -45,6 +46,7 @@ export default function App() {
     return (
       <div style={st.wrap}>
         <style>{GLOBAL_CSS}</style>
+        <Toaster />
         <h2 style={st.h2}>Вход</h2>
         <p style={st.p}>{error}</p>
         <input style={st.input} value={value} onChange={(e) => setValue(e.target.value)} placeholder="Telegram ID или телефон" />
@@ -56,6 +58,7 @@ export default function App() {
   return (
     <div>
       <style>{GLOBAL_CSS}</style>
+      <Toaster />
       <div style={st.topbar}>
         {isTester ? (
           <>
