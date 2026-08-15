@@ -28,8 +28,8 @@ function formatPhoneDisplay(v: string): string {
 
 const TABS = [
   { id: 'overview', l: 'Обзор' },
-  { id: 'pay', l: 'Оплата' },
   { id: 'meters', l: 'Счётчики' },
+  { id: 'pay', l: 'Оплата' },
   { id: 'contract', l: 'Договор' },
   { id: 'chat', l: 'Чат' },
 ]
