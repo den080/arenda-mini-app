@@ -317,6 +317,11 @@ export function LandlordDashboard() {
 
   const chipOf = (color?: string) => color === '#c00' ? T.chipRed : color === '#a80' ? T.chipOrange : color === '#080' ? T.chipGreen : T.chipGray
 
+  const iosBlue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: 4, flexShrink: 0 }
+  const iosRed: React.CSSProperties = { border: 'none', background: 'transparent', color: '#ff3b30', fontSize: 15, cursor: 'pointer', padding: 4, flexShrink: 0 }
+  const iosOk: React.CSSProperties = { color: '#1e7e34', fontSize: 14, fontWeight: 600 }
+  const iosMuted: React.CSSProperties = { color: '#8e8e93', fontSize: 14 }
+
   const todayNow = new Date()
   const todayMidNow = new Date(todayNow.getFullYear(), todayNow.getMonth(), todayNow.getDate())
   const periodStart = statsPeriod === '6m' ? new Date(todayMidNow.getFullYear(), todayMidNow.getMonth() - 5, 1) : new Date(todayMidNow.getFullYear() - 1, todayMidNow.getMonth(), 1)
@@ -368,16 +373,15 @@ export function LandlordDashboard() {
             <>
               {objects.map((o, i) => (
                 <div key={o.id} style={{ ...T.card, outline: i === selIdx ? `2px solid ${C.blue}` : 'none', cursor: 'pointer' }} onClick={() => setSel(i)}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                    <div style={{ fontSize: 17, fontWeight: 600 }}>{o.address}</div>
-                    {Number((o.contract as any)?.deposit_amount || 0) > 0 && <div style={{ fontSize: 11, color: C.text2, whiteSpace: 'nowrap' }}>депозит: {Number((o.contract as any).deposit_paid || 0).toFixed(0)}/{Number((o.contract as any).deposit_amount).toFixed(0)} ₽</div>}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '10px 0', borderBottom: `1px solid ${C.line}` }}>
+                    <div style={{ fontSize: 16, fontWeight: 600 }}>{o.address}</div>
+                    {Number((o.contract as any)?.deposit_amount || 0) > 0 && <div style={{ fontSize: 12, color: C.text2, whiteSpace: 'nowrap' }}>депозит {Number((o.contract as any).deposit_paid || 0).toFixed(0)}/{Number((o.contract as any).deposit_amount).toFixed(0)}</div>}
                   </div>
-                  <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '10px 0' }}>
                     <span style={chipOf(o.statusColor)}>{o.statusDetail}</span>
+                    {o.amount > 0 && <b style={{ fontSize: 16 }}>{amountBreakdown(o)}</b>}
                   </div>
-                  {o.amount > 0 && <div style={{ ...T.total, marginTop: 8 }}>{amountBreakdown(o)}</div>}
-                  {!!o.frozenTotal && o.frozenTotal > 0 && <div style={T.tiny}>🧊 Замороженные штрафы: {o.frozenTotal.toFixed(0)} ₽</div>}
-                  {i !== selIdx && <div style={T.link}>Выбрать объект</div>}
+                  {!!o.frozenTotal && o.frozenTotal > 0 && <div style={{ ...T.tiny, marginTop: 0 }}>Замороженные штрафы: {o.frozenTotal.toFixed(0)} ₽</div>}
                 </div>
               ))}
 
@@ -389,7 +393,7 @@ export function LandlordDashboard() {
                     {objects.map(o => <option key={o.id} value={o.id}>{o.address}</option>)}
                   </select>
                   <select value={statsPeriod} onChange={(e) => setStatsPeriod(e.target.value as '6m' | '12m')} style={T.select}>
-                    <option value="6m">Последние 6 мес</option>
+                    <option value="6m">6 мес</option>
                     <option value="12m">Год</option>
                   </select>
                 </div>
@@ -399,16 +403,16 @@ export function LandlordDashboard() {
                     <div style={L.statValue}>{collected.toFixed(0)} ₽</div>
                   </div>
                   <div style={L.statTile}>
-                    <div style={L.statLabel}>Штрафов начислено</div>
+                    <div style={L.statLabel}>Штрафов</div>
                     <div style={{ ...L.statValue, color: C.red }}>{penaltiesAccrued.toFixed(0)} ₽</div>
                   </div>
                   <div style={L.statTile}>
-                    <div style={L.statLabel}>Оплата вовремя</div>
+                    <div style={L.statLabel}>Вовремя</div>
                     <div style={L.statValue}>{onTimePct}%</div>
                   </div>
                   <div style={L.statTile}>
-                    <div style={L.statLabel}>Сейчас просрочено</div>
-                    <div style={{ ...L.statValue, color: overdueNow > 0 ? C.red : C.green }}>{overdueNow} объект(а)</div>
+                    <div style={L.statLabel}>Просрочено</div>
+                    <div style={{ ...L.statValue, color: overdueNow > 0 ? C.red : C.green }}>{overdueNow}</div>
                   </div>
                 </div>
               </div>
@@ -436,14 +440,14 @@ export function LandlordDashboard() {
                 <div style={T.card}>
                   <div style={T.h2}>Первый месяц и депозит</div>
                   {firstMonthPending && (
-                    <button style={T.btn} onClick={() => confirmSigning(current.paymentId!)}>✅ Подтвердить: первый месяц + депозит получены при подписании</button>
+                    <button style={T.btn} onClick={() => confirmSigning(current.paymentId!)}>Подтвердить: первый месяц и депозит получены</button>
                   )}
                   {deposit > 0 && (
-                    <div style={T.item}>
+                    <div style={{ padding: '8px 0' }}>
                       <Progress value={depositPaid} max={deposit} />
-                      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                        <button style={T.btnSmall} onClick={() => setDepModal('add')}>+ внести</button>
-                        <button style={T.btnSecondary} onClick={() => setDepModal('edit')}>изменить</button>
+                      <div style={{ display: 'flex', gap: 16, marginTop: 8 }}>
+                        <button style={iosBlue} onClick={() => setDepModal('add')}>Внести</button>
+                        <button style={iosBlue} onClick={() => setDepModal('edit')}>Изменить</button>
                       </div>
                     </div>
                   )}
@@ -452,24 +456,32 @@ export function LandlordDashboard() {
 
               {contract && current.paymentId && !current.payment?.confirmed_by_landlord && (
                 <div style={T.card}>
-                  <div style={T.h2}>Подтверждение оплаты по каналам</div>
-                  <div style={T.item}>
-                    <div style={{ fontSize: 14, marginBottom: 8 }}>💳 Безнал: {current.payment?.confirmed_card ? '🟢 получен' : current.payment?.card_claimed ? '🟡 заявлен арендатором' : '⚪ не заявлен'}</div>
-                    {current.payment?.card_claimed && !current.payment?.confirmed_card && (
-                      <button style={T.btnSmall} onClick={() => confirmChannel(current.paymentId!, 'card')}>Подтвердить</button>
-                    )}
+                  <div style={T.h2}>Подтверждение оплаты</div>
+                  <div style={T.row}>
+                    <span>Безнал</span>
+                    {current.payment?.confirmed_card
+                      ? <span style={iosOk}>получен</span>
+                      : current.payment?.card_claimed
+                        ? <button style={iosBlue} onClick={() => confirmChannel(current.paymentId!, 'card')}>Подтвердить</button>
+                        : <span style={iosMuted}>не заявлен</span>}
                   </div>
-                  <div style={T.item}>
-                    <div style={{ fontSize: 14, marginBottom: 8 }}>💵 Нал: {current.payment?.confirmed_cash ? '🟢 получен' : current.payment?.cash_closed ? '⚪ канал закрыт' : current.hasConfirmedCashMeeting ? '🟡 ждёт встречи' : '⚪ не заявлен'}</div>
-                    {current.hasConfirmedCashMeeting && !current.payment?.cash_closed && !current.payment?.confirmed_cash && (
-                      <span style={{ display: 'flex', gap: 8 }}>
-                        <button style={T.btnSmall} onClick={() => confirmChannel(current.paymentId!, 'cash')}>Подтвердить</button>
-                        <button style={T.btnDanger} onClick={() => confirmChannel(current.paymentId!, 'cash', true)}>закрыть канал</button>
-                      </span>
-                    )}
+                  <div style={{ ...T.row, borderBottom: 'none' }}>
+                    <span>Нал</span>
+                    {current.payment?.confirmed_cash
+                      ? <span style={iosOk}>получен</span>
+                      : current.payment?.cash_closed
+                        ? <span style={iosMuted}>канал закрыт</span>
+                        : current.hasConfirmedCashMeeting
+                          ? (
+                            <span style={{ display: 'flex', gap: 14 }}>
+                              <button style={iosRed} onClick={() => confirmChannel(current.paymentId!, 'cash', true)}>закрыть</button>
+                              <button style={iosBlue} onClick={() => confirmChannel(current.paymentId!, 'cash')}>Подтвердить</button>
+                            </span>
+                          )
+                          : <span style={iosMuted}>не заявлен</span>}
                   </div>
                   {!current.payment?.card_claimed && !current.hasConfirmedCashMeeting && (
-                    <button style={T.btn} onClick={() => confirmChannel(current.paymentId!, 'card')}>✅ Подтвердить оплату полностью</button>
+                    <button style={T.btn} onClick={() => confirmChannel(current.paymentId!, 'card')}>Подтвердить оплату полностью</button>
                   )}
                 </div>
               )}
@@ -477,26 +489,18 @@ export function LandlordDashboard() {
               {showUtilities && (
                 <div style={T.card}>
                   <div style={T.h2}>Ресурсы по квитанции</div>
-                  {current.needUtilitiesReminder && (
-                    <div style={T.note}>⏳ Посчитайте ресурсы с квитанции и добавьте сумму к платежу</div>
-                  )}
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <div style={{ ...T.row, borderBottom: 'none' }}>
                     <input
                       type="number"
                       value={utilInputs[current.id] ?? String(current.utilitiesAmount || '')}
                       onChange={(e) => setUtilInputs({ ...utilInputs, [current.id]: e.target.value })}
-                      placeholder="Сумма по квитанции, ₽"
-                      style={{ ...T.input, marginBottom: 0, flex: 1 }}
+                      placeholder="Сумма, ₽"
+                      style={{ flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'transparent', textAlign: 'right', fontSize: 15, color: '#1d1d1f', padding: 0 }}
                       inputMode="numeric"
                     />
-                    <button
-                      onClick={() => saveUtilitiesNext(utilInputs[current.id] ?? String(current.utilitiesAmount || 0))}
-                      style={T.btnSmall}
-                    >
-                      Включить в платёж
-                    </button>
+                    <button style={iosBlue} onClick={() => saveUtilitiesNext(utilInputs[current.id] ?? String(current.utilitiesAmount || 0))}>Включить в платёж</button>
                   </div>
-                  <div style={T.tiny}>Сумма добавляется к платежу отдельно, не растёт при просрочке и не входит в штрафы. Появляется после подтверждения первого месяца; если следующего счёта ещё нет — он создаётся вместе с ресурсами.</div>
+                  <div style={T.tiny}>Добавляется к платежу отдельно, не растёт при просрочке и не входит в штрафы. Если следующего счёта ещё нет — он создаётся вместе с ресурсами.</div>
                 </div>
               )}
 
@@ -504,14 +508,9 @@ export function LandlordDashboard() {
                 <div style={T.card}>
                   <div style={T.h2}>Отсрочка штрафа</div>
                   {(current.deferredRequests || []).map((r: any) => (
-                    <div key={r.id} style={T.item}>
-                      <div style={{ fontSize: 14, marginBottom: 8 }}>Арендатор просит отсрочить {Number(r.amount).toFixed(2)} ₽</div>
-                      <button
-                        onClick={() => confirmDeferral(r.id, contract.id, r.payment_id, Number(r.amount), contract.tenant_id)}
-                        style={T.btnWarn}
-                      >
-                        Подтвердить отсрочку
-                      </button>
+                    <div key={r.id} style={T.row}>
+                      <span>Просьба отсрочить {Number(r.amount).toFixed(0)} ₽</span>
+                      <button style={iosBlue} onClick={() => confirmDeferral(r.id, contract.id, r.payment_id, Number(r.amount), contract.tenant_id)}>Подтвердить</button>
                     </div>
                   ))}
                 </div>
@@ -520,20 +519,29 @@ export function LandlordDashboard() {
               {contract && (
                 <div style={T.card}>
                   <div style={T.h2}>Способ оплаты</div>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <button style={contract.payment_method === 'card' ? T.btnSmall : T.btnSecondary} onClick={() => updatePaymentMethod(contract.id, 'card')}>Безналичный расчёт</button>
-                    <button style={contract.payment_method === 'cash' ? T.btnSmall : T.btnSecondary} onClick={() => updatePaymentMethod(contract.id, 'cash')}>Наличные</button>
-                    <button style={contract.payment_method === 'both' ? T.btnSmall : T.btnSecondary} onClick={() => updatePaymentMethod(contract.id, 'both')}>Оба способа</button>
-                  </div>
-                  {contract.payment_method === 'both' && (
-                    <div style={T.tiny}>💡 Способ оплаты выбирает арендатор: карта или наличные.</div>
-                  )}
+                  {[
+                    { v: 'card', l: 'Безналичный расчёт' },
+                    { v: 'cash', l: 'Наличные' },
+                    { v: 'both', l: 'Оба способа' },
+                  ].map((o, i) => (
+                    <div key={o.v}>
+                      {i > 0 && <div style={{ height: 1, background: 'rgba(60,60,67,0.12)' }} />}
+                      <button
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', minHeight: 44, border: 'none', background: 'transparent', cursor: 'pointer', padding: '4px 0', fontSize: 15, color: '#1d1d1f' }}
+                        onClick={() => updatePaymentMethod(contract.id, o.v as any)}
+                      >
+                        {o.l}
+                        {contract.payment_method === o.v && <span style={{ color: '#0071e3', fontWeight: 600 }}>✓</span>}
+                      </button>
+                    </div>
+                  ))}
+                  {contract.payment_method === 'both' && <div style={T.tiny}>Способ оплаты выбирает арендатор: карта или наличные.</div>}
                 </div>
               )}
 
               {contract && tenantChoseCash && (
-                <div style={T.card}>
-                  <div style={T.h2}>Оплата наличными — договорённость о времени</div>
+                <div>
+                  <div style={{ fontSize: 13, color: '#8e8e93', margin: '14px 4px 6px', textTransform: 'uppercase', letterSpacing: 0.3 }}>Оплата наличными</div>
                   <CashNegotiation
                     contractId={contract.id}
                     myRole="landlord"
@@ -544,20 +552,20 @@ export function LandlordDashboard() {
               )}
 
               <div style={T.card}>
-                <div style={T.h2}>История платежей объекта</div>
+                <div style={T.h2}>История платежей</div>
                 {objHistory.length === 0 ? (
-                  <div style={T.small}>Платежей пока нет</div>
+                  <div style={{ ...T.small, margin: '8px 0' }}>Платежей пока нет</div>
                 ) : (
                   objHistory.map((h: any) => {
                     const late = h.confirmed_by_landlord && h.confirmed_at && new Date(h.confirmed_at) > parseDate(h.due_date)
                     const sum = Number(h.base_amount || 0) + Number(h.penalty_amount || 0) + Number(h.utilities_amount || 0)
                     return (
-                      <div key={h.id} style={T.item}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                          <span style={{ fontSize: 14 }}>{parseDate(h.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}</span>
-                          <b style={{ color: late ? C.red : C.text, whiteSpace: 'nowrap' }}>{sum.toFixed(0)} ₽</b>
-                        </div>
-                        <div style={T.tiny}>{h.confirmed_by_landlord ? (late ? 'просрочка' : 'оплачен вовремя') : 'не подтверждён'}</div>
+                      <div key={h.id} style={T.row}>
+                        <span>{parseDate(h.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}</span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontSize: 13, color: late ? '#ff3b30' : '#8e8e93' }}>{h.confirmed_by_landlord ? (late ? 'просрочка' : 'вовремя') : 'не подтверждён'}</span>
+                          <b>{sum.toFixed(0)} ₽</b>
+                        </span>
                       </div>
                     )
                   })
@@ -578,37 +586,39 @@ export function LandlordDashboard() {
                 <div style={T.row}><span style={{ color: C.text2 }}>Аренда</span><b>{Number(contract.rent_amount).toFixed(0)} ₽/мес</b></div>
                 <div style={T.row}><span style={{ color: C.text2 }}>Оплата</span><b>до {contract.payment_day} числа</b></div>
                 {deposit > 0 && (
-                  <div style={{ marginTop: 8 }}>
-                    <div style={T.row}><span style={{ color: C.text2 }}>Депозит</span><b>{deposit.toFixed(0)} ₽</b></div>
+                  <div style={{ padding: '8px 0 4px' }}>
                     <Progress value={depositPaid} max={deposit} />
                   </div>
                 )}
               </div>
 
               <div style={T.card}>
-                <div style={T.h2}>🧊 Замороженные штрафы</div>
+                <div style={T.h2}>Замороженные штрафы</div>
                 {(current.penaltyAmount || 0) > 0 && !current.payment?.confirmed_by_landlord && (
-                  <button style={T.btnSmall} onClick={() => freezePenalty(current.paymentId!)}>🧊 Заморозить текущий штраф ({(current.penaltyAmount || 0).toFixed(0)} ₽)</button>
+                  <div style={{ padding: '6px 0' }}>
+                    <button style={iosBlue} onClick={() => freezePenalty(current.paymentId!)}>Заморозить текущий штраф ({(current.penaltyAmount || 0).toFixed(0)} ₽)</button>
+                  </div>
                 )}
-                {(current.frozenRows || []).length === 0 && <div style={T.small}>Замороженных штрафов нет</div>}
+                {(current.frozenRows || []).length === 0 && <div style={{ ...T.small, margin: '8px 0' }}>Замороженных штрафов нет</div>}
                 {(current.frozenRows || []).map((f: any) => (
                   <div key={f.id} style={T.item}>
-                    <div style={{ fontSize: 14 }}>
-                      {f.period ? parseDate(f.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : 'без месяца'} · {Number(f.amount).toFixed(0)} ₽
-                      {f.adjusted_note && <div style={T.tiny}>{f.adjusted_note}</div>}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 15 }}>
+                      <span>{f.period ? parseDate(f.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : 'без месяца'}</span>
+                      <b>{Number(f.amount).toFixed(0)} ₽</b>
                     </div>
-                    <span style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-                      <button style={T.btnSecondary} onClick={() => openAdjust(f.id, false)}>изменить</button>
-                      <button style={T.btnDanger} onClick={() => openAdjust(f.id, true)}>обнулить</button>
-                    </span>
+                    {f.adjusted_note && <div style={T.tiny}>{f.adjusted_note}</div>}
+                    <div style={{ display: 'flex', gap: 16, marginTop: 4 }}>
+                      <button style={iosBlue} onClick={() => openAdjust(f.id, false)}>изменить</button>
+                      <button style={iosRed} onClick={() => openAdjust(f.id, true)}>обнулить</button>
+                    </div>
                   </div>
                 ))}
                 {!!current.frozenTotal && current.frozenTotal > 0 && (
                   deposit > 0
                     ? (deposit >= (current.frozenTotal || 0)
-                      ? <div style={T.small}>Будет удержано из депозита; остаток депозита: {(deposit - (current.frozenTotal || 0)).toFixed(0)} ₽</div>
-                      : <div style={{ ...T.small, color: C.red }}>Сверх депозита долг: {((current.frozenTotal || 0) - deposit).toFixed(0)} ₽</div>)
-                    : <div style={{ ...T.small, color: C.red }}>Долг арендатора (депозита нет)</div>
+                      ? <div style={T.small}>Будет удержано из депозита; остаток: {(deposit - (current.frozenTotal || 0)).toFixed(0)} ₽</div>
+                      : <div style={{ ...T.small, color: '#ff3b30' }}>Сверх депозита долг: {((current.frozenTotal || 0) - deposit).toFixed(0)} ₽</div>)
+                    : <div style={{ ...T.small, color: '#ff3b30' }}>Долг арендатора (депозита нет)</div>
                 )}
                 <div style={T.tiny}>Записи не удаляются до конца договора; каждое изменение сохраняется с примечанием и датой.</div>
               </div>
@@ -627,11 +637,11 @@ export function LandlordDashboard() {
       <div style={T.card}>
         <div style={T.h2}>Уведомления</div>
         {notifications.length === 0 ? (
-          <div style={T.small}>Нет уведомлений</div>
+          <div style={{ ...T.small, margin: '8px 0' }}>Нет уведомлений</div>
         ) : (
           notifications.map(n => (
-            <div key={n.id} style={{ padding: '8px 0', borderBottom: `1px solid ${C.line}`, fontSize: 14 }}>
-              {(n as any).message || getNotificationText(n.type)}
+            <div key={n.id} style={T.row}>
+              <span style={{ fontSize: 14 }}>{(n as any).message || getNotificationText(n.type)}</span>
             </div>
           ))
         )}
@@ -674,9 +684,9 @@ export function LandlordDashboard() {
 }
 
 const L: Record<string, React.CSSProperties> = {
-  filtersRow: { display: 'flex', gap: 8, marginBottom: 12 },
-  statsGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 },
-  statTile: { backgroundColor: '#fafafc', borderRadius: 12, padding: 12 },
+  filtersRow: { display: 'flex', gap: 8, marginBottom: 12, marginTop: 8 },
+  statsGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 },
+  statTile: { backgroundColor: 'rgba(120,120,128,0.06)', borderRadius: 10, padding: 12 },
   statLabel: { fontSize: 12, color: C.text2, marginBottom: 4 },
   statValue: { fontSize: 17, fontWeight: 700 },
 }
