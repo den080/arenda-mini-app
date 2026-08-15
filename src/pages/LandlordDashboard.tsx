@@ -78,9 +78,9 @@ export function LandlordDashboard() {
           const { data: cashMeeting } = await supabase.from('cash_meetings').select('*').eq('contract_id', contract.id).eq('kind', 'meeting').eq('status', 'confirmed').order('created_at', { ascending: false }).limit(1).maybeSingle()
           const dueMid = parseDate(payment.due_date)
           const sd = contract.start_date ? parseDate(contract.start_date) : null
-          const firstMonthGrace = !!sd && dueMid.getMonth() === sd.getMonth() && dueMid.getFullYear() === sd.getFullYear() && todayMid < new Date(sd.getFullYear(), sd.getMonth() + 1, 1)
-          const isOverdue = todayMid > dueMid && !firstMonthGrace
-          const daysUntilDue = firstMonthGrace && todayMid > dueMid ? 0 : Math.round((dueMid.getTime() - todayMid.getTime()) / 86400000)
+          const isFirstMonth = !!sd && dueMid.getMonth() === sd.getMonth() && dueMid.getFullYear() === sd.getFullYear()
+          const isOverdue = todayMid > dueMid && !isFirstMonth
+          const daysUntilDue = Math.round((dueMid.getTime() - todayMid.getTime()) / 86400000)
           const baseAmount = payment.base_amount || contract.rent_amount
           const penaltyAmount = payment.penalty_amount || 0
           const utilitiesAmount = Number(payment.utilities_amount || 0)
@@ -95,9 +95,10 @@ export function LandlordDashboard() {
           let statusDetail = ''
           let statusColor = '#a80'
           if (!payment.confirmed_by_landlord) {
-            if (isOverdue) { status = 'overdue'; statusDetail = `Просрочка ${Math.round((todayMid.getTime() - dueMid.getTime()) / 86400000)} дн.`; statusColor = '#c00' }
+            if (isFirstMonth) { statusDetail = 'Первый месяц — ждёт оплаты'; statusColor = '#a80' }
+            else if (isOverdue) { status = 'overdue'; statusDetail = `Просрочка ${Math.round((todayMid.getTime() - dueMid.getTime()) / 86400000)} дн.`; statusColor = '#c00' }
             else if (waitingForReadings) { statusDetail = 'Ждём показания'; statusColor = '#a80' }
-            else if (daysUntilDue === 0) { statusDetail = firstMonthGrace ? 'Первый месяц — просрочка не начисляется' : 'Сегодня последний день оплаты'; statusColor = '#a80' }
+            else if (daysUntilDue === 0) { statusDetail = 'Сегодня последний день оплаты'; statusColor = '#a80' }
             else if (daysUntilDue <= reminder) { statusDetail = `До оплаты ${daysUntilDue} дн.`; statusColor = '#a80' }
             else { statusDetail = `До оплаты ${daysUntilDue} дн.`; statusColor = '#080' }
           } else {
@@ -490,7 +491,7 @@ export function LandlordDashboard() {
                   <div style={T.row}><span style={{ color: C.text2 }}>Срок</span><b>{parseDate((contract as any).start_date).toLocaleDateString('ru-RU')} — {parseDate((contract as any).end_date).toLocaleDateString('ru-RU')}</b></div>
                 )}
                 <div style={T.row}><span style={{ color: C.text2 }}>Аренда</span><b>{Number(contract.rent_amount).toFixed(0)} ₽/мес</b></div>
-                <div style={T.row}><span style={{ color: C.text2 }}>День платежа</span><b>{contract.payment_day} число</b></div>
+                <div style={T.row}><span style={{ color: C.text2 }}>Оплата</span><b>до {contract.payment_day} числа</b></div>
                 {deposit > 0 && <div style={T.row}><span style={{ color: C.text2 }}>Депозит</span><b>внесено {depositPaid.toFixed(0)} из {deposit.toFixed(0)} ₽</b></div>}
               </div>
 
