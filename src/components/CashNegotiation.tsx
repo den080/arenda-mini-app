@@ -57,8 +57,9 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
     setRows((data as Meeting[]) || [])
     const { data: c } = await supabase.from('contracts').select('*').eq('id', contractId).maybeSingle()
     setCon(c)
-    const { data: p } = await supabase.from('payments').select('*').eq('contract_id', contractId).order('period', { ascending: false }).limit(1).maybeSingle()
-    setPay(p)
+    const { data: allp } = await supabase.from('payments').select('*').eq('contract_id', contractId).order('period', { ascending: false })
+    const openp = (allp || []).filter((x: any) => !x.confirmed_by_landlord)
+    setPay(openp.length ? openp[openp.length - 1] : (allp || [])[0] || null)
   }
 
   useEffect(() => {
@@ -76,6 +77,10 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
   const incoming = meetings.filter(m => m.status === 'proposed' && m.proposer !== myRole)
   const myProposals = meetings.filter(m => m.status === 'proposed' && m.proposer === myRole)
   const confirmed = meetings.find(m => m.status === 'confirmed')
+
+  const pm = pay ? parseDate(pay.period) : null
+  const sm = con?.start_date ? parseDate(con.start_date) : null
+  const firstMonthActive = !!(pm && sm && pm.getMonth() === sm.getMonth() && pm.getFullYear() === sm.getFullYear()) && !pay?.confirmed_by_landlord
 
   const meetMs = confirmed && confirmed.meeting_date ? new Date(`${confirmed.meeting_date}T${confirmed.time_from}`).getTime() : 0
   const canResched = !!confirmed && (meetMs - Date.now()) > 24 * 3600 * 1000
@@ -191,6 +196,10 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
     <div>
       <div style={T.tiny}>Место встречи по умолчанию — арендуемый объект, если не обсуждалось иное.</div>
 
+      {firstMonthActive && (
+        <div style={T.note}>💵 Первый месяц оплачивается при подписании — согласование времени встречи не требуется. Арендодатель подтвердит получение в своём кабинете.</div>
+      )}
+
       {confirmed && (
         <div style={T.noteGreen}>
           ✅ Встреча согласована: {fmtDate(confirmed.meeting_date)}, {confirmed.time_from}–{confirmed.time_to}
@@ -212,7 +221,7 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
         </div>
       )}
 
-      {resched && (
+      {resched && !firstMonthActive && (
         <>
           <div style={T.h3}>🔁 Выберите новое время (внутри любого открытого окна)</div>
           {windows.length === 0 && <div style={T.tiny}>Нет открытых окон — добавьте новое ниже.</div>}
@@ -220,7 +229,7 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
         </>
       )}
 
-      {!resched && (
+      {!resched && !firstMonthActive && (
         <>
           <div style={T.h3}>🕐 Мои окна, когда я могу</div>
           {myWindows.length === 0 && <div style={T.tiny}>Пока нет. Добавьте окно ниже — вторая сторона выберет внутри него точное время.</div>}
@@ -249,7 +258,7 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
         </>
       )}
 
-      {incoming.length > 0 && (
+      {!firstMonthActive && incoming.length > 0 && (
         <>
           <div style={T.h3}>📥 Ждут моего подтверждения</div>
           {incoming.map(m => (
@@ -264,7 +273,7 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
         </>
       )}
 
-      {myProposals.length > 0 && (
+      {!firstMonthActive && myProposals.length > 0 && (
         <>
           <div style={T.h3}>📤 Мои заявки</div>
           {myProposals.map(m => (
