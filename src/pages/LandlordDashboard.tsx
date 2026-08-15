@@ -308,13 +308,6 @@ export function LandlordDashboard() {
     }
   }
 
-  function amountBreakdown(obj: ObjectWithStatus): string {
-    const parts: string[] = [`${(obj.baseAmount ?? obj.amount).toFixed(2)} ₽`]
-    if (obj.penaltyAmount && obj.penaltyAmount > 0) parts.push(`${obj.penaltyAmount.toFixed(2)} ₽ штраф`)
-    if (obj.utilitiesAmount && obj.utilitiesAmount > 0) parts.push(`${obj.utilitiesAmount.toFixed(2)} ₽ ресурсы`)
-    return parts.join(' + ')
-  }
-
   const iosBlue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: 4, flexShrink: 0 }
   const iosRed: React.CSSProperties = { border: 'none', background: 'transparent', color: '#ff3b30', fontSize: 15, cursor: 'pointer', padding: 4, flexShrink: 0 }
   const iosOk: React.CSSProperties = { color: '#1e7e34', fontSize: 14, fontWeight: 600 }
