@@ -150,9 +150,9 @@ export function ObjectManager() {
   async function save() {
     if (saving) return
     if (!user || !address) { setMsg('Укажите адрес объекта'); return }
-    if (!validPhone(phone)) { setMsg('⚠️ Проверьте номер телефона арендатора: 11 цифр, начинается с 7 или 8'); return }
+    if (!validPhone(phone)) { setMsg('Проверьте номер телефона арендатора: 11 цифр, начинается с 7 или 8'); return }
     if (method !== 'cash' && details.length === 0) {
-      setAddDetailsErr('⚠️ Добавьте хотя бы один способ безналичной оплаты: карту банка или СБП')
+      setAddDetailsErr('Добавьте хотя бы один способ безналичной оплаты: карту банка или СБП')
       return
     }
     setAddDetailsErr(null)
@@ -209,7 +209,7 @@ export function ObjectManager() {
         contract_id: contract.id, period, due_date: due.toISOString().slice(0, 10),
         base_amount: Number(rent) || 0, penalty_amount: 0, utilities_amount: 0,
       })
-      setMsg('✅ Объект, договор и первый платёж сохранены')
+      setMsg('Объект, договор и первый платёж сохранены')
       setShowForm(false)
       setAddress(''); setNotes(''); setName(''); setPhone(''); setRent(''); setDeposit(''); setStartDate(''); setPaymentDay(''); setMeterDay('15'); setDetails([]); setReadingsMode('manual'); setMethod('both'); setAddDetailsErr(null)
       load()
@@ -254,9 +254,9 @@ export function ObjectManager() {
 
   async function saveEdit() {
     if (!editId || !user) return
-    if (!validPhone(ePhone)) { setMsg('⚠️ Проверьте номер телефона арендатора: 11 цифр, начинается с 7 или 8'); return }
+    if (!validPhone(ePhone)) { setMsg('Проверьте номер телефона арендатора: 11 цифр, начинается с 7 или 8'); return }
     if (eMethod !== 'cash' && eDetails.length === 0) {
-      setEditDetailsErr('⚠️ Добавьте хотя бы один способ безналичной оплаты: карту банка или СБП')
+      setEditDetailsErr('Добавьте хотя бы один способ безналичной оплаты: карту банка или СБП')
       return
     }
     setEditDetailsErr(null)
@@ -291,7 +291,7 @@ export function ObjectManager() {
         await supabase.from('users').update({ full_name: eName || 'Арендатор', phone: ePhone ? normalizePhone(ePhone) : null }).eq('id', editCounterId)
       }
     }
-    setMsg('✅ Изменения сохранены')
+    setMsg('Изменения сохранены')
     setEditId(null)
     load()
   }
@@ -313,7 +313,7 @@ export function ObjectManager() {
     }
     await supabase.from('object_meters').delete().eq('object_id', id)
     const { error } = await supabase.from('objects').delete().eq('id', id)
-    setMsg(error ? 'Ошибка: ' + error.message : '🗑 Объект удалён')
+    setMsg(error ? 'Ошибка: ' + error.message : 'Объект удалён')
     load()
   }
 
@@ -458,8 +458,8 @@ export function ObjectManager() {
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start' }}>
               <span style={{ flex: 1, fontSize: 15, fontWeight: 600 }}>{o.address}</span>
               <span style={{ display: 'flex', gap: 6 }}>
-                <button style={T.btnSecondary} onClick={() => openEdit(o)}>✏️</button>
-                <button style={T.btnDanger} onClick={() => removeObject(o.id)}>🗑</button>
+                <button style={T.btnSecondary} onClick={() => openEdit(o)}>изменить</button>
+                <button style={T.btnDanger} onClick={() => removeObject(o.id)}>удалить</button>
               </span>
             </div>
           )}
