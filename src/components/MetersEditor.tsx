@@ -106,6 +106,11 @@ export function MetersEditor({ objId }: { objId: string }) {
       '3': ['electricity_peak', 'electricity_semipeak', 'electricity_night'],
     }
     const all = ['electricity_single', 'electricity_day', 'electricity_night', 'electricity_peak', 'electricity_semipeak']
+    const toDeactivate = all.filter(c => isAct(c) && !(need[mode] || []).includes(c))
+    if (toDeactivate.length > 0) {
+      const answer = window.prompt('Смена тарифа отключит счётчики. Введите слово "удалить" для подтверждения')
+      if (!answer || answer.trim().toLowerCase() !== 'удалить') { alert('Отменено'); return }
+    }
     for (const code of all) await setActive(code, (need[mode] || []).includes(code))
   }
 
@@ -124,7 +129,7 @@ export function MetersEditor({ objId }: { objId: string }) {
 
   return (
     <div>
-      <div style={T.tiny}>⚡ Электричество</div>
+      <div style={T.tiny}>Электричество</div>
       {[
         { v: 'none', l: 'Не используется / автопередача данных' },
         { v: '1', l: '1-тарифный' },
@@ -142,15 +147,16 @@ export function MetersEditor({ objId }: { objId: string }) {
         <div style={{ marginBottom: 8 }}>
           {activeElecRows.map(r => (
             <div key={r.id} style={{ ...T.item, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 13, flex: 1, minWidth: 100 }}>⚡ {typeByCode(codeOf(r))?.label || 'Электро'}</span>
+              <span style={{ fontSize: 13, flex: 1, minWidth: 100 }}>{typeByCode(codeOf(r))?.label || 'Электро'}</span>
               <input defaultValue={r.label || ''} placeholder="номер счётчика" style={{ ...T.select, flex: 1, minWidth: 110 }} onBlur={(e) => setSerial(r.id, e.target.value)} />
               {startInput(r)}
+              <button style={T.btnDanger} onClick={() => removeMeter(r.id)}>✕</button>
             </div>
           ))}
         </div>
       )}
 
-      <div style={T.tiny}>💧 Вода</div>
+      <div style={T.tiny}>Вода</div>
       {waterRows.length === 0 && <div style={T.tiny}>счётчиков воды нет</div>}
       {waterRows.map(r => (
         <div key={r.id} style={{ ...T.item, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -170,23 +176,26 @@ export function MetersEditor({ objId }: { objId: string }) {
       ))}
       <button style={busy ? T.btnOff : T.btnSmall} disabled={busy} onClick={addWater}>+ Добавить счётчик воды</button>
 
-      <div style={{ ...T.tiny, marginTop: 10 }}>🔥 Отопление</div>
-      <div style={{ marginBottom: 6 }}>
-        <label style={{ fontSize: 14, cursor: 'pointer' }}>
-          <input type="checkbox" checked={isAct('heat')} onChange={(e) => setActive('heat', e.target.checked)} />
-          {' '}Теплосчётчик установлен
-        </label>
-      </div>
+      <div style={{ ...T.tiny, marginTop: 10 }}>Отопление</div>
+      {!isAct('heat') && (
+        <div style={{ marginBottom: 6 }}>
+          <label style={{ fontSize: 14, cursor: 'pointer' }}>
+            <input type="checkbox" checked={false} onChange={(e) => { if (e.target.checked) setActive('heat', true) }} />
+            {' '}Теплосчётчик установлен
+          </label>
+        </div>
+      )}
       {activeRows('heat').map(r => (
         <div key={r.id} style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
           <input defaultValue={r.label || ''} placeholder="номер теплосчётчика" style={{ ...T.select, flex: 1 }} onBlur={(e) => setSerial(r.id, e.target.value)} />
           {startInput(r)}
+          <button style={T.btnDanger} onClick={() => removeMeter(r.id)}>✕</button>
         </div>
       ))}
-      {typeByCode('gas') && (
+      {typeByCode('gas') && !isAct('gas') && (
         <div style={{ marginBottom: 6 }}>
           <label style={{ fontSize: 14, cursor: 'pointer' }}>
-            <input type="checkbox" checked={isAct('gas')} onChange={(e) => setActive('gas', e.target.checked)} />
+            <input type="checkbox" checked={false} onChange={(e) => { if (e.target.checked) setActive('gas', true) }} />
             {' '}Газ
           </label>
         </div>
@@ -195,9 +204,10 @@ export function MetersEditor({ objId }: { objId: string }) {
         <div key={r.id} style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
           <input defaultValue={r.label || ''} placeholder="номер счётчика газа" style={{ ...T.select, flex: 1 }} onBlur={(e) => setSerial(r.id, e.target.value)} />
           {startInput(r)}
+          <button style={T.btnDanger} onClick={() => removeMeter(r.id)}>✕</button>
         </div>
       ))}
-      <div style={T.tiny}>Стартовые показания («старт») видит арендатор в своей вкладке «Счётчики».</div>
+      <div style={T.tiny}>Удаление любого счётчика — только после ввода слова «удалить». Стартовые показания («старт») видит арендатор в своей вкладке «Счётчики».</div>
     </div>
   )
 }
