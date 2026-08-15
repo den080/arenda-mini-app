@@ -18,7 +18,7 @@ export function Toaster() {
   }, [])
   if (!msg) return null
   return (
-    <div style={{ position: 'fixed', left: '50%', transform: 'translateX(-50%)', bottom: 84, background: 'rgba(29,29,31,0.92)', color: '#fff', padding: '10px 16px', borderRadius: 12, fontSize: 14, zIndex: 999, maxWidth: '86%', textAlign: 'center', boxShadow: '0 4px 14px rgba(0,0,0,0.25)' }}>
+    <div style={{ position: 'fixed', left: '50%', transform: 'translateX(-50%)', bottom: 96, background: 'rgba(29,29,31,0.92)', color: '#fff', padding: '10px 16px', borderRadius: 12, fontSize: 14, zIndex: 999, maxWidth: '86%', textAlign: 'center', boxShadow: '0 4px 14px rgba(0,0,0,0.25)' }}>
       {msg}
     </div>
   )
@@ -100,16 +100,16 @@ export function BottomNav({ tabs, tab, setTab, badges }: {
   badges?: Record<string, boolean>
 }) {
   return (
-    <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'rgba(249,249,251,0.97)', borderTop: '1px solid #e5e5ea', display: 'flex', padding: '6px 6px 10px', zIndex: 900 }}>
+    <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'rgba(249,249,251,0.98)', borderTop: '1px solid #e5e5ea', display: 'flex', padding: '4px 6px calc(10px + env(safe-area-inset-bottom))', zIndex: 900 }}>
       {tabs.map(t => (
         <button
           key={t.id}
           onClick={() => setTab(t.id)}
-          style={{ flex: 1, border: 'none', background: 'transparent', padding: '8px 2px', cursor: 'pointer', position: 'relative', color: tab === t.id ? '#0071e3' : '#86868b', fontSize: 12, fontWeight: 600 }}
+          style={{ flex: 1, border: 'none', background: 'transparent', padding: '14px 2px', cursor: 'pointer', position: 'relative', color: tab === t.id ? '#0071e3' : '#86868b', fontSize: 13, fontWeight: 600 }}
         >
           {t.l}
           {badges && badges[t.id] && (
-            <span style={{ position: 'absolute', top: 4, left: '50%', marginLeft: 10, width: 8, height: 8, background: '#ff3b30', borderRadius: 4 }} />
+            <span style={{ position: 'absolute', top: 8, left: '50%', marginLeft: 16, width: 8, height: 8, background: '#ff3b30', borderRadius: 4 }} />
           )}
         </button>
       ))}
