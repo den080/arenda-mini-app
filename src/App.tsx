@@ -57,14 +57,17 @@ export default function App() {
     <div>
       <style>{GLOBAL_CSS}</style>
       <div style={st.topbar}>
-        <button style={st.seg} onClick={logout}>Выйти</button>
         {isTester ? (
           <>
-            <button style={mode === 'landlord' ? st.segActive : st.seg} onClick={() => setMode('landlord')}>Арендодатель</button>
             <button style={mode === 'tenant' ? st.segActive : st.seg} onClick={() => setMode('tenant')}>Арендатор</button>
+            <button style={mode === 'landlord' ? st.segActive : st.seg} onClick={() => setMode('landlord')}>Арендодатель</button>
+            <button style={st.seg} onClick={logout}>Выйти</button>
           </>
         ) : (
-          <div style={st.segActive}>{mode === 'landlord' ? 'Арендодатель' : 'Арендатор'}</div>
+          <>
+            <div style={st.segActive}>{mode === 'landlord' ? 'Арендодатель' : 'Арендатор'}</div>
+            <button style={st.seg} onClick={logout}>Выйти</button>
+          </>
         )}
       </div>
       {mode === 'landlord' ? <LandlordDashboard /> : <TenantDashboard />}
