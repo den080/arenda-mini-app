@@ -3,6 +3,7 @@ import { supabase } from './lib/supabase'
 import { useTelegramUser } from './hooks/useTelegramUser'
 import LandlordDashboard from './pages/LandlordDashboard'
 import TenantDashboard from './pages/TenantDashboard'
+import { C } from './theme'
 
 const GLOBAL_CSS = `
   button:active { opacity: 0.55; }
@@ -38,13 +39,13 @@ export default function App() {
     })
   }, [user])
 
-  if (loading) return <div style={st.wrap}>⏳ Загрузка...</div>
+  if (loading) return <div style={st.wrap}>Загрузка...</div>
 
   if (!user) {
     return (
       <div style={st.wrap}>
         <style>{GLOBAL_CSS}</style>
-        <h2 style={st.h2}>🔑 Вход</h2>
+        <h2 style={st.h2}>Вход</h2>
         <p style={st.p}>{error}</p>
         <input style={st.input} value={value} onChange={(e) => setValue(e.target.value)} placeholder="Telegram ID или телефон" />
         <button style={st.button} onClick={() => value.trim() && loginWithId(value.trim())}>Войти</button>
@@ -56,16 +57,14 @@ export default function App() {
     <div>
       <style>{GLOBAL_CSS}</style>
       <div style={st.topbar}>
-        <button style={st.logout} onClick={logout}>🚪 Выйти</button>
+        <button style={st.seg} onClick={logout}>Выйти</button>
         {isTester ? (
           <>
-            <button style={mode === 'landlord' ? st.tabActive : st.tab} onClick={() => setMode('landlord')}>🏠 Арендодатель</button>
-            <button style={mode === 'tenant' ? st.tabActive : st.tab} onClick={() => setMode('tenant')}>💧 Арендатор</button>
+            <button style={mode === 'landlord' ? st.segActive : st.seg} onClick={() => setMode('landlord')}>Арендодатель</button>
+            <button style={mode === 'tenant' ? st.segActive : st.seg} onClick={() => setMode('tenant')}>Арендатор</button>
           </>
         ) : (
-          <div style={mode === 'landlord' ? st.tabActive : st.tab}>
-            {mode === 'landlord' ? '🏠 Арендодатель' : '💧 Арендатор'}
-          </div>
+          <div style={st.segActive}>{mode === 'landlord' ? 'Арендодатель' : 'Арендатор'}</div>
         )}
       </div>
       {mode === 'landlord' ? <LandlordDashboard /> : <TenantDashboard />}
@@ -79,8 +78,7 @@ const st: Record<string, React.CSSProperties> = {
   p: { color: '#555', fontSize: 14 },
   input: { width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box' },
   button: { marginTop: 12, width: '100%', padding: 14, borderRadius: 10, border: 'none', background: '#2196f3', color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer' },
-  topbar: { display: 'flex', gap: 8, padding: '10px 12px', maxWidth: 600, margin: '0 auto', boxSizing: 'border-box' },
-  logout: { padding: '8px 12px', borderRadius: 8, border: 'none', background: '#eceff1', fontSize: 14, cursor: 'pointer' },
-  tab: { flex: 1, padding: 10, borderRadius: 10, border: '1px solid #ddd', background: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', textAlign: 'center' },
-  tabActive: { flex: 1, padding: 10, borderRadius: 10, border: '1px solid #2196f3', background: '#2196f3', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', textAlign: 'center' },
+  topbar: { display: 'flex', gap: 4, padding: 4, background: C.gray, borderRadius: 12, maxWidth: 600, margin: '12px auto 0', boxSizing: 'border-box' },
+  seg: { flex: 1, padding: '9px 4px', borderRadius: 9, border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', background: 'transparent', color: C.text2 },
+  segActive: { flex: 1, padding: '9px 4px', borderRadius: 9, border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', background: '#fff', color: C.text, boxShadow: '0 1px 3px rgba(0,0,0,0.12)', textAlign: 'center' },
 }
