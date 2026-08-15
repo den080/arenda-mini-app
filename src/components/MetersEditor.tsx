@@ -1,10 +1,22 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { T } from '../theme'
 import { ConfirmDelete, showToast } from './ui'
 
-const line = { display: 'flex', gap: 6, alignItems: 'center' } as const
-const inp = { ...T.select, flex: 1, minWidth: 0 }
+const S: Record<string, React.CSSProperties> = {
+  head: { fontSize: 13, color: '#8e8e93', margin: '16px 16px 6px', textTransform: 'uppercase', letterSpacing: 0.3 },
+  card: { background: '#fff', borderRadius: 12, margin: '0 0 10px', padding: '0 16px' },
+  row: { display: 'flex', alignItems: 'center', gap: 10, minHeight: 44, padding: '4px 0', boxSizing: 'border-box' },
+  rowBtn: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, minHeight: 44, padding: '4px 0', boxSizing: 'border-box', width: '100%', border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left' },
+  sep: { height: 1, background: 'rgba(60,60,67,0.12)' },
+  label: { fontSize: 15, color: '#1d1d1f' },
+  title: { fontSize: 15, fontWeight: 600, color: '#1d1d1f' },
+  value: { flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'transparent', textAlign: 'right', fontSize: 15, color: '#1d1d1f', padding: 0 },
+  select: { flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'transparent', textAlign: 'right', fontSize: 15, color: '#0071e3', padding: 0 },
+  minus: { width: 22, height: 22, borderRadius: 11, border: 'none', background: '#ff3b30', color: '#fff', fontSize: 16, lineHeight: '20px', cursor: 'pointer', padding: 0, flexShrink: 0 },
+  check: { color: '#0071e3', fontSize: 17, fontWeight: 600 },
+  add: { margin: '2px 0 12px', padding: '11px 16px', borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontSize: 15, fontWeight: 600, cursor: 'pointer' },
+  hint: { fontSize: 12, color: '#8e8e93', margin: '4px 16px 12px' },
+}
 
 export function MetersEditor({ objId }: { objId: string }) {
   const [types, setTypes] = useState<any[]>([])
@@ -129,68 +141,82 @@ export function MetersEditor({ objId }: { objId: string }) {
 
   const elecMode = getElecMode()
 
-  const meterCard = (r: any, head: any) => (
-    <div key={r.id} style={T.item}>
-      <div style={{ marginBottom: 6 }}>{head}</div>
-      <div style={line}>
-        <input defaultValue={r.label || ''} placeholder="номер счётчика" style={inp} onBlur={(e) => setSerial(r.id, e.target.value)} />
-        <button style={T.btnDanger} onClick={() => setDel(r.id)}>✕</button>
+  const meterCard = (r: any, title: string, extraRow?: any) => (
+    <div key={r.id} style={S.card}>
+      <div style={S.row}>
+        <span style={S.title}>{title}</span>
+        <span style={{ flex: 1 }} />
+        <button style={S.minus} onClick={() => setDel(r.id)}>−</button>
       </div>
-      <div style={{ ...line, marginTop: 6 }}>
-        <input defaultValue={r.initial_value ?? ''} placeholder="стартовые показания" style={inp} inputMode="decimal" onBlur={(e) => setInitial(r.id, e.target.value)} />
+      {extraRow && (<><div style={S.sep} />{extraRow}</>)}
+      <div style={S.sep} />
+      <div style={S.row}>
+        <span style={S.label}>Номер счётчика</span>
+        <input style={S.value} defaultValue={r.label || ''} placeholder="—" onBlur={(e) => setSerial(r.id, e.target.value)} />
+      </div>
+      <div style={S.sep} />
+      <div style={S.row}>
+        <span style={S.label}>Стартовые показания</span>
+        <input style={S.value} inputMode="decimal" defaultValue={r.initial_value ?? ''} placeholder="—" onBlur={(e) => setInitial(r.id, e.target.value)} />
       </div>
     </div>
   )
 
   return (
     <div>
-      <div style={T.tiny}>Электричество</div>
-      {[
-        { v: 'none', l: 'Не используется / автопередача данных' },
-        { v: '1', l: '1-тарифный' },
-        { v: '2', l: '2-тарифный (день/ночь)' },
-        { v: '3', l: '3-тарифный (пик/полупик/ночь)' },
-      ].map(opt => (
-        <div key={opt.v} style={{ marginBottom: 6 }}>
-          <label style={{ fontSize: 14, cursor: 'pointer' }}>
-            <input type="radio" name={`elec-${objId}`} checked={elecMode === opt.v} onChange={() => requestElecMode(opt.v)} />
-            {' '}{opt.l}
-          </label>
-        </div>
-      ))}
-      {activeElecRows.map(r => meterCard(r, <span style={{ fontSize: 13 }}>{typeByCode(codeOf(r))?.label || 'Электро'}</span>))}
+      <div style={S.head}>Электричество</div>
+      <div style={S.card}>
+        {[
+          { v: 'none', l: 'Не используется / автопередача' },
+          { v: '1', l: '1-тарифный' },
+          { v: '2', l: '2-тарифный (день/ночь)' },
+          { v: '3', l: '3-тарифный (пик/полупик/ночь)' },
+        ].map((o, i) => (
+          <div key={o.v}>
+            {i > 0 && <div style={S.sep} />}
+            <button style={S.rowBtn} onClick={() => requestElecMode(o.v)}>
+              <span style={S.label}>{o.l}</span>
+              {elecMode === o.v && <span style={S.check}>✓</span>}
+            </button>
+          </div>
+        ))}
+      </div>
+      {activeElecRows.map(r => meterCard(r, typeByCode(codeOf(r))?.label || 'Электро'))}
 
-      <div style={{ ...T.tiny, marginTop: 10 }}>Вода</div>
-      {waterRows.length === 0 && <div style={T.tiny}>счётчиков воды нет</div>}
-      {waterRows.map(r => meterCard(r, (
-        <select value={codeOf(r)} onChange={(e) => setWaterType(r.id, e.target.value)} style={{ ...T.select, width: '100%', boxSizing: 'border-box' }}>
-          <option value="water_cold">Холодная</option>
-          <option value="water_hot">Горячая</option>
-        </select>
+      <div style={S.head}>Вода</div>
+      {waterRows.length === 0 && <div style={S.hint}>Счётчиков воды нет</div>}
+      {waterRows.map(r => meterCard(r, r && codeOf(r) === 'water_hot' ? 'Горячая вода' : 'Холодная вода', (
+        <div style={S.row}>
+          <span style={S.label}>Тип</span>
+          <select value={codeOf(r)} onChange={(e) => setWaterType(r.id, e.target.value)} style={S.select}>
+            <option value="water_cold">Холодная</option>
+            <option value="water_hot">Горячая</option>
+          </select>
+        </div>
       )))}
-      <button style={busy ? T.btnOff : T.btnSmall} disabled={busy} onClick={addWater}>+ Добавить счётчик воды</button>
+      <button style={S.add} disabled={busy} onClick={addWater}>+ Добавить счётчик воды</button>
 
-      <div style={{ ...T.tiny, marginTop: 10 }}>Отопление</div>
+      <div style={S.head}>Отопление и газ</div>
       {!isAct('heat') && (
-        <div style={{ marginBottom: 6 }}>
-          <label style={{ fontSize: 14, cursor: 'pointer' }}>
-            <input type="checkbox" checked={false} onChange={(e) => { if (e.target.checked) setActive('heat', true) }} />
-            {' '}Теплосчётчик установлен
-          </label>
+        <div style={S.card}>
+          <button style={S.rowBtn} onClick={() => setActive('heat', true)}>
+            <span style={S.label}>Теплосчётчик установлен</span>
+            <span style={{ color: '#0071e3', fontSize: 15 }}>добавить</span>
+          </button>
         </div>
       )}
-      {activeRows('heat').map(r => meterCard(r, <span style={{ fontSize: 13 }}>Теплосчётчик</span>))}
+      {activeRows('heat').map(r => meterCard(r, 'Теплосчётчик'))}
       {typeByCode('gas') && !isAct('gas') && (
-        <div style={{ marginBottom: 6 }}>
-          <label style={{ fontSize: 14, cursor: 'pointer' }}>
-            <input type="checkbox" checked={false} onChange={(e) => { if (e.target.checked) setActive('gas', true) }} />
-            {' '}Газ
-          </label>
+        <div style={S.card}>
+          <button style={S.rowBtn} onClick={() => setActive('gas', true)}>
+            <span style={S.label}>Счётчик газа</span>
+            <span style={{ color: '#0071e3', fontSize: 15 }}>добавить</span>
+          </button>
         </div>
       )}
-      {activeRows('gas').map(r => meterCard(r, <span style={{ fontSize: 13 }}>Счётчик газа</span>))}
+      {activeRows('gas').map(r => meterCard(r, 'Счётчик газа'))}
 
-      <div style={T.tiny}>Стартовые показания видит арендатор в своей вкладке «Счётчики». Отключение счётчика — только с подтверждением.</div>
+      <div style={S.hint}>Стартовые показания видит арендатор. Отключение счётчика — только с подтверждением.</div>
 
       <ConfirmDelete
         open={!!del}
