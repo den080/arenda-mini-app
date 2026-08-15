@@ -5,7 +5,6 @@ import CashNegotiation from '../components/CashNegotiation'
 import MetersEditor from '../components/MetersEditor'
 import ReadingsReview from '../components/ReadingsReview'
 import Chat from '../components/Chat'
-import ObjectManager from '../components/ObjectManager'
 import { ensureNextPayment } from '../lib/nextPayment'
 import { T, C } from '../theme'
 import type { Object as PropertyObject, Contract, NotificationLog, User } from '../types/database'
@@ -44,6 +43,8 @@ export function LandlordDashboard() {
   const [notifications, setNotifications] = useState<NotificationLog[]>([])
   const [utilInputs, setUtilInputs] = useState<Record<string, string>>({})
   const [history, setHistory] = useState<any[]>([])
+  const [statsPeriod, setStatsPeriod] = useState<'6m' | '12m'>('6m')
+  const [statsObject, setStatsObject] = useState<string>('all')
   const [sel, setSel] = useState(0)
   const [tab, setTab] = useState('overview')
 
@@ -90,7 +91,7 @@ export function LandlordDashboard() {
             const { data: readingsData } = await supabase.from('meter_readings').select('*').eq('contract_id', contract.id).gte('submitted_at', new Date(currentYear, currentMonth, 1).toISOString()).lt('submitted_at', new Date(currentYear, currentMonth + 1, 1).toISOString())
             if (!readingsData || readingsData.length === 0) waitingForReadings = true
           }
-          const needUtilitiesReminder = !payment.confirmed_by_landlord && !isFirstMonth && readingsMode !== 'self' && daysUntilDue >= 0 && daysUntilDue <= reminder && utilitiesAmount === 0
+          const needUtilitiesReminder = !payment.confirmed_by_landlord && readingsMode !== 'self' && daysUntilDue >= 0 && daysUntilDue <= reminder && utilitiesAmount === 0
           let status: 'paid' | 'overdue' | 'pending' = 'pending'
           let statusDetail = ''
           let statusColor = '#a80'
@@ -133,6 +134,29 @@ export function LandlordDashboard() {
   async function saveUtilities(paymentId: string, value: string) {
     const { error } = await supabase.from('payments').update({ utilities_amount: Number(value) || 0 }).eq('id', paymentId)
     if (error) alert('Ошибка: ' + error.message); else window.dispatchEvent(new Event('rentflow-refresh'))
+  }
+
+  function toISO(d: Date): string {
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const dd = String(d.getDate()).padStart(2, '0')
+    return `${d.getFullYear()}-${m}-${dd}`
+  }
+
+  async function saveUtilitiesNext(value: string) {
+    if (!current?.payment) return
+    if (!current.payment.confirmed_by_landlord) {
+      await saveUtilities(current.payment.id, value)
+      return
+    }
+    const pd = parseDate(current.payment.period)
+    const nextPeriod = new Date(pd.getFullYear(), pd.getMonth() + 1, 1)
+    const due = new Date(nextPeriod.getFullYear(), nextPeriod.getMonth(), Number(contract?.payment_day) || 1)
+    const { error } = await supabase.from('payments').insert({
+      contract_id: contract!.id, period: toISO(nextPeriod), due_date: toISO(due),
+      base_amount: Number(contract!.rent_amount) || 0, penalty_amount: 0, utilities_amount: Number(value) || 0,
+    })
+    if (error) { alert('Ошибка: ' + error.message); return }
+    window.dispatchEvent(new Event('rentflow-refresh'))
   }
 
   async function confirmSigning(paymentId: string) {
@@ -270,6 +294,17 @@ export function LandlordDashboard() {
 
   const chipOf = (color?: string) => color === '#c00' ? T.chipRed : color === '#a80' ? T.chipOrange : color === '#080' ? T.chipGreen : T.chipGray
 
+  const todayNow = new Date()
+  const todayMidNow = new Date(todayNow.getFullYear(), todayNow.getMonth(), todayNow.getDate())
+  const periodStart = statsPeriod === '6m' ? new Date(todayMidNow.getFullYear(), todayMidNow.getMonth() - 5, 1) : new Date(todayMidNow.getFullYear() - 1, todayMidNow.getMonth(), 1)
+  const filteredHistory = history.filter(h => (statsObject === 'all' || h.objId === statsObject) && parseDate(h.period) >= periodStart).sort((a, b) => parseDate(b.period).getTime() - parseDate(a.period).getTime())
+  const collected = filteredHistory.filter(h => h.confirmed_by_landlord).reduce((s: number, h: any) => s + Number(h.base_amount || 0) + Number(h.penalty_amount || 0) + Number(h.utilities_amount || 0), 0)
+  const penaltiesAccrued = filteredHistory.reduce((s: number, h: any) => s + Number(h.penalty_amount || 0), 0)
+  const confirmedCount = filteredHistory.filter(h => h.confirmed_by_landlord).length
+  const onTimeCount = filteredHistory.filter(h => h.confirmed_by_landlord && h.confirmed_at && new Date(h.confirmed_at) <= parseDate(h.due_date)).length
+  const onTimePct = confirmedCount > 0 ? Math.round((onTimeCount / confirmedCount) * 100) : 0
+  const overdueNow = objects.filter(o => o.statusColor === '#c00').length
+
   const selIdx = Math.min(sel, Math.max(0, objects.length - 1))
   const current = objects[selIdx]
   const contract = current?.contract
@@ -278,6 +313,10 @@ export function LandlordDashboard() {
   const periodMid = current?.payment ? parseDate(current.payment.period) : null
   const sd = (contract as any)?.start_date ? parseDate((contract as any).start_date) : null
   const firstMonthPending = !!(contract && current?.payment && sd && periodMid && !current.payment.confirmed_by_landlord && periodMid.getFullYear() === sd.getFullYear() && periodMid.getMonth() === sd.getMonth())
+  const firstMonthCurrent = !!(contract && current?.payment && sd && periodMid && periodMid.getFullYear() === sd.getFullYear() && periodMid.getMonth() === sd.getMonth())
+  const openPay = current?.payment && !current.payment.confirmed_by_landlord ? current.payment : null
+  const lastConfirmedIsFirst = !!(contract && sd && current?.payment && current.payment.confirmed_by_landlord && periodMid && periodMid.getFullYear() === sd.getFullYear() && periodMid.getMonth() === sd.getMonth())
+  const showUtilities = !!(contract && current?.paymentId && current.readingsMode !== 'self' && (openPay ? !firstMonthCurrent : lastConfirmedIsFirst))
   const tenantChoseCash = contract && (contract.payment_method === 'cash' || (contract.payment_method === 'both' && (contract as any).tenant_pay_method === 'cash'))
   const objHistory = history.filter(h => h.objId === current?.id).slice(0, 10)
 
@@ -316,6 +355,21 @@ export function LandlordDashboard() {
                   {i !== selIdx && <div style={T.link}>Выбрать объект</div>}
                 </div>
               ))}
+            </>
+          )}
+
+          {tab === 'meters' && current && (
+            <>
+              <div style={T.card}>
+                <div style={T.h2}>Счётчики объекта</div>
+                <MetersEditor objId={current.id} />
+              </div>
+              {current.readingsMode === 'manual' && contract && (
+                <div style={T.card}>
+                  <div style={T.h2}>Показания за текущий месяц</div>
+                  <ReadingsReview contractId={contract.id} tenantId={contract.tenant_id} />
+                </div>
+              )}
             </>
           )}
 
@@ -363,7 +417,7 @@ export function LandlordDashboard() {
                 </div>
               )}
 
-                {contract && current.paymentId && !current.payment?.confirmed_by_landlord && current.readingsMode !== 'self' && !firstMonthPending && (
+              {showUtilities && (
                 <div style={T.card}>
                   <div style={T.h2}>Ресурсы по квитанции</div>
                   {current.needUtilitiesReminder && (
@@ -379,13 +433,13 @@ export function LandlordDashboard() {
                       inputMode="numeric"
                     />
                     <button
-                      onClick={() => saveUtilities(current.paymentId!, utilInputs[current.id] ?? String(current.utilitiesAmount || 0))}
+                      onClick={() => saveUtilitiesNext(utilInputs[current.id] ?? String(current.utilitiesAmount || 0))}
                       style={T.btnSmall}
                     >
                       Включить в платёж
                     </button>
                   </div>
-                  <div style={T.tiny}>Сумма добавляется к платежу отдельно, не растёт при просрочке и не входит в штрафы</div>
+                  <div style={T.tiny}>Сумма добавляется к платежу отдельно, не растёт при просрочке и не входит в штрафы. Появляется после подтверждения первого месяца; если следующего счёта ещё нет — он создаётся вместе с ресурсами.</div>
                 </div>
               )}
 
@@ -420,13 +474,7 @@ export function LandlordDashboard() {
                 </div>
               )}
 
-              {contract && tenantChoseCash && firstMonthPending && (
-                <div style={T.card}>
-                  <div style={T.h2}>Оплата наличными</div>
-                  <div style={T.small}>💵 Наличные передаются при подписании договора</div>
-                </div>
-              )}
-              {contract && tenantChoseCash && !firstMonthPending && (
+              {contract && tenantChoseCash && (
                 <div style={T.card}>
                   <div style={T.h2}>Оплата наличными — договорённость о времени</div>
                   <CashNegotiation
@@ -458,21 +506,6 @@ export function LandlordDashboard() {
                   })
                 )}
               </div>
-            </>
-          )}
-
-          {tab === 'meters' && current && (
-            <>
-              <div style={T.card}>
-                <div style={T.h2}>Счётчики объекта</div>
-                <MetersEditor objId={current.id} />
-              </div>
-              {current.readingsMode === 'manual' && contract && (
-                <div style={T.card}>
-                  <div style={T.h2}>Показания за текущий месяц</div>
-                  <ReadingsReview contractId={contract.id} tenantId={contract.tenant_id} />
-                </div>
-              )}
             </>
           )}
 
@@ -529,7 +562,37 @@ export function LandlordDashboard() {
         </>
       )}
 
-      <ObjectManager />
+      <div style={T.card}>
+        <div style={T.h2}>Статистика</div>
+        <div style={L.filtersRow}>
+          <select value={statsObject} onChange={(e) => setStatsObject(e.target.value)} style={{ ...T.select, flex: 1 }}>
+            <option value="all">Все объекты</option>
+            {objects.map(o => <option key={o.id} value={o.id}>{o.address}</option>)}
+          </select>
+          <select value={statsPeriod} onChange={(e) => setStatsPeriod(e.target.value as '6m' | '12m')} style={T.select}>
+            <option value="6m">Последние 6 мес</option>
+            <option value="12m">Год</option>
+          </select>
+        </div>
+        <div style={L.statsGrid}>
+          <div style={L.statTile}>
+            <div style={L.statLabel}>Собрано</div>
+            <div style={L.statValue}>{collected.toFixed(0)} ₽</div>
+          </div>
+          <div style={L.statTile}>
+            <div style={L.statLabel}>Штрафов начислено</div>
+            <div style={{ ...L.statValue, color: C.red }}>{penaltiesAccrued.toFixed(0)} ₽</div>
+          </div>
+          <div style={L.statTile}>
+            <div style={L.statLabel}>Оплата вовремя</div>
+            <div style={L.statValue}>{onTimePct}%</div>
+          </div>
+          <div style={L.statTile}>
+            <div style={L.statLabel}>Сейчас просрочено</div>
+            <div style={{ ...L.statValue, color: overdueNow > 0 ? C.red : C.green }}>{overdueNow} объект(а)</div>
+          </div>
+        </div>
+      </div>
 
       <div style={T.card}>
         <div style={T.h2}>Уведомления</div>
@@ -550,8 +613,8 @@ export function LandlordDashboard() {
 function TabBar({ tab, setTab }: { tab: string; setTab: (t: string) => void }) {
   const tabs = [
     { id: 'overview', l: 'Обзор' },
-    { id: 'pay', l: 'Оплата' },
     { id: 'meters', l: 'Счётчики' },
+    { id: 'pay', l: 'Оплата' },
     { id: 'contract', l: 'Договор' },
     { id: 'chat', l: 'Чат' },
   ]
@@ -571,6 +634,14 @@ function TabBar({ tab, setTab }: { tab: string; setTab: (t: string) => void }) {
       ))}
     </div>
   )
+}
+
+const L: Record<string, React.CSSProperties> = {
+  filtersRow: { display: 'flex', gap: 8, marginBottom: 12 },
+  statsGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 },
+  statTile: { backgroundColor: '#fafafc', borderRadius: 12, padding: 12 },
+  statLabel: { fontSize: 12, color: C.text2, marginBottom: 4 },
+  statValue: { fontSize: 17, fontWeight: 700 },
 }
 
 export default LandlordDashboard
