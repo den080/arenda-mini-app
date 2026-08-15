@@ -6,6 +6,7 @@ import MetersEditor from '../components/MetersEditor'
 import ReadingsReview from '../components/ReadingsReview'
 import Chat from '../components/Chat'
 import { ensureNextPayment } from '../lib/nextPayment'
+import { BottomNav, Modal, PromptNumber, Progress, showToast } from '../components/ui'
 import { T, C } from '../theme'
 import type { Object as PropertyObject, Contract, NotificationLog, User } from '../types/database'
 
@@ -35,6 +36,14 @@ function parseDate(d: any): Date {
   return new Date(y, (m || 1) - 1, dd || 1)
 }
 
+const TABS = [
+  { id: 'overview', l: 'Обзор' },
+  { id: 'meters', l: 'Счётчики' },
+  { id: 'pay', l: 'Оплата' },
+  { id: 'contract', l: 'Договор' },
+  { id: 'chat', l: 'Чат' },
+]
+
 export function LandlordDashboard() {
   const { user, loading: userLoading } = useTelegramUser()
   const [objects, setObjects] = useState<ObjectWithStatus[]>([])
@@ -47,6 +56,10 @@ export function LandlordDashboard() {
   const [statsObject, setStatsObject] = useState<string>('all')
   const [sel, setSel] = useState(0)
   const [tab, setTab] = useState('overview')
+  const [depModal, setDepModal] = useState<'add' | 'edit' | null>(null)
+  const [fz, setFz] = useState<{ id: string; zero: boolean } | null>(null)
+  const [fzAmount, setFzAmount] = useState('')
+  const [fzNote, setFzNote] = useState('')
 
   useEffect(() => {
     if (!user) return
@@ -133,7 +146,7 @@ export function LandlordDashboard() {
 
   async function saveUtilities(paymentId: string, value: string) {
     const { error } = await supabase.from('payments').update({ utilities_amount: Number(value) || 0 }).eq('id', paymentId)
-    if (error) alert('Ошибка: ' + error.message); else window.dispatchEvent(new Event('rentflow-refresh'))
+    if (error) showToast('Ошибка: ' + error.message); else { showToast('✅ Ресурсы добавлены к платежу'); window.dispatchEvent(new Event('rentflow-refresh')) }
   }
 
   function toISO(d: Date): string {
@@ -155,13 +168,15 @@ export function LandlordDashboard() {
       contract_id: contract!.id, period: toISO(nextPeriod), due_date: toISO(due),
       base_amount: Number(contract!.rent_amount) || 0, penalty_amount: 0, utilities_amount: Number(value) || 0,
     })
-    if (error) { alert('Ошибка: ' + error.message); return }
+    if (error) { showToast('Ошибка: ' + error.message); return }
+    showToast('✅ Счёт создан вместе с ресурсами')
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
 
   async function confirmSigning(paymentId: string) {
     const { error } = await supabase.from('payments').update({ confirmed_by_landlord: true, confirmed_at: new Date().toISOString() }).eq('id', paymentId)
-    if (error) { alert('Ошибка: ' + error.message); return }
+    if (error) { showToast('Ошибка: ' + error.message); return }
+    showToast('✅ Первый месяц подтверждён')
     const { data: pay } = await supabase.from('payments').select('*').eq('id', paymentId).maybeSingle()
     if (pay) {
       await ensureNextPayment(pay.contract_id)
@@ -171,42 +186,63 @@ export function LandlordDashboard() {
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
 
-  async function addDepositPayment(contractId: string) {
-    const { data: con } = await supabase.from('contracts').select('deposit_amount, deposit_paid').eq('id', contractId).maybeSingle()
-    if (!con) return
-    const total = Number(con.deposit_amount || 0); const paid = Number(con.deposit_paid || 0)
-    if (total <= 0) { alert('Сначала укажите общую сумму депозита в редактировании объекта'); return }
-    const val = window.prompt(`Внесите платёж по депозиту (внесено ${paid.toFixed(0)} из ${total.toFixed(0)}), ₽:`)
-    if (val === null) return
-    const amount = Number(val)
-    if (isNaN(amount) || amount <= 0) { alert('Некорректная сумма'); return }
-    const { error } = await supabase.from('contracts').update({ deposit_paid: Math.min(total, paid + amount) }).eq('id', contractId)
-    if (error) { alert('Ошибка: ' + error.message); return }
+  async function doAddDeposit(amount: number) {
+    if (!contract) return
+    const total = deposit; const paid = depositPaid
+    if (total <= 0) { showToast('Сначала укажите общую сумму депозита'); return }
+    if (isNaN(amount) || amount <= 0) { showToast('Некорректная сумма'); return }
+    const { error } = await supabase.from('contracts').update({ deposit_paid: Math.min(total, paid + amount) }).eq('id', contract.id)
+    if (error) { showToast('Ошибка: ' + error.message); return }
+    showToast('✅ Платёж по депозиту внесён')
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
 
-  async function editDepositPaid(contractId: string) {
-    const { data: con } = await supabase.from('contracts').select('deposit_amount, deposit_paid').eq('id', contractId).maybeSingle()
-    if (!con) return
-    const val = window.prompt(`Новое значение «внесено» (общая сумма ${Number(con.deposit_amount || 0).toFixed(0)}), ₽:`, String(con.deposit_paid || 0))
-    if (val === null) return
-    const v = Number(val)
-    if (isNaN(v) || v < 0) { alert('Некорректное значение'); return }
-    const { error } = await supabase.from('contracts').update({ deposit_paid: Math.min(Number(con.deposit_amount || 0), v) }).eq('id', contractId)
-    if (error) { alert('Ошибка: ' + error.message); return }
+  async function doEditDeposit(v: number) {
+    if (!contract) return
+    if (isNaN(v) || v < 0) { showToast('Некорректное значение'); return }
+    const { error } = await supabase.from('contracts').update({ deposit_paid: Math.min(deposit, v) }).eq('id', contract.id)
+    if (error) { showToast('Ошибка: ' + error.message); return }
+    showToast('✅ Депозит обновлён')
+    window.dispatchEvent(new Event('rentflow-refresh'))
+  }
+
+  function openAdjust(id: string, zero: boolean) {
+    const row = (current?.frozenRows || []).find((f: any) => f.id === id)
+    setFzAmount(row ? String(row.amount) : '')
+    setFzNote('')
+    setFz({ id, zero })
+  }
+
+  async function confirmAdjust() {
+    if (!fz || !contract) return
+    const zero = fz.zero
+    const note = fzNote.trim()
+    if (zero && !note) { showToast('Обнуление требует причину'); return }
+    let newAmount = zero ? 0 : Number(fzAmount)
+    if (!zero && (isNaN(newAmount) || newAmount < 0)) { showToast('Некорректная сумма'); return }
+    if (!zero && !note) { showToast('Изменение требует примечание'); return }
+    const { error } = await supabase.from('frozen_penalties').update({
+      amount: newAmount, adjusted_at: new Date().toISOString(),
+      adjusted_note: zero ? `обнулено: ${note}` : `изменено на ${newAmount.toFixed(0)}: ${note}`,
+    }).eq('id', fz.id)
+    if (error) { showToast('Ошибка: ' + error.message); return }
+    await supabase.from('notifications_log').insert({ user_id: contract.tenant_id, type: 'deferred_confirmed', related_id: contract.id, message: zero ? '🧊 Замороженный штраф обнулён' : `🧊 Замороженный штраф изменён: теперь ${newAmount.toFixed(0)} ₽`, sent_at: new Date().toISOString() })
+    showToast('✅ Сохранено')
+    setFz(null)
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
 
   async function confirmDeferral(requestId: string, contractId: string, paymentId: string, amount: number, tenantId: string) {
     const { data: pay } = await supabase.from('payments').select('*').eq('id', paymentId).maybeSingle()
     const { error: e1 } = await supabase.from('frozen_penalties').insert({ contract_id: contractId, payment_id: paymentId, period: pay ? pay.period : null, amount, original_amount: amount, note: 'отсрочка штрафа подтверждена' })
-    if (e1) { alert('Ошибка: ' + e1.message); return }
+    if (e1) { showToast('Ошибка: ' + e1.message); return }
     await supabase.from('deferred_requests').update({ status: 'confirmed' }).eq('id', requestId)
     if (paymentId) {
       const newPenalty = Math.max(0, Number(pay?.penalty_amount || 0) - amount)
       await supabase.from('payments').update({ penalty_amount: newPenalty }).eq('id', paymentId)
     }
     await supabase.from('notifications_log').insert({ user_id: tenantId, type: 'deferred_confirmed', related_id: contractId, message: `🧊 Штраф ${Number(amount).toFixed(0)} ₽ заморожен и будет учтён в конце договора`, sent_at: new Date().toISOString() })
+    showToast('✅ Отсрочка подтверждена')
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
 
@@ -214,28 +250,13 @@ export function LandlordDashboard() {
     const { data: pay } = await supabase.from('payments').select('*').eq('id', paymentId).maybeSingle()
     if (!pay) return
     const pen = Number(pay.penalty_amount || 0)
-    if (pen <= 0) { alert('Нет штрафа для заморозки'); return }
+    if (pen <= 0) { showToast('Нет штрафа для заморозки'); return }
     const { error } = await supabase.from('frozen_penalties').insert({ contract_id: pay.contract_id, payment_id: pay.id, period: pay.period, amount: pen, original_amount: pen, note: 'штраф заморожен вручную' })
-    if (error) { alert('Ошибка: ' + error.message); return }
+    if (error) { showToast('Ошибка: ' + error.message); return }
     await supabase.from('payments').update({ penalty_amount: 0 }).eq('id', paymentId)
     const { data: con } = await supabase.from('contracts').select('*').eq('id', pay.contract_id).maybeSingle()
     if (con) await supabase.from('notifications_log').insert({ user_id: con.tenant_id, type: 'deferred_confirmed', related_id: pay.id, message: `🧊 Штраф ${pen.toFixed(0)} ₽ заморожен и будет учтён в конце договора`, sent_at: new Date().toISOString() })
-    window.dispatchEvent(new Event('rentflow-refresh'))
-  }
-
-  async function adjustFrozen(id: string, contractId: string, tenantId: string, zero: boolean) {
-    const { data: row } = await supabase.from('frozen_penalties').select('*').eq('id', id).maybeSingle()
-    if (!row) return
-    const first = window.prompt(zero ? 'Причина обнуления (обязательно):' : `Новая сумма (сейчас ${Number(row.amount).toFixed(0)} ₽):`)
-    if (first === null) return
-    if (zero && !first.trim()) { alert('Обнуление требует причину'); return }
-    let newAmount = zero ? 0 : Number(first)
-    if (!zero && (isNaN(newAmount) || newAmount < 0)) { alert('Некорректная сумма'); return }
-    let note = ''
-    if (!zero) { const n = window.prompt('Примечание к изменению (обязательно):'); if (n === null) return; note = n.trim(); if (!note) { alert('Изменение требует примечание'); return } } else { note = first.trim() }
-    const { error } = await supabase.from('frozen_penalties').update({ amount: newAmount, adjusted_at: new Date().toISOString(), adjusted_note: zero ? `обнулено: ${note}` : `изменено с ${Number(row.amount).toFixed(0)} на ${newAmount.toFixed(0)}: ${note}` }).eq('id', id)
-    if (error) { alert('Ошибка: ' + error.message); return }
-    await supabase.from('notifications_log').insert({ user_id: tenantId, type: 'deferred_confirmed', related_id: contractId, message: zero ? '🧊 Замороженный штраф обнулён' : `🧊 Замороженный штраф изменён: теперь ${newAmount.toFixed(0)} ₽`, sent_at: new Date().toISOString() })
+    showToast('✅ Штраф заморожен')
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
 
@@ -244,13 +265,14 @@ export function LandlordDashboard() {
     if (method === 'cash') updateData.cash_slots = []
     const { error } = await supabase.from('contracts').update(updateData).eq('id', contractId)
     if (!error) {
+      showToast('✅ Способ оплаты обновлён')
       setObjects(prev => prev.map(o => o.contract?.id === contractId ? { ...o, contract: { ...o.contract!, payment_method: method, cash_slots: method === 'cash' ? [] : o.contract!.cash_slots } } : o))
-    } else alert('Ошибка: ' + error.message)
+    } else showToast('Ошибка: ' + error.message)
   }
 
   async function confirmChannel(paymentId: string, channel: 'card' | 'cash', close: boolean = false) {
     const { data: pay } = await supabase.from('payments').select('*').eq('id', paymentId).maybeSingle()
-    if (!pay) { alert('Платёж не найден'); return }
+    if (!pay) { showToast('Платёж не найден'); return }
     const { data: cashMeeting } = await supabase.from('cash_meetings').select('*').eq('contract_id', pay.contract_id).eq('kind', 'meeting').eq('status', 'confirmed').order('created_at', { ascending: false }).limit(1).maybeSingle()
     const cardEngaged = !!pay.card_claimed
     const update: any = {}
@@ -263,7 +285,8 @@ export function LandlordDashboard() {
     const cashSatisfied = !(!!cashMeeting && !afterCashClosed) || cashFinalClosed
     if (cardSatisfied && cashSatisfied) { update.confirmed_by_landlord = true; update.confirmed_at = new Date().toISOString() }
     const { error: e1 } = await supabase.from('payments').update(update).eq('id', paymentId)
-    if (e1) { alert('Ошибка: ' + e1.message); return }
+    if (e1) { showToast('Ошибка: ' + e1.message); return }
+    showToast('✅ Подтверждено')
     if (update.confirmed_by_landlord) await ensureNextPayment(pay.contract_id)
     const { data: con } = await supabase.from('contracts').select('*').eq('id', pay.contract_id).maybeSingle()
     if (con) {
@@ -320,11 +343,14 @@ export function LandlordDashboard() {
   const tenantChoseCash = contract && (contract.payment_method === 'cash' || (contract.payment_method === 'both' && (contract as any).tenant_pay_method === 'cash'))
   const objHistory = history.filter(h => h.objId === current?.id).slice(0, 10)
 
+  const payBadge = !!((current?.payment && !current.payment.confirmed_by_landlord) || firstMonthPending)
+  const metersBadge = !!current?.waitingForReadings
+
   if (userLoading || loading) return <div style={T.page}>Загрузка…</div>
   if (error) return <div style={T.page}><div style={T.card}>{error}</div></div>
 
   return (
-    <div style={T.page}>
+    <div style={{ ...T.page, paddingBottom: 90 }}>
       <h1 style={T.h1}>Мои объекты</h1>
       {objects.length === 0 ? (
         <div style={T.card}>Объектов нет. Добавьте первый объект в блоке «Управление объектами» ниже.</div>
@@ -337,7 +363,6 @@ export function LandlordDashboard() {
               ))}
             </div>
           )}
-          <TabBar tab={tab} setTab={setTab} />
 
           {tab === 'overview' && (
             <>
@@ -415,11 +440,11 @@ export function LandlordDashboard() {
                   )}
                   {deposit > 0 && (
                     <div style={T.item}>
-                      <div style={{ fontSize: 14, marginBottom: 8 }}>Внесено {depositPaid.toFixed(0)} из {deposit.toFixed(0)} ₽ · остаток {Math.max(0, deposit - depositPaid).toFixed(0)} ₽</div>
-                      <span style={{ display: 'flex', gap: 8 }}>
-                        <button style={T.btnSmall} onClick={() => addDepositPayment(contract.id)}>+ внести</button>
-                        <button style={T.btnDanger} onClick={() => editDepositPaid(contract.id)}>изменить</button>
-                      </span>
+                      <Progress value={depositPaid} max={deposit} />
+                      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                        <button style={T.btnSmall} onClick={() => setDepModal('add')}>+ внести</button>
+                        <button style={T.btnSecondary} onClick={() => setDepModal('edit')}>изменить</button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -552,7 +577,12 @@ export function LandlordDashboard() {
                 )}
                 <div style={T.row}><span style={{ color: C.text2 }}>Аренда</span><b>{Number(contract.rent_amount).toFixed(0)} ₽/мес</b></div>
                 <div style={T.row}><span style={{ color: C.text2 }}>Оплата</span><b>до {contract.payment_day} числа</b></div>
-                {deposit > 0 && <div style={T.row}><span style={{ color: C.text2 }}>Депозит</span><b>внесено {depositPaid.toFixed(0)} из {deposit.toFixed(0)} ₽</b></div>}
+                {deposit > 0 && (
+                  <div style={{ marginTop: 8 }}>
+                    <div style={T.row}><span style={{ color: C.text2 }}>Депозит</span><b>{deposit.toFixed(0)} ₽</b></div>
+                    <Progress value={depositPaid} max={deposit} />
+                  </div>
+                )}
               </div>
 
               <div style={T.card}>
@@ -568,8 +598,8 @@ export function LandlordDashboard() {
                       {f.adjusted_note && <div style={T.tiny}>{f.adjusted_note}</div>}
                     </div>
                     <span style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-                      <button style={T.btnSecondary} onClick={() => adjustFrozen(f.id, contract.id, contract.tenant_id, false)}>изменить</button>
-                      <button style={T.btnDanger} onClick={() => adjustFrozen(f.id, contract.id, contract.tenant_id, true)}>обнулить</button>
+                      <button style={T.btnSecondary} onClick={() => openAdjust(f.id, false)}>изменить</button>
+                      <button style={T.btnDanger} onClick={() => openAdjust(f.id, true)}>обнулить</button>
                     </span>
                   </div>
                 ))}
@@ -606,32 +636,39 @@ export function LandlordDashboard() {
           ))
         )}
       </div>
-    </div>
-  )
-}
 
-function TabBar({ tab, setTab }: { tab: string; setTab: (t: string) => void }) {
-  const tabs = [
-    { id: 'overview', l: 'Обзор' },
-    { id: 'meters', l: 'Счётчики' },
-    { id: 'pay', l: 'Оплата' },
-    { id: 'contract', l: 'Договор' },
-    { id: 'chat', l: 'Чат' },
-  ]
-  return (
-    <div style={{ display: 'flex', background: C.gray, borderRadius: 12, padding: 4, marginBottom: 12 }}>
-      {tabs.map(t => (
-        <button
-          key={t.id}
-          onClick={() => setTab(t.id)}
-          style={{
-            flex: 1, padding: '9px 4px', borderRadius: 9, border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer',
-            background: tab === t.id ? '#fff' : 'transparent',
-            color: tab === t.id ? C.text : C.text2,
-            boxShadow: tab === t.id ? '0 1px 3px rgba(0,0,0,0.12)' : 'none',
-          }}
-        >{t.l}</button>
-      ))}
+      <BottomNav tabs={TABS} tab={tab} setTab={setTab} badges={{ pay: payBadge, meters: metersBadge }} />
+
+      <PromptNumber
+        open={depModal === 'add'}
+        title="Взнос по депозиту"
+        label={`Внесено ${depositPaid.toFixed(0)} из ${deposit.toFixed(0)} ₽. Сумма взноса:`}
+        onClose={() => setDepModal(null)}
+        onSubmit={(n) => doAddDeposit(n)}
+      />
+      <PromptNumber
+        open={depModal === 'edit'}
+        title="Изменить «внесено»"
+        label={`Общая сумма депозита ${deposit.toFixed(0)} ₽. Новое значение «внесено»:`}
+        initial={String(depositPaid || 0)}
+        onClose={() => setDepModal(null)}
+        onSubmit={(n) => doEditDeposit(n)}
+      />
+
+      <Modal open={!!fz} title={fz?.zero ? 'Обнулить замороженный штраф' : 'Изменить замороженный штраф'} onClose={() => setFz(null)}>
+        {!fz?.zero && (
+          <>
+            <div style={{ fontSize: 14, marginBottom: 8 }}>Новая сумма, ₽</div>
+            <input value={fzAmount} onChange={(e) => setFzAmount(e.target.value)} inputMode="decimal" style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box', marginBottom: 12 }} />
+          </>
+        )}
+        <div style={{ fontSize: 14, marginBottom: 8 }}>{fz?.zero ? 'Причина обнуления (обязательно)' : 'Примечание к изменению (обязательно)'}</div>
+        <input value={fzNote} onChange={(e) => setFzNote(e.target.value)} placeholder="например: договорились с арендатором" style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box', marginBottom: 14 }} />
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }} onClick={confirmAdjust}>Сохранить</button>
+          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 15, cursor: 'pointer' }} onClick={() => setFz(null)}>Отмена</button>
+        </div>
+      </Modal>
     </div>
   )
 }
