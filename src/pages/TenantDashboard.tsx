@@ -28,8 +28,8 @@ function formatPhoneDisplay(v: string): string {
 
 const TABS = [
   { id: 'overview', l: 'Обзор' },
-  { id: 'meters', l: 'Счётчики' },
   { id: 'pay', l: 'Оплата' },
+  { id: 'meters', l: 'Счётчики' },
   { id: 'contract', l: 'Договор' },
   { id: 'chat', l: 'Чат' },
 ]
@@ -350,7 +350,7 @@ function TenantRental({ contract, tab }: { contract: any; tab: string }) {
           <div style={T.card}>
             <div style={T.h2}>Счёт за {monthLabel}</div>
             <div style={T.row}><span style={{ color: C.text2 }}>Аренда</span><b>{Number(payment?.base_amount ?? contract.rent_amount).toFixed(2)} ₽</b></div>
-            <div style={T.row}><span style={{ color: C.text2 }}>Штраф</span><b>{Number(payment.penalty_amount || 0).toFixed(2)} ₽</b></div>
+            <div style={T.row}><span style={{ color: C.text2 }}>Штраф</span><b>{Number(payment?.penalty_amount || 0).toFixed(2)} ₽</b></div>
             {utilities > 0 && (
               <div style={T.row}><span style={{ color: C.text2 }}>Ресурсы по квитанции</span><b>{utilities.toFixed(2)} ₽</b></div>
             )}
@@ -398,7 +398,10 @@ function TenantRental({ contract, tab }: { contract: any; tab: string }) {
                 )}
               </div>
             )}
-            {effectiveMethod === 'cash' && (
+            {effectiveMethod === 'cash' && firstMonth && (
+              <div style={T.note}>💵 Наличные передаются при подписании договора</div>
+            )}
+            {effectiveMethod === 'cash' && !firstMonth && (
               <div style={T.sub}>
                 <div style={T.h3}>Оплата наличными</div>
                 <CashNegotiation
