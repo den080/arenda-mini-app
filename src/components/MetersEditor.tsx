@@ -47,6 +47,11 @@ export function MetersEditor({ objId }: { objId: string }) {
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
 
+  async function setInitial(id: string, value: string) {
+    await supabase.from('object_meters').update({ initial_value: value === '' ? null : Number(value) }).eq('id', id)
+    window.dispatchEvent(new Event('rentflow-refresh'))
+  }
+
   async function setWaterType(id: string, code: string) {
     const mt = typeByCode(code)
     if (!mt) return
@@ -77,6 +82,8 @@ export function MetersEditor({ objId }: { objId: string }) {
   }
 
   async function removeMeter(id: string) {
+    const answer = window.prompt('Введите слово "удалить" для подтверждения удаления счётчика')
+    if (!answer || answer.trim().toLowerCase() !== 'удалить') { alert('Удаление отменено'); return }
     await supabase.from('object_meters').update({ is_active: false }).eq('id', id)
     window.dispatchEvent(new Event('rentflow-refresh'))
     load()
@@ -102,6 +109,17 @@ export function MetersEditor({ objId }: { objId: string }) {
 
   const elecMode = getElecMode()
 
+  const startInput = (r: any) => (
+    <input
+      defaultValue={r.initial_value ?? ''}
+      placeholder="старт"
+      title="Стартовое показание (видит арендатор)"
+      style={{ ...T.select, width: 70 }}
+      inputMode="decimal"
+      onBlur={(e) => setInitial(r.id, e.target.value)}
+    />
+  )
+
   return (
     <div>
       <div style={T.tiny}>⚡ Электричество</div>
@@ -123,16 +141,17 @@ export function MetersEditor({ objId }: { objId: string }) {
       {waterRows.length === 0 && <div style={T.tiny}>счётчиков воды нет</div>}
       {waterRows.map(r => (
         <div key={r.id} style={{ ...T.item, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-          <select value={codeOf(r)} onChange={(e) => setWaterType(r.id, e.target.value)} style={{ ...T.select, width: '38%' }}>
+          <select value={codeOf(r)} onChange={(e) => setWaterType(r.id, e.target.value)} style={{ ...T.select, width: '34%' }}>
             <option value="water_cold">Холодная</option>
             <option value="water_hot">Горячая</option>
           </select>
           <input
             defaultValue={r.label || ''}
             placeholder="номер счётчика"
-            style={{ ...T.select, flex: 1, minWidth: 120 }}
+            style={{ ...T.select, flex: 1, minWidth: 110 }}
             onBlur={(e) => setSerial(r.id, e.target.value)}
           />
+          {startInput(r)}
           <button style={T.btnDanger} onClick={() => removeMeter(r.id)}>✕</button>
         </div>
       ))}
@@ -148,6 +167,7 @@ export function MetersEditor({ objId }: { objId: string }) {
       {activeRows('heat').map(r => (
         <div key={r.id} style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
           <input defaultValue={r.label || ''} placeholder="номер теплосчётчика" style={{ ...T.select, flex: 1 }} onBlur={(e) => setSerial(r.id, e.target.value)} />
+          {startInput(r)}
         </div>
       ))}
       {typeByCode('gas') && (
@@ -161,8 +181,10 @@ export function MetersEditor({ objId }: { objId: string }) {
       {activeRows('gas').map(r => (
         <div key={r.id} style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
           <input defaultValue={r.label || ''} placeholder="номер счётчика газа" style={{ ...T.select, flex: 1 }} onBlur={(e) => setSerial(r.id, e.target.value)} />
+          {startInput(r)}
         </div>
       ))}
+      <div style={T.tiny}>Стартовые показания («старт») видит арендатор в своей вкладке «Счётчики».</div>
     </div>
   )
 }
