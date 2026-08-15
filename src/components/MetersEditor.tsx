@@ -3,6 +3,9 @@ import { supabase } from '../lib/supabase'
 import { T } from '../theme'
 import { ConfirmDelete, showToast } from './ui'
 
+const line = { display: 'flex', gap: 6, alignItems: 'center' } as const
+const inp = { ...T.select, flex: 1, minWidth: 0 }
+
 export function MetersEditor({ objId }: { objId: string }) {
   const [types, setTypes] = useState<any[]>([])
   const [rows, setRows] = useState<any[]>([])
@@ -126,15 +129,17 @@ export function MetersEditor({ objId }: { objId: string }) {
 
   const elecMode = getElecMode()
 
-  const startInput = (r: any) => (
-    <input
-      defaultValue={r.initial_value ?? ''}
-      placeholder="стартовые показания"
-      title="Стартовые показания (видит арендатор)"
-      style={{ ...T.select, width: 120 }}
-      inputMode="decimal"
-      onBlur={(e) => setInitial(r.id, e.target.value)}
-    />
+  const meterCard = (r: any, head: any) => (
+    <div key={r.id} style={T.item}>
+      <div style={{ marginBottom: 6 }}>{head}</div>
+      <div style={line}>
+        <input defaultValue={r.label || ''} placeholder="номер счётчика" style={inp} onBlur={(e) => setSerial(r.id, e.target.value)} />
+        <button style={T.btnDanger} onClick={() => setDel(r.id)}>✕</button>
+      </div>
+      <div style={{ ...line, marginTop: 6 }}>
+        <input defaultValue={r.initial_value ?? ''} placeholder="стартовые показания" style={inp} inputMode="decimal" onBlur={(e) => setInitial(r.id, e.target.value)} />
+      </div>
+    </div>
   )
 
   return (
@@ -153,37 +158,16 @@ export function MetersEditor({ objId }: { objId: string }) {
           </label>
         </div>
       ))}
-      {activeElecRows.length > 0 && (
-        <div style={{ marginBottom: 8 }}>
-          {activeElecRows.map(r => (
-            <div key={r.id} style={{ ...T.item, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 13, flex: 1, minWidth: 100, textAlign: 'center' }}>{typeByCode(codeOf(r))?.label || 'Электро'}</span>
-              <input defaultValue={r.label || ''} placeholder="номер счётчика" style={{ ...T.select, flex: 1, minWidth: 110 }} onBlur={(e) => setSerial(r.id, e.target.value)} />
-              {startInput(r)}
-              <button style={T.btnDanger} onClick={() => setDel(r.id)}>✕</button>
-            </div>
-          ))}
-        </div>
-      )}
+      {activeElecRows.map(r => meterCard(r, <span style={{ fontSize: 13 }}>{typeByCode(codeOf(r))?.label || 'Электро'}</span>))}
 
-      <div style={T.tiny}>Вода</div>
+      <div style={{ ...T.tiny, marginTop: 10 }}>Вода</div>
       {waterRows.length === 0 && <div style={T.tiny}>счётчиков воды нет</div>}
-      {waterRows.map(r => (
-        <div key={r.id} style={{ ...T.item, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-          <select value={codeOf(r)} onChange={(e) => setWaterType(r.id, e.target.value)} style={{ ...T.select, width: '34%' }}>
-            <option value="water_cold">Холодная</option>
-            <option value="water_hot">Горячая</option>
-          </select>
-          <input
-            defaultValue={r.label || ''}
-            placeholder="номер счётчика"
-            style={{ ...T.select, flex: 1, minWidth: 110 }}
-            onBlur={(e) => setSerial(r.id, e.target.value)}
-          />
-          {startInput(r)}
-          <button style={T.btnDanger} onClick={() => setDel(r.id)}>✕</button>
-        </div>
-      ))}
+      {waterRows.map(r => meterCard(r, (
+        <select value={codeOf(r)} onChange={(e) => setWaterType(r.id, e.target.value)} style={{ ...T.select, width: '100%', boxSizing: 'border-box' }}>
+          <option value="water_cold">Холодная</option>
+          <option value="water_hot">Горячая</option>
+        </select>
+      )))}
       <button style={busy ? T.btnOff : T.btnSmall} disabled={busy} onClick={addWater}>+ Добавить счётчик воды</button>
 
       <div style={{ ...T.tiny, marginTop: 10 }}>Отопление</div>
@@ -195,13 +179,7 @@ export function MetersEditor({ objId }: { objId: string }) {
           </label>
         </div>
       )}
-      {activeRows('heat').map(r => (
-        <div key={r.id} style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-          <input defaultValue={r.label || ''} placeholder="номер теплосчётчика" style={{ ...T.select, flex: 1 }} onBlur={(e) => setSerial(r.id, e.target.value)} />
-          {startInput(r)}
-          <button style={T.btnDanger} onClick={() => setDel(r.id)}>✕</button>
-        </div>
-      ))}
+      {activeRows('heat').map(r => meterCard(r, <span style={{ fontSize: 13 }}>Теплосчётчик</span>))}
       {typeByCode('gas') && !isAct('gas') && (
         <div style={{ marginBottom: 6 }}>
           <label style={{ fontSize: 14, cursor: 'pointer' }}>
@@ -210,13 +188,8 @@ export function MetersEditor({ objId }: { objId: string }) {
           </label>
         </div>
       )}
-      {activeRows('gas').map(r => (
-        <div key={r.id} style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-          <input defaultValue={r.label || ''} placeholder="номер счётчика газа" style={{ ...T.select, flex: 1 }} onBlur={(e) => setSerial(r.id, e.target.value)} />
-          {startInput(r)}
-          <button style={T.btnDanger} onClick={() => setDel(r.id)}>✕</button>
-        </div>
-      ))}
+      {activeRows('gas').map(r => meterCard(r, <span style={{ fontSize: 13 }}>Счётчик газа</span>))}
+
       <div style={T.tiny}>Стартовые показания видит арендатор в своей вкладке «Счётчики». Отключение счётчика — только с подтверждением.</div>
 
       <ConfirmDelete
