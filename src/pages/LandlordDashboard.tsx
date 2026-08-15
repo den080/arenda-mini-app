@@ -355,6 +355,38 @@ export function LandlordDashboard() {
                   {i !== selIdx && <div style={T.link}>Выбрать объект</div>}
                 </div>
               ))}
+
+              <div style={T.card}>
+                <div style={T.h2}>Статистика</div>
+                <div style={L.filtersRow}>
+                  <select value={statsObject} onChange={(e) => setStatsObject(e.target.value)} style={{ ...T.select, flex: 1 }}>
+                    <option value="all">Все объекты</option>
+                    {objects.map(o => <option key={o.id} value={o.id}>{o.address}</option>)}
+                  </select>
+                  <select value={statsPeriod} onChange={(e) => setStatsPeriod(e.target.value as '6m' | '12m')} style={T.select}>
+                    <option value="6m">Последние 6 мес</option>
+                    <option value="12m">Год</option>
+                  </select>
+                </div>
+                <div style={L.statsGrid}>
+                  <div style={L.statTile}>
+                    <div style={L.statLabel}>Собрано</div>
+                    <div style={L.statValue}>{collected.toFixed(0)} ₽</div>
+                  </div>
+                  <div style={L.statTile}>
+                    <div style={L.statLabel}>Штрафов начислено</div>
+                    <div style={{ ...L.statValue, color: C.red }}>{penaltiesAccrued.toFixed(0)} ₽</div>
+                  </div>
+                  <div style={L.statTile}>
+                    <div style={L.statLabel}>Оплата вовремя</div>
+                    <div style={L.statValue}>{onTimePct}%</div>
+                  </div>
+                  <div style={L.statTile}>
+                    <div style={L.statLabel}>Сейчас просрочено</div>
+                    <div style={{ ...L.statValue, color: overdueNow > 0 ? C.red : C.green }}>{overdueNow} объект(а)</div>
+                  </div>
+                </div>
+              </div>
             </>
           )}
 
@@ -561,38 +593,6 @@ export function LandlordDashboard() {
           )}
         </>
       )}
-
-      <div style={T.card}>
-        <div style={T.h2}>Статистика</div>
-        <div style={L.filtersRow}>
-          <select value={statsObject} onChange={(e) => setStatsObject(e.target.value)} style={{ ...T.select, flex: 1 }}>
-            <option value="all">Все объекты</option>
-            {objects.map(o => <option key={o.id} value={o.id}>{o.address}</option>)}
-          </select>
-          <select value={statsPeriod} onChange={(e) => setStatsPeriod(e.target.value as '6m' | '12m')} style={T.select}>
-            <option value="6m">Последние 6 мес</option>
-            <option value="12m">Год</option>
-          </select>
-        </div>
-        <div style={L.statsGrid}>
-          <div style={L.statTile}>
-            <div style={L.statLabel}>Собрано</div>
-            <div style={L.statValue}>{collected.toFixed(0)} ₽</div>
-          </div>
-          <div style={L.statTile}>
-            <div style={L.statLabel}>Штрафов начислено</div>
-            <div style={{ ...L.statValue, color: C.red }}>{penaltiesAccrued.toFixed(0)} ₽</div>
-          </div>
-          <div style={L.statTile}>
-            <div style={L.statLabel}>Оплата вовремя</div>
-            <div style={L.statValue}>{onTimePct}%</div>
-          </div>
-          <div style={L.statTile}>
-            <div style={L.statLabel}>Сейчас просрочено</div>
-            <div style={{ ...L.statValue, color: overdueNow > 0 ? C.red : C.green }}>{overdueNow} объект(а)</div>
-          </div>
-        </div>
-      </div>
 
       <div style={T.card}>
         <div style={T.h2}>Уведомления</div>
