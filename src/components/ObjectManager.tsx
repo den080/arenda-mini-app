@@ -63,7 +63,7 @@ function DetailsEditor({ list, onChange }: { list: PayDetail[]; onChange: (v: Pa
           </div>
         </div>
       ))}
-      <button style={T.btnSmall} onClick={() => onChange([...list, { type: 'card', bank: BANKS[0], number: '' }])}>+ Добавить способ оплаты</button>
+      <button style={T.btnSmall} onClick={() => onChange([...list, { type: 'sbp', bank: BANKS[0], number: '' }])}>+ Добавить способ оплаты</button>
     </div>
   )
 }
@@ -97,9 +97,9 @@ export function ObjectManager() {
   const [meterDay, setMeterDay] = useState('15')
   const [readingsMode, setReadingsMode] = useState('manual')
   const [method, setMethod] = useState('both')
-  const [penPay, setPenPay] = useState('')
-  const [penRead, setPenRead] = useState('')
-  const [remind, setRemind] = useState('')
+  const [penPay, setPenPay] = useState('500')
+  const [penRead, setPenRead] = useState('100')
+  const [remind, setRemind] = useState('3')
   const [details, setDetails] = useState<PayDetail[]>([])
   const [addDetailsErr, setAddDetailsErr] = useState<string | null>(null)
 
