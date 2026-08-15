@@ -29,7 +29,7 @@ export async function ensureNextPayment(contractId: string) {
     base_amount: Number(con.rent_amount) || Number(last.base_amount) || 0,
     penalty_amount: 0,
     utilities_amount: 0,
-  }, { ignoreDuplicates: true })
+  })
   window.dispatchEvent(new Event('rentflow-refresh'))
 }
 
