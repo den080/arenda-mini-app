@@ -90,7 +90,7 @@ export function LandlordDashboard() {
             const { data: readingsData } = await supabase.from('meter_readings').select('*').eq('contract_id', contract.id).gte('submitted_at', new Date(currentYear, currentMonth, 1).toISOString()).lt('submitted_at', new Date(currentYear, currentMonth + 1, 1).toISOString())
             if (!readingsData || readingsData.length === 0) waitingForReadings = true
           }
-          const needUtilitiesReminder = !payment.confirmed_by_landlord && readingsMode !== 'self' && daysUntilDue >= 0 && daysUntilDue <= reminder && utilitiesAmount === 0
+          const needUtilitiesReminder = !payment.confirmed_by_landlord && !isFirstMonth && readingsMode !== 'self' && daysUntilDue >= 0 && daysUntilDue <= reminder && utilitiesAmount === 0
           let status: 'paid' | 'overdue' | 'pending' = 'pending'
           let statusDetail = ''
           let statusColor = '#a80'
@@ -363,7 +363,7 @@ export function LandlordDashboard() {
                 </div>
               )}
 
-              {contract && current.paymentId && !current.payment?.confirmed_by_landlord && current.readingsMode !== 'self' && (
+                {contract && current.paymentId && !current.payment?.confirmed_by_landlord && current.readingsMode !== 'self' && !firstMonthPending && (
                 <div style={T.card}>
                   <div style={T.h2}>Ресурсы по квитанции</div>
                   {current.needUtilitiesReminder && (
