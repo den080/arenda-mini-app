@@ -90,13 +90,13 @@ export function TenantDashboard() {
 
   const getNotificationText = (type: string) => {
     switch (type) {
-      case 'payment_claimed': return '✅ Арендатор сообщил об оплате'
-      case 'payment_confirmed': return '🟢 Арендодатель подтвердил оплату'
-      case 'meter_submitted': return '💦 Переданы новые показания'
-      case 'cash_proposed': return '💵 Предложено время встречи наличными'
-      case 'cash_confirmed': return '🤝 Время встречи наличными подтверждено'
-      case 'deferred_proposed': return '🙏 Заявка на отсрочку штрафа отправлена'
-      case 'deferred_confirmed': return '🧊 Замороженный штраф обновлён'
+      case 'payment_claimed': return 'Арендатор сообщил об оплате'
+      case 'payment_confirmed': return 'Арендодатель подтвердил оплату'
+      case 'meter_submitted': return 'Переданы новые показания'
+      case 'cash_proposed': return 'Предложено время встречи наличными'
+      case 'cash_confirmed': return 'Время встречи наличными подтверждено'
+      case 'deferred_proposed': return 'Заявка на отсрочку штрафа отправлена'
+      case 'deferred_confirmed': return 'Замороженный штраф обновлён'
       default: return type
     }
   }
@@ -109,7 +109,7 @@ export function TenantDashboard() {
     <div style={T.page}>
       <h1 style={T.h1}>Моя аренда</h1>
       {contracts.length === 0 ? (
-        <div style={T.card}>🤝 У вас пока нет активной аренды. Попросите арендодателя добавить объект и указать ваш номер телефона в договоре — после этого аренда появится здесь.</div>
+        <div style={T.card}>У вас пока нет активной аренды. Попросите арендодателя добавить объект и указать ваш номер телефона в договоре — после этого аренда появится здесь.</div>
       ) : (
         <>
           {contracts.length > 1 && (
@@ -192,7 +192,7 @@ function TenantRental({ contract, tab }: { contract: any; tab: string }) {
     await supabase.from('notifications_log').insert({
       user_id: data.landlord.id, type: 'payment_claimed', related_id: payment.id, sent_at: new Date().toISOString(),
     })
-    setMsg('✅ Арендодатель уведомлён: безнал заявлен, ждёт подтверждения')
+    setMsg('Арендодатель уведомлён: безнал заявлен, ждёт подтверждения')
     load()
   }
 
@@ -209,7 +209,7 @@ function TenantRental({ contract, tab }: { contract: any; tab: string }) {
     await supabase.from('notifications_log').insert({
       user_id: data.landlord.id, type: 'deferred_proposed', related_id: contract.id, sent_at: new Date().toISOString(),
     })
-    setMsg('✅ Заявка на отсрочку штрафа отправлена арендодателю')
+    setMsg('Заявка на отсрочку штрафа отправлена арендодателю')
     load()
   }
 
@@ -223,7 +223,7 @@ function TenantRental({ contract, tab }: { contract: any; tab: string }) {
     }
     if (rows.length === 0) { setMsg('Введите показания счётчиков'); return }
     const { error: e } = await supabase.from('meter_readings').insert(rows)
-    setMsg(e ? 'Ошибка: ' + e.message : '✅ Показания переданы и ждут подтверждения арендодателем')
+    setMsg(e ? 'Ошибка: ' + e.message : 'Показания переданы и ждут подтверждения арендодателем')
     setVals({})
     if (!e) {
       await supabase.from('notifications_log').insert({
@@ -236,7 +236,7 @@ function TenantRental({ contract, tab }: { contract: any; tab: string }) {
   async function copyToClipboard(text: string, label: string) {
     try {
       await navigator.clipboard.writeText(text)
-      setMsg(`✅ Скопировано: ${label}`)
+      setMsg(`Скопировано: ${label}`)
       setTimeout(() => setMsg(null), 2000)
     } catch {
       setMsg('Не удалось скопировать')
@@ -261,7 +261,7 @@ function TenantRental({ contract, tab }: { contract: any; tab: string }) {
     }
     if (rows.length === 0) { setMsg('Эти месяцы уже созданы'); return }
     const { error } = await supabase.from('payments').insert(rows)
-    setMsg(error ? 'Ошибка: ' + error.message : `✅ Созданы счета на ${rows.length} мес. вперёд — оплачиваются по порядку`)
+    setMsg(error ? 'Ошибка: ' + error.message : `Созданы счета на ${rows.length} мес. вперёд — оплачиваются по порядку`)
     if (!error) load()
   }
 
@@ -279,7 +279,7 @@ function TenantRental({ contract, tab }: { contract: any; tab: string }) {
   const monthLabel = payment ? new Date(payment.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : ''
   const deposit = Number(contract.deposit_amount || 0)
   const frozenTotal = (frozenRows || []).reduce((sum: number, f: any) => sum + Number(f.amount || 0), 0)
-  const chip = (stt: string) => (stt || 'proposed') === 'confirmed' ? '🟢 получены' : (stt || 'proposed') === 'incomplete' ? '🔴 не полностью' : '🟡 ждут'
+  const chip = (stt: string) => (stt || 'proposed') === 'confirmed' ? 'получены' : (stt || 'proposed') === 'incomplete' ? 'не полностью' : 'ждут'
   const latests = (meters || []).map((m: any) => ((readingsByMeter || {})[m.id] || [])[0]).filter(Boolean)
   const overallReading = latests.length === 0
     ? 'none'
@@ -340,7 +340,7 @@ function TenantRental({ contract, tab }: { contract: any; tab: string }) {
             <div style={T.row}><span style={{ color: C.text2 }}>Итого</span><span style={T.total}>{total.toFixed(2)} ₽</span></div>
             {payment && <div style={T.small}>{firstMonth ? 'Оплата при подписании договора' : `Оплатить до: ${parseDate(payment.due_date).toLocaleDateString('ru-RU')}`}</div>}
             <div style={{ marginTop: 10 }}><span style={statusChip}>{statusText}</span></div>
-            {isOverdue && <div style={T.noteRed}>⚠️ +{penaltyRate} руб за каждый день просрочки</div>}
+            {isOverdue && <div style={T.noteRed}>+{penaltyRate} руб за каждый день просрочки</div>}
           </div>
         </>
       )}
@@ -359,7 +359,7 @@ function TenantRental({ contract, tab }: { contract: any; tab: string }) {
             <div style={{ marginTop: 10 }}><span style={statusChip}>{statusText}</span></div>
             {payment && !payment.confirmed_by_landlord && Number(payment.penalty_amount) > 0 && (
               deferralPending ? (
-                <div style={T.note}>🟡 Отсрочка штрафа: заявка на рассмотрении</div>
+                <div style={T.note}>Отсрочка штрафа: заявка на рассмотрении</div>
               ) : (
                 <button onClick={requestDeferral} style={T.btnWarn}>Попросить отсрочку штрафа</button>
               )
@@ -368,8 +368,8 @@ function TenantRental({ contract, tab }: { contract: any; tab: string }) {
               <div style={T.sub}>
                 <div style={T.h3}>Как вы будете платить</div>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <button style={effectiveMethod === 'card' ? T.btnSmall : T.btnSecondary} onClick={() => choosePayMethod('card')}>💳 Безналичный расчёт</button>
-                  <button style={effectiveMethod === 'cash' ? T.btnSmall : T.btnSecondary} onClick={() => choosePayMethod('cash')}>💵 Наличные</button>
+                  <button style={effectiveMethod === 'card' ? T.btnSmall : T.btnSecondary} onClick={() => choosePayMethod('card')}>Безналичный расчёт</button>
+                  <button style={effectiveMethod === 'cash' ? T.btnSmall : T.btnSecondary} onClick={() => choosePayMethod('cash')}>Наличные</button>
                 </div>
               </div>
             )}
@@ -381,25 +381,25 @@ function TenantRental({ contract, tab }: { contract: any; tab: string }) {
                 ) : (
                   details.map((d: PayDetail, i: number) => (
                     <div key={i} style={T.item}>
-                      <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 6 }}>{d.type === 'card' ? '💳' : '⚡'} {d.type === 'card' ? d.bank : `СБП • ${d.bank}`}</div>
+                      <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 6 }}>{d.type === 'card' ? d.bank : `СБП • ${d.bank}`}</div>
                       <div style={{ fontFamily: 'monospace', fontSize: 16, marginBottom: 8 }}>{d.type === 'card' ? formatCardNumber(d.number) : formatPhoneDisplay(d.number)}</div>
                       <button onClick={() => copyToClipboard(d.type === 'card' ? formatCardNumber(d.number) : d.number, d.type === 'card' ? 'номер карты' : 'номер СБП')} style={T.btnSecondary}>
-                        📋 Скопировать
+                        Скопировать
                       </button>
                     </div>
                   ))
                 )}
                 {!payment?.confirmed_by_landlord && details.length > 0 && (
                   payment.card_claimed ? (
-                    <div style={T.note}>💳 Безнал заявлен: ждёт подтверждения арендодателем</div>
+                    <div style={T.note}>Безнал заявлен: ждёт подтверждения арендодателем</div>
                   ) : (
-                    <button onClick={claimPaid} style={T.btn}>✅ Я оплатил</button>
+                    <button onClick={claimPaid} style={T.btn}>Я оплатил</button>
                   )
                 )}
               </div>
             )}
             {effectiveMethod === 'cash' && firstMonth && (
-              <div style={T.note}>💵 Наличные передаются при подписании договора</div>
+              <div style={T.note}>Наличные передаются при подписании договора</div>
             )}
             {effectiveMethod === 'cash' && !firstMonth && (
               <div style={T.sub}>
@@ -414,14 +414,14 @@ function TenantRental({ contract, tab }: { contract: any; tab: string }) {
             )}
           </div>
           <div style={T.card}>
-            <button style={T.btnSecondary} onClick={payAdvance}>💨 Внести оплату досрочно</button>
+            <button style={T.btnSecondary} onClick={payAdvance}>Внести оплату досрочно</button>
             <div style={T.tiny}>Создаст счета на несколько месяцев вперёд. Оплачиваются по порядку, начиная с ближайшего; арендодатель подтверждает каждый месяц.</div>
           </div>
           <div style={T.card}>
             <div style={T.h2}>История платежей</div>
             {payments.slice(0, 8).map((p: any) => (
               <div key={p.id} style={T.row}>
-                <span>{new Date(p.period).toLocaleDateString('ru-RU', { month: 'short', year: 'numeric' })} {p.confirmed_by_landlord ? '🟢' : '🟡'}</span>
+                <span>{new Date(p.period).toLocaleDateString('ru-RU', { month: 'short', year: 'numeric' })} · {p.confirmed_by_landlord ? 'оплачен' : 'ожидает'}</span>
                 <b>{(Number(p.base_amount) + Number(p.penalty_amount || 0) + Number(p.utilities_amount || 0)).toFixed(2)} ₽</b>
               </div>
             ))}
@@ -436,13 +436,13 @@ function TenantRental({ contract, tab }: { contract: any; tab: string }) {
               <div style={T.h2}>Передать показания</div>
               <div style={T.small}>Срок подачи: до {contract.meter_deadline_day} числа</div>
               {overallReading === 'incomplete' && (
-                <div style={T.noteRed}>🔴 Арендодатель отметил: показания получены не полностью — передайте недостающие ещё раз</div>
+                <div style={T.noteRed}>Арендодатель отметил: показания получены не полностью — передайте недостающие ещё раз</div>
               )}
               {overallReading === 'confirmed' && (
-                <div style={T.noteGreen}>🟢 Показания получены арендодателем</div>
+                <div style={T.noteGreen}>Показания получены арендодателем</div>
               )}
               {overallReading === 'proposed' && (
-                <div style={T.note}>🟡 Показания отправлены и ждут подтверждения арендодателем</div>
+                <div style={T.note}>Показания отправлены и ждут подтверждения арендодателем</div>
               )}
               {meters.map((m: any) => {
                 const t = meterTypes.find((x: any) => x.id === m.meter_type_id)
@@ -462,7 +462,7 @@ function TenantRental({ contract, tab }: { contract: any; tab: string }) {
                     {m.initial_value != null && <div style={T.tiny}>стартовое показание: {Number(m.initial_value).toFixed(0)}</div>}
                     {last && (
                       <div style={T.link} onClick={() => setHistoryOpen({ ...historyOpen, [m.id]: !open })}>
-                        🕐 последнее: {last.value} · подано {new Date(last.submitted_at).toLocaleDateString('ru-RU')} · {chip(last.status)} {open ? '▲' : '▼'}
+                        последнее: {last.value} · подано {new Date(last.submitted_at).toLocaleDateString('ru-RU')} · {chip(last.status)} {open ? '▲' : '▼'}
                       </div>
                     )}
                     {open && hist.slice(0, 10).map((r: any) => (
@@ -471,7 +471,7 @@ function TenantRental({ contract, tab }: { contract: any; tab: string }) {
                   </div>
                 )
               })}
-              <button onClick={submitMeters} style={T.btn}>📤 Передать показания</button>
+              <button onClick={submitMeters} style={T.btn}>Передать показания</button>
             </div>
           )}
           {readingsMode === 'manual' && meters.length === 0 && (
@@ -480,13 +480,13 @@ function TenantRental({ contract, tab }: { contract: any; tab: string }) {
           {readingsMode === 'auto' && (
             <div style={T.card}>
               <div style={T.h2}>Показания счётчиков</div>
-              <div style={T.small}>💡 Показания передаются автоматически — вам ничего подавать не нужно.</div>
+              <div style={T.small}>Показания передаются автоматически — вам ничего подавать не нужно.</div>
             </div>
           )}
           {readingsMode === 'self' && (
             <div style={T.card}>
               <div style={T.h2}>Показания счётчиков</div>
-              <div style={T.small}>💡 Вы платите полную квитанцию сами — показания подавать не нужно.</div>
+              <div style={T.small}>Вы платите полную квитанцию сами — показания подавать не нужно.</div>
             </div>
           )}
         </>
@@ -514,7 +514,7 @@ function TenantRental({ contract, tab }: { contract: any; tab: string }) {
           </div>
           {frozenTotal > 0 && (
             <div style={T.card}>
-              <div style={T.h2}>🧊 Замороженные штрафы: {frozenTotal.toFixed(0)} ₽</div>
+              <div style={T.h2}>Замороженные штрафы: {frozenTotal.toFixed(0)} ₽</div>
               {(frozenRows || []).map((f: any) => (
                 <div key={f.id} style={T.item}>
                   <div style={{ fontSize: 14 }}>{f.period ? parseDate(f.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : 'без месяца'} — {Number(f.amount).toFixed(0)} ₽</div>
