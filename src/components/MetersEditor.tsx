@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { T } from '../theme'
+import { ConfirmDelete, showToast } from './ui'
 
 export function MetersEditor({ objId }: { objId: string }) {
   const [types, setTypes] = useState<any[]>([])
   const [rows, setRows] = useState<any[]>([])
   const [busy, setBusy] = useState(false)
+  const [del, setDel] = useState<string | null>(null)
+  const [elecPending, setElecPending] = useState<string | null>(null)
 
   async function load() {
     const { data: t } = await supabase.from('meter_types').select('*')
@@ -71,10 +74,10 @@ export function MetersEditor({ objId }: { objId: string }) {
       const inactive = rows.find(r => !r.is_active && waterCodes.includes(codeOf(r)))
       if (inactive) {
         const { error } = await supabase.from('object_meters').update({ is_active: true }).eq('id', inactive.id)
-        if (error) { alert('Ошибка: ' + error.message); return }
+        if (error) { showToast('Ошибка: ' + error.message); return }
       } else {
         const { error } = await supabase.from('object_meters').insert({ object_id: objId, meter_type_id: mt.id, is_active: true, label: '' })
-        if (error) { alert('Ошибка: ' + error.message); return }
+        if (error) { showToast('Ошибка: ' + error.message); return }
       }
       window.dispatchEvent(new Event('rentflow-refresh'))
       await load()
@@ -83,10 +86,9 @@ export function MetersEditor({ objId }: { objId: string }) {
     }
   }
 
-  async function removeMeter(id: string) {
-    const answer = window.prompt('Введите слово "удалить" для подтверждения удаления счётчика')
-    if (!answer || answer.trim().toLowerCase() !== 'удалить') { alert('Удаление отменено'); return }
+  async function doRemove(id: string) {
     await supabase.from('object_meters').update({ is_active: false }).eq('id', id)
+    showToast('Счётчик отключён')
     window.dispatchEvent(new Event('rentflow-refresh'))
     load()
   }
@@ -98,7 +100,18 @@ export function MetersEditor({ objId }: { objId: string }) {
     return 'none'
   }
 
-  async function setElecMode(mode: string) {
+  async function applyElecMode(mode: string) {
+    const need: Record<string, string[]> = {
+      none: [],
+      '1': ['electricity_single'],
+      '2': ['electricity_day', 'electricity_night'],
+      '3': ['electricity_peak', 'electricity_semipeak', 'electricity_night'],
+    }
+    const all = ['electricity_single', 'electricity_day', 'electricity_night', 'electricity_peak', 'electricity_semipeak']
+    for (const code of all) await setActive(code, (need[mode] || []).includes(code))
+  }
+
+  function requestElecMode(mode: string) {
     const need: Record<string, string[]> = {
       none: [],
       '1': ['electricity_single'],
@@ -107,11 +120,8 @@ export function MetersEditor({ objId }: { objId: string }) {
     }
     const all = ['electricity_single', 'electricity_day', 'electricity_night', 'electricity_peak', 'electricity_semipeak']
     const toDeactivate = all.filter(c => isAct(c) && !(need[mode] || []).includes(c))
-    if (toDeactivate.length > 0) {
-      const answer = window.prompt('Смена тарифа отключит счётчики. Введите слово "удалить" для подтверждения')
-      if (!answer || answer.trim().toLowerCase() !== 'удалить') { alert('Отменено'); return }
-    }
-    for (const code of all) await setActive(code, (need[mode] || []).includes(code))
+    if (toDeactivate.length > 0) setElecPending(mode)
+    else applyElecMode(mode)
   }
 
   const elecMode = getElecMode()
@@ -119,9 +129,9 @@ export function MetersEditor({ objId }: { objId: string }) {
   const startInput = (r: any) => (
     <input
       defaultValue={r.initial_value ?? ''}
-      placeholder="старт"
-      title="Стартовое показание (видит арендатор)"
-      style={{ ...T.select, width: 70 }}
+      placeholder="стартовые показания"
+      title="Стартовые показания (видит арендатор)"
+      style={{ ...T.select, width: 120 }}
       inputMode="decimal"
       onBlur={(e) => setInitial(r.id, e.target.value)}
     />
@@ -138,7 +148,7 @@ export function MetersEditor({ objId }: { objId: string }) {
       ].map(opt => (
         <div key={opt.v} style={{ marginBottom: 6 }}>
           <label style={{ fontSize: 14, cursor: 'pointer' }}>
-            <input type="radio" name={`elec-${objId}`} checked={elecMode === opt.v} onChange={() => setElecMode(opt.v)} />
+            <input type="radio" name={`elec-${objId}`} checked={elecMode === opt.v} onChange={() => requestElecMode(opt.v)} />
             {' '}{opt.l}
           </label>
         </div>
@@ -147,10 +157,10 @@ export function MetersEditor({ objId }: { objId: string }) {
         <div style={{ marginBottom: 8 }}>
           {activeElecRows.map(r => (
             <div key={r.id} style={{ ...T.item, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 13, flex: 1, minWidth: 100 }}>{typeByCode(codeOf(r))?.label || 'Электро'}</span>
+              <span style={{ fontSize: 13, flex: 1, minWidth: 100, textAlign: 'center' }}>{typeByCode(codeOf(r))?.label || 'Электро'}</span>
               <input defaultValue={r.label || ''} placeholder="номер счётчика" style={{ ...T.select, flex: 1, minWidth: 110 }} onBlur={(e) => setSerial(r.id, e.target.value)} />
               {startInput(r)}
-              <button style={T.btnDanger} onClick={() => removeMeter(r.id)}>✕</button>
+              <button style={T.btnDanger} onClick={() => setDel(r.id)}>✕</button>
             </div>
           ))}
         </div>
@@ -171,7 +181,7 @@ export function MetersEditor({ objId }: { objId: string }) {
             onBlur={(e) => setSerial(r.id, e.target.value)}
           />
           {startInput(r)}
-          <button style={T.btnDanger} onClick={() => removeMeter(r.id)}>✕</button>
+          <button style={T.btnDanger} onClick={() => setDel(r.id)}>✕</button>
         </div>
       ))}
       <button style={busy ? T.btnOff : T.btnSmall} disabled={busy} onClick={addWater}>+ Добавить счётчик воды</button>
@@ -189,7 +199,7 @@ export function MetersEditor({ objId }: { objId: string }) {
         <div key={r.id} style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
           <input defaultValue={r.label || ''} placeholder="номер теплосчётчика" style={{ ...T.select, flex: 1 }} onBlur={(e) => setSerial(r.id, e.target.value)} />
           {startInput(r)}
-          <button style={T.btnDanger} onClick={() => removeMeter(r.id)}>✕</button>
+          <button style={T.btnDanger} onClick={() => setDel(r.id)}>✕</button>
         </div>
       ))}
       {typeByCode('gas') && !isAct('gas') && (
@@ -204,10 +214,24 @@ export function MetersEditor({ objId }: { objId: string }) {
         <div key={r.id} style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
           <input defaultValue={r.label || ''} placeholder="номер счётчика газа" style={{ ...T.select, flex: 1 }} onBlur={(e) => setSerial(r.id, e.target.value)} />
           {startInput(r)}
-          <button style={T.btnDanger} onClick={() => removeMeter(r.id)}>✕</button>
+          <button style={T.btnDanger} onClick={() => setDel(r.id)}>✕</button>
         </div>
       ))}
-      <div style={T.tiny}>Удаление любого счётчика — только после ввода слова «удалить». Стартовые показания («старт») видит арендатор в своей вкладке «Счётчики».</div>
+      <div style={T.tiny}>Стартовые показания видит арендатор в своей вкладке «Счётчики». Отключение счётчика — только с подтверждением.</div>
+
+      <ConfirmDelete
+        open={!!del}
+        text="Счётчик будет отключён. История показаний сохранится, но арендатор больше не сможет подавать по нему показания."
+        onClose={() => setDel(null)}
+        onConfirm={() => { if (del) doRemove(del) }}
+      />
+
+      <ConfirmDelete
+        open={!!elecPending}
+        text="Смена тарифа отключит текущие электросчётчики. Продолжить?"
+        onClose={() => setElecPending(null)}
+        onConfirm={() => { if (elecPending) applyElecMode(elecPending) }}
+      />
     </div>
   )
 }
