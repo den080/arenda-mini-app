@@ -34,6 +34,14 @@ function fmtDate(d: any): string {
   return `${String(dt.getDate()).padStart(2, '0')}.${String(dt.getMonth() + 1).padStart(2, '0')}.${dt.getFullYear()} (${wd})`
 }
 
+const DATE_OPTIONS: { iso: string; label: string }[] = []
+for (let i = 0; i < 60; i++) {
+  const d = new Date()
+  d.setDate(d.getDate() + i)
+  const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  DATE_OPTIONS.push({ iso, label: fmtDate(iso) })
+}
+
 function plusHour(t: string): string {
   const [h, m] = t.split(':').map(Number)
   const nh = Math.min(23, h + 1)
@@ -44,6 +52,7 @@ const S: Record<string, React.CSSProperties> = {
   head: { fontSize: 13, color: '#8e8e93', margin: '14px 4px 6px', textTransform: 'uppercase', letterSpacing: 0.3 },
   card: { background: '#fff', borderRadius: 12, margin: '0 0 10px', padding: '0 16px' },
   row: { display: 'flex', alignItems: 'center', gap: 10, minHeight: 44, padding: '6px 0', boxSizing: 'border-box' },
+  rowBtn: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, minHeight: 44, padding: '6px 0', boxSizing: 'border-box', width: '100%', border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left' },
   sep: { height: 1, background: 'rgba(60,60,67,0.12)' },
   label: { fontSize: 15, color: '#1d1d1f' },
   sub: { fontSize: 13, color: '#8e8e93', marginTop: 2 },
@@ -51,8 +60,9 @@ const S: Record<string, React.CSSProperties> = {
   red: { border: 'none', background: 'transparent', color: '#ff3b30', fontSize: 15, cursor: 'pointer', padding: 4, flexShrink: 0 },
   orange: { color: '#b25000', fontSize: 14, flexShrink: 0 },
   ok: { color: '#1e7e34', fontSize: 15, fontWeight: 600, flexShrink: 0 },
-  sel: { padding: '7px 10px', border: 'none', background: 'rgba(120,120,128,0.08)', borderRadius: 8, fontSize: 14, color: '#1d1d1f', outline: 'none' },
+  sel: { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, outline: 'none', padding: '4px 0', textAlign: 'right', maxWidth: '52%' },
   foot: { fontSize: 12, color: '#8e8e93', margin: '4px 4px 10px' },
+  rightRow: { display: 'flex', justifyContent: 'flex-end', padding: '2px 0 10px' },
 }
 
 export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
@@ -202,19 +212,24 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
     const s = sub[w.id] || { from: '', to: '' }
     return (
       <div key={w.id} style={S.card}>
-        <div style={S.row}>
-          <span style={S.label}>{fmtDate(w.meeting_date)} · {w.time_from}–{w.time_to}</span>
+        <div style={{ ...S.row, borderBottom: 'none', paddingBottom: 0 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={S.label}>{fmtDate(w.meeting_date)}</div>
+            <div style={S.sub}>окно {w.time_from}–{w.time_to}</div>
+          </div>
         </div>
-        <div style={S.sep} />
         <div style={S.row}>
-          <select value={s.from} onChange={(e) => setSub({ ...sub, [w.id]: { ...s, from: e.target.value, to: plusHour(e.target.value) } })} style={{ ...S.sel, flex: 1 }}>
+          <span style={S.label}>Время встречи</span>
+          <select value={s.from} onChange={(e) => setSub({ ...sub, [w.id]: { ...s, from: e.target.value, to: plusHour(e.target.value) } })} style={S.sel}>
             <option value="">с --:--</option>
             {opts.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
-          <select value={s.to} onChange={(e) => setSub({ ...sub, [w.id]: { ...s, to: e.target.value } })} style={{ ...S.sel, flex: 1 }}>
+          <select value={s.to} onChange={(e) => setSub({ ...sub, [w.id]: { ...s, to: e.target.value } })} style={S.sel}>
             <option value="">по --:--</option>
             {opts.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
+        </div>
+        <div style={S.rightRow}>
           <button style={S.blue} disabled={busy} onClick={() => propose(w, resched && confirmed ? confirmed.id : undefined)}>{resched ? 'Перенести' : 'Предложить'}</button>
         </div>
       </div>
@@ -266,25 +281,33 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
               <div key={w.id}>
                 {i > 0 && <div style={S.sep} />}
                 <div style={S.row}>
-                  <span style={S.label}>{fmtDate(w.meeting_date)} · {w.time_from}–{w.time_to}</span>
-                  <span style={{ flex: 1 }} />
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={S.label}>{fmtDate(w.meeting_date)}</div>
+                    <div style={S.sub}>{w.time_from}–{w.time_to}</div>
+                  </div>
                   <button style={S.red} onClick={() => removeWindow(w.id)}>удалить</button>
                 </div>
               </div>
             ))}
             <div style={S.sep} />
             <div style={S.row}>
-              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ ...S.sel, flex: 1, minWidth: 0 }} />
+              <span style={S.label}>Дата</span>
+              <select value={date} onChange={(e) => setDate(e.target.value)} style={S.sel}>
+                <option value="">выбрать</option>
+                {DATE_OPTIONS.map(o => <option key={o.iso} value={o.iso}>{o.label}</option>)}
+              </select>
+            </div>
+            <div style={S.sep} />
+            <div style={S.row}>
+              <span style={S.label}>Время</span>
               <select value={from} onChange={(e) => { setFrom(e.target.value); setTo(plusHour(e.target.value)) }} style={S.sel}>
-                <option value="">с --:--</option>
                 {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
               <select value={to} onChange={(e) => setTo(e.target.value)} style={S.sel}>
-                <option value="">по --:--</option>
                 {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
-            <div style={{ ...S.row, justifyContent: 'flex-end' }}>
+            <div style={S.rightRow}>
               <button style={S.blue} disabled={busy} onClick={addWindow}>Добавить окно</button>
             </div>
           </div>
@@ -303,8 +326,10 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
               <div key={m.id}>
                 {i > 0 && <div style={S.sep} />}
                 <div style={S.row}>
-                  <span style={S.label}>{fmtDate(m.meeting_date)} · {m.time_from}–{m.time_to}</span>
-                  <span style={{ flex: 1 }} />
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={S.label}>{fmtDate(m.meeting_date)}</div>
+                    <div style={S.sub}>{m.time_from}–{m.time_to}</div>
+                  </div>
                   <button style={S.red} onClick={() => decline(m.id)}>Отклонить</button>
                   <button style={S.blue} onClick={() => confirmMeeting(m.id)}>Подтвердить</button>
                 </div>
@@ -322,8 +347,10 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
               <div key={m.id}>
                 {i > 0 && <div style={S.sep} />}
                 <div style={S.row}>
-                  <span style={S.label}>{fmtDate(m.meeting_date)} · {m.time_from}–{m.time_to}</span>
-                  <span style={{ flex: 1 }} />
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={S.label}>{fmtDate(m.meeting_date)}</div>
+                    <div style={S.sub}>{m.time_from}–{m.time_to}</div>
+                  </div>
                   <span style={S.orange}>ожидает</span>
                 </div>
               </div>
