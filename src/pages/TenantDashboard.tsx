@@ -28,9 +28,8 @@ function formatPhoneDisplay(v: string): string {
 }
 
 const TABS = [
-  { id: 'overview', l: 'Обзор' },
-  { id: 'meters', l: 'Счётчики' },
   { id: 'pay', l: 'Оплата' },
+  { id: 'meters', l: 'Счётчики' },
   { id: 'contract', l: 'Договор' },
   { id: 'chat', l: 'Чат' },
 ]
@@ -41,7 +40,7 @@ export function TenantDashboard() {
   const [loading, setLoading] = useState(true)
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [openId, setOpenId] = useState<string | null>(null)
-  const [tab, setTab] = useState('overview')
+  const [tab, setTab] = useState('pay')
 
   async function load() {
     if (!user) return
@@ -114,7 +113,7 @@ export function TenantDashboard() {
               <div key={c.id}>
                 {i > 0 && <div style={{ height: 1, background: 'rgba(60,60,67,0.12)' }} />}
                 <button
-                  onClick={() => { setOpenId(c.id); setTab('overview') }}
+                  onClick={() => { setOpenId(c.id); setTab('pay') }}
                   style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 52, border: 'none', background: 'transparent', cursor: 'pointer', padding: '8px 0', textAlign: 'left', boxSizing: 'border-box' }}
                 >
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -349,85 +348,6 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
 
   return (
     <div>
-      {tab === 'overview' && (
-        <>
-          <div style={T.card}>
-            <div style={T.h2}>Счёт за {monthLabel}</div>
-            <div style={T.row}><span style={iosMuted}>Итого</span><span style={T.total}>{total.toFixed(2)} ₽</span></div>
-            {payment && <div style={{ ...T.row, borderBottom: 'none' }}><span style={iosMuted}>{firstMonth ? 'Оплата при подписании договора' : 'Оплатить до'}</span><b>{firstMonth ? '' : parseDate(payment.due_date).toLocaleDateString('ru-RU')}</b></div>}
-            <div style={{ padding: '4px 0 8px' }}><span style={statusChip}>{statusText}</span></div>
-            {isOverdue && <div style={T.noteRed}>+{penaltyRate} руб за каждый день просрочки</div>}
-          </div>
-        </>
-      )}
-
-      {tab === 'meters' && (
-        <>
-          {readingsMode === 'manual' && meters.length > 0 && (
-            <>
-              <div style={secHead}>Передать показания</div>
-              <div style={T.card}>
-                <div style={{ ...T.row, borderBottom: 'none' }}>
-                  <span style={iosMuted}>Срок подачи</span>
-                  <b>до {contract.meter_deadline_day} числа</b>
-                </div>
-                {overallReading === 'incomplete' && <div style={T.noteRed}>Арендодатель отметил: показания получены не полностью — передайте недостающие ещё раз</div>}
-                {overallReading === 'confirmed' && <div style={T.noteGreen}>Показания получены арендодателем</div>}
-                {overallReading === 'proposed' && <div style={T.note}>Показания отправлены и ждут подтверждения арендодателем</div>}
-              </div>
-              {meters.map((m: any) => {
-                const t = meterTypes.find((x: any) => x.id === m.meter_type_id)
-                const hist = (readingsByMeter || {})[m.id] || []
-                const last = hist[0]
-                const open = !!historyOpen[m.id]
-                return (
-                  <div key={m.id} style={T.card}>
-                    <div style={{ ...T.row, borderBottom: 'none', alignItems: 'center' }}>
-                      <span style={{ fontSize: 15, fontWeight: 600 }}>{t?.label || 'Счётчик'}{m.label ? ` · № ${m.label}` : ''}</span>
-                      <input
-                        value={vals[m.id] || ''}
-                        onChange={(e) => setVals({ ...vals, [m.id]: e.target.value })}
-                        placeholder="0"
-                        style={rightInput}
-                        inputMode="decimal"
-                      />
-                    </div>
-                    {m.initial_value != null && <div style={{ ...T.tiny, margin: '0 0 6px' }}>стартовые показания: {Number(m.initial_value).toFixed(0)}</div>}
-                    {last && (
-                      <div style={{ ...hair }} />
-                    )}
-                    {last && (
-                      <div style={{ ...iosBlue, fontSize: 14, padding: '8px 0 6px' }} onClick={() => setHistoryOpen({ ...historyOpen, [m.id]: !open })}>
-                        последнее: {last.value} · подано {new Date(last.submitted_at).toLocaleDateString('ru-RU')} {open ? '▲' : '▼'}
-                      </div>
-                    )}
-                    {open && hist.slice(0, 10).map((r: any) => (
-                      <div key={r.id} style={T.tiny}>{r.value} · подано {new Date(r.submitted_at).toLocaleDateString('ru-RU')} · {r.status === 'confirmed' ? 'подтверждены' : r.status === 'incomplete' ? 'не полностью' : 'ждут'}</div>
-                    ))}
-                  </div>
-                )
-              })}
-              <button onClick={submitMeters} style={T.btn}>Передать показания</button>
-            </>
-          )}
-          {readingsMode === 'manual' && meters.length === 0 && (
-            <div style={T.card}><div style={{ ...T.small, margin: '8px 0' }}>На объекте нет счётчиков с ручной подачей.</div></div>
-          )}
-          {readingsMode === 'auto' && (
-            <div style={T.card}>
-              <div style={T.h2}>Показания счётчиков</div>
-              <div style={{ ...T.small, margin: '8px 0' }}>Показания передаются автоматически — вам ничего подавать не нужно.</div>
-            </div>
-          )}
-          {readingsMode === 'self' && (
-            <div style={T.card}>
-              <div style={T.h2}>Показания счётчиков</div>
-              <div style={{ ...T.small, margin: '8px 0' }}>Вы платите полную квитанцию сами — показания подавать не нужно.</div>
-            </div>
-          )}
-        </>
-      )}
-
       {tab === 'pay' && (
         <>
           <div style={T.card}>
@@ -437,9 +357,13 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
             {utilities > 0 && (
               <div style={T.row}><span style={iosMuted}>Ресурсы по квитанции</span><b>{utilities.toFixed(2)} ₽</b></div>
             )}
-            <div style={{ ...T.row, borderBottom: 'none' }}><span style={iosMuted}>Итого</span><span style={T.total}>{total.toFixed(2)} ₽</span></div>
-            {payment && <div style={T.small}>{firstMonth ? 'Оплата при подписании договора' : `Оплатить до: ${parseDate(payment.due_date).toLocaleDateString('ru-RU')}`}</div>}
-            <div style={{ padding: '4px 0 8px' }}><span style={statusChip}>{statusText}</span></div>
+            <div style={T.row}><span style={iosMuted}>Итого</span><span style={T.total}>{total.toFixed(2)} ₽</span></div>
+            <div style={{ ...T.row, borderBottom: 'none' }}>
+              <span style={iosMuted}>{firstMonth ? 'Оплата при подписании договора' : 'Оплатить до'}</span>
+              <b>{firstMonth ? '' : parseDate(payment.due_date).toLocaleDateString('ru-RU')}</b>
+            </div>
+            <div style={{ padding: '0 0 8px' }}><span style={statusChip}>{statusText}</span></div>
+            {isOverdue && <div style={T.noteRed}>+{penaltyRate} руб за каждый день просрочки</div>}
 
             {effectiveMethod === 'card' && details.length > 0 && !payment?.confirmed_by_landlord && (
               payment.card_claimed ? (
@@ -510,14 +434,11 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
                 />
               </div>
             )}
-          </div>
 
-          <div style={T.card}>
-            <div style={T.row}>
+            <div style={{ ...T.row, marginTop: 6 }}>
               <span style={{ fontSize: 15 }}>Оплата досрочно</span>
               <button style={iosBlue} onClick={() => setAdvOpen(true)}>Внести на несколько месяцев</button>
             </div>
-            <div style={{ ...T.tiny, margin: '0 0 8px' }}>Создаст счета вперёд; оплачиваются по порядку, начиная с ближайшего.</div>
           </div>
 
           <div style={T.card}>
@@ -532,6 +453,73 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
               </div>
             ))}
           </div>
+        </>
+      )}
+
+      {tab === 'meters' && (
+        <>
+          {readingsMode === 'manual' && meters.length > 0 && (
+            <>
+              <div style={secHead}>Передать показания</div>
+              <div style={T.card}>
+                <div style={{ ...T.row, borderBottom: 'none' }}>
+                  <span style={iosMuted}>Срок подачи</span>
+                  <b>до {contract.meter_deadline_day} числа</b>
+                </div>
+                {overallReading === 'incomplete' && <div style={T.noteRed}>Арендодатель отметил: показания получены не полностью — передайте недостающие ещё раз</div>}
+                {overallReading === 'confirmed' && <div style={T.noteGreen}>Показания получены арендодателем</div>}
+                {overallReading === 'proposed' && <div style={T.note}>Показания отправлены и ждут подтверждения арендодателем</div>}
+              </div>
+              {meters.map((m: any) => {
+                const t = meterTypes.find((x: any) => x.id === m.meter_type_id)
+                const hist = (readingsByMeter || {})[m.id] || []
+                const last = hist[0]
+                const open = !!historyOpen[m.id]
+                return (
+                  <div key={m.id} style={T.card}>
+                    <div style={{ ...T.row, borderBottom: 'none', alignItems: 'center' }}>
+                      <span style={{ fontSize: 15, fontWeight: 600 }}>{t?.label || 'Счётчик'}{m.label ? ` · № ${m.label}` : ''}</span>
+                      <input
+                        value={vals[m.id] || ''}
+                        onChange={(e) => setVals({ ...vals, [m.id]: e.target.value })}
+                        placeholder="0"
+                        style={rightInput}
+                        inputMode="decimal"
+                      />
+                    </div>
+                    {m.initial_value != null && <div style={{ ...T.tiny, margin: '0 0 6px' }}>стартовые показания: {Number(m.initial_value).toFixed(0)}</div>}
+                    {last && (
+                      <div style={{ ...hair }} />
+                    )}
+                    {last && (
+                      <div style={{ ...iosBlue, fontSize: 14, padding: '8px 0 6px' }} onClick={() => setHistoryOpen({ ...historyOpen, [m.id]: !open })}>
+                        последнее: {last.value} · подано {new Date(last.submitted_at).toLocaleDateString('ru-RU')} {open ? '▲' : '▼'}
+                      </div>
+                    )}
+                    {open && hist.slice(0, 10).map((r: any) => (
+                      <div key={r.id} style={T.tiny}>{r.value} · подано {new Date(r.submitted_at).toLocaleDateString('ru-RU')} · {r.status === 'confirmed' ? 'подтверждены' : r.status === 'incomplete' ? 'не полностью' : 'ждут'}</div>
+                    ))}
+                  </div>
+                )
+              })}
+              <button onClick={submitMeters} style={T.btn}>Передать показания</button>
+            </>
+          )}
+          {readingsMode === 'manual' && meters.length === 0 && (
+            <div style={T.card}><div style={{ ...T.small, margin: '8px 0' }}>На объекте нет счётчиков с ручной подачей.</div></div>
+          )}
+          {readingsMode === 'auto' && (
+            <div style={T.card}>
+              <div style={T.h2}>Показания счётчиков</div>
+              <div style={{ ...T.small, margin: '8px 0' }}>Показания передаются автоматически — вам ничего подавать не нужно.</div>
+            </div>
+          )}
+          {readingsMode === 'self' && (
+            <div style={T.card}>
+              <div style={T.h2}>Показания счётчиков</div>
+              <div style={{ ...T.small, margin: '8px 0' }}>Вы платите полную квитанцию сами — показания подавать не нужно.</div>
+            </div>
+          )}
         </>
       )}
 
