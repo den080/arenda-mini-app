@@ -12,8 +12,14 @@ const GLOBAL_CSS = `
   button:disabled { opacity: 0.6; }
 `
 
-const TEST_PHONES = ['+79057674225', '+77475885016', '+79651947084', '+79999110921', '+79063190766']
-const TEST_IDS = ['28606967']
+// ========== ЗАГЛУШКА ==========
+// LOCKDOWN = true  → пускает только пользователей из whitelist
+// LOCKDOWN = false → приложение открыто всем пользователям Telegram
+const LOCKDOWN = true
+
+const ALLOWED_IDS = ['28606967']
+const ALLOWED_PHONES = ['+79057674225', '+77475885016', '+79651947084', '+79999110921', '+79063190766']
+// ==============================
 
 function normPhone(v: string): string {
   let c = (v || '').replace(/[\s\-\(\)]/g, '')
@@ -22,19 +28,22 @@ function normPhone(v: string): string {
   return c
 }
 
-function canLoginManual(v: string): boolean {
-  if (TEST_IDS.includes(v.trim())) return true
-  return TEST_PHONES.includes(normPhone(v))
+function isAllowed(v: string): boolean {
+  const t = v.trim()
+  if (ALLOWED_IDS.includes(t)) return true
+  return ALLOWED_PHONES.includes(normPhone(t))
 }
 
+export { LOCKDOWN, ALLOWED_IDS, ALLOWED_PHONES, isAllowed, normPhone }
+
 export default function App() {
-  const { user, loading, error, loginWithId, logout } = useTelegramUser()
+  const { user, loading, error, loginWithId, logout, accessDenied } = useTelegramUser()
   const [value, setValue] = useState('')
   const [mode, setMode] = useState<'landlord' | 'tenant' | null>(null)
 
   const isTester = !!user && (
-    TEST_IDS.includes(String(user.telegram_id || '')) ||
-    TEST_PHONES.includes(normPhone(user.phone || ''))
+    ALLOWED_IDS.includes(String(user.telegram_id || '')) ||
+    ALLOWED_PHONES.includes(normPhone(user.phone || ''))
   )
 
   useEffect(() => {
@@ -63,14 +72,25 @@ export default function App() {
   function tryLogin() {
     const v = value.trim()
     if (!v) return
-    if (!canLoginManual(v)) {
-      showToast('Вход по номеру доступен только тестовым пользователям. Откройте мини-приложение из Telegram.')
+    if (LOCKDOWN && !isAllowed(v)) {
+      showToast('Доступ к приложению сейчас закрыт.')
       return
     }
     loginWithId(v)
   }
 
   if (loading) return <div style={st.wrap}>Загрузка...</div>
+
+  if (accessDenied) {
+    return (
+      <div style={{ ...st.wrap, textAlign: 'center', paddingTop: 60 }}>
+        <style>{GLOBAL_CSS}</style>
+        <Toaster />
+        <h2 style={{ ...st.h2, fontSize: 22, marginBottom: 8 }}>Доступ закрыт</h2>
+        <p style={st.p}>Приложение сейчас доступно ограниченному кругу пользователей. Попробуйте позже или обратитесь к администратору.</p>
+      </div>
+    )
+  }
 
   if (!user) {
     return (
@@ -79,9 +99,13 @@ export default function App() {
         <Toaster />
         <h2 style={st.h2}>Вход</h2>
         <p style={st.p}>{error}</p>
-        <input style={st.input} value={value} onChange={(e) => setValue(e.target.value)} placeholder="Телефон тестового пользователя" />
+        <input style={st.input} value={value} onChange={(e) => setValue(e.target.value)} placeholder="Телефон" />
         <button style={st.button} onClick={tryLogin}>Войти</button>
-        <p style={{ ...st.p, marginTop: 12 }}>Работаете из Telegram? Мини-приложение определит вас автоматически — вводить ничего не нужно.</p>
+        {LOCKDOWN && (
+          <p style={{ ...st.p, marginTop: 12, fontSize: 13 }}>
+            Сейчас приложение работает в закрытом режиме. Вход возможен только для разрешённых пользователей.
+          </p>
+        )}
       </div>
     )
   }
