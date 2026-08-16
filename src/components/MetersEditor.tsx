@@ -32,7 +32,10 @@ export function MetersEditor({ objId }: { objId: string }) {
     const { data: t } = await supabase.from('meter_types').select('*')
     setTypes(t || [])
     const { data: r } = await supabase.from('object_meters').select('*').eq('object_id', objId)
-    setRows(r || [])
+    const codeOfL = (row: any) => ((t || []).find((x: any) => x.id === row.meter_type_id) || {}).code || ''
+    const g = (c: string) => c === 'water_cold' ? 0 : c === 'water_hot' ? 1 : c.startsWith('electricity') ? 2 : c === 'heat' ? 3 : c === 'gas' ? 4 : 5
+    const sorted = (r || []).slice().sort((a: any, b: any) => g(codeOfL(a)) - g(codeOfL(b)) || String(a.id).localeCompare(String(b.id)))
+    setRows(sorted)
   }
 
   useEffect(() => {
