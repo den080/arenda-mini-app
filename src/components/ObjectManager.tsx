@@ -1,650 +1,439 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useTelegramUser } from '../hooks/useTelegramUser'
-import CashNegotiation from '../components/CashNegotiation'
-import MetersEditor from '../components/MetersEditor'
-import ReadingsReview from '../components/ReadingsReview'
-import Chat from '../components/Chat'
-import { ObjectAdd, ObjectEdit } from '../components/ObjectManager'
-import { ensureNextPayment } from '../lib/nextPayment'
-import { BottomNav, Modal, PromptNumber, Progress, showToast } from '../components/ui'
-import { T, C } from '../theme'
-import type { Object as PropertyObject, Contract, NotificationLog, User } from '../types/database'
+import { T } from '../theme'
+import { ConfirmDelete, showToast } from './ui'
 
-interface ObjectWithStatus extends PropertyObject {
-  status: 'paid' | 'overdue' | 'pending' | 'no_contract' | 'no_payment'
-  statusDetail?: string
-  statusColor?: string
-  amount: number
-  baseAmount?: number
-  penaltyAmount?: number
-  utilitiesAmount?: number
-  paymentId: string | null
-  contract?: Contract & { tenant?: User }
-  payment?: any
-  daysOverdue?: number
-  waitingForReadings?: boolean
-  needUtilitiesReminder?: boolean
-  readingsMode?: string
-  frozenTotal?: number
-  frozenRows?: any[]
-  deferredRequests?: any[]
-  hasConfirmedCashMeeting?: boolean
+const BANKS = ['Сбербанк', 'Т-Банк (Тинькофф)', 'ВТБ', 'Альфа-Банк', 'Газпромбанк', 'Россельхозбанк', 'Райффайзен Банк', 'Росбанк', 'Открытие', 'Совкомбанк', 'МТС Банк', 'Промсвязьбанк', 'Почта Банк', 'Дом.РФ', 'ЮниКредит Банк']
+
+interface PayDetail { type: 'card' | 'sbp'; bank: string; number: string }
+
+const S: Record<string, React.CSSProperties> = {
+  lab: { fontSize: 13, color: '#8e8e93', margin: '12px 0 2px' },
+  inp: { width: '100%', padding: '8px 0', border: 'none', borderBottom: '1px solid rgba(60,60,67,0.12)', background: 'transparent', fontSize: 15, color: '#1d1d1f', outline: 'none', borderRadius: 0, boxSizing: 'border-box' },
+  sel: { width: '100%', padding: '9px 10px', border: 'none', background: 'rgba(120,120,128,0.08)', borderRadius: 8, fontSize: 14, color: '#1d1d1f', outline: 'none', boxSizing: 'border-box' },
+  blue: { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: 4 },
+  red: { border: 'none', background: 'transparent', color: '#ff3b30', fontSize: 15, cursor: 'pointer', padding: 4 },
+  btnRow: { display: 'flex', gap: 16, alignItems: 'center', margin: '14px 0 8px' },
 }
 
-function parseDate(d: any): Date {
-  const [y, m, dd] = String(d).slice(0, 10).split('-').map(Number)
-  return new Date(y, (m || 1) - 1, dd || 1)
+function normalizePhone(input: string): string {
+  let cleaned = input.replace(/[\s\-\(\)]/g, '')
+  if (cleaned.startsWith('8') && cleaned.length === 11) cleaned = '+7' + cleaned.slice(1)
+  if (!cleaned.startsWith('+')) cleaned = '+' + cleaned
+  return cleaned
 }
 
-const OBJ_TABS = [
-  { id: 'meters', l: 'Счётчики' },
-  { id: 'pay', l: 'Оплата' },
-  { id: 'contract', l: 'Договор' },
-  { id: 'chat', l: 'Чат' },
-]
-
-export function LandlordDashboard() {
-  const { user, loading: userLoading } = useTelegramUser()
-  const [objects, setObjects] = useState<ObjectWithStatus[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [notifications, setNotifications] = useState<NotificationLog[]>([])
-  const [utilInputs, setUtilInputs] = useState<Record<string, string>>({})
-  const [history, setHistory] = useState<any[]>([])
-  const [openId, setOpenId] = useState<string | null>(null)
-  const [tab, setTab] = useState('pay')
-  const [depModal, setDepModal] = useState<'add' | 'edit' | null>(null)
-  const [fz, setFz] = useState<{ id: string; zero: boolean } | null>(null)
-  const [fzAmount, setFzAmount] = useState('')
-  const [fzNote, setFzNote] = useState('')
-
-  useEffect(() => {
-    if (!user) return
-    async function fetchData() {
-      try {
-        const { data: notifData } = await supabase.from('notifications_log').select('*').eq('user_id', user!.id).order('sent_at', { ascending: false }).limit(5)
-        if (notifData) setNotifications(notifData)
-        const { data: objectsData } = await supabase.from('objects').select('*').eq('landlord_id', user!.id)
-        if (!objectsData) { setObjects([]); setHistory([]); setLoading(false); return }
-        const objectsWithStatus: ObjectWithStatus[] = []
-        const allHistory: any[] = []
-        const today = new Date()
-        const todayMid = new Date(today.getFullYear(), today.getMonth(), today.getDate())
-        const currentMonth = today.getMonth()
-        const currentYear = today.getFullYear()
-        for (const obj of objectsData) {
-          const { data: contract } = await supabase.from('contracts').select('*, tenant:users!tenant_id(full_name, phone)').eq('object_id', obj.id).eq('status', 'active').maybeSingle()
-          if (!contract) { objectsWithStatus.push({ ...obj, status: 'no_contract', amount: 0, paymentId: null, statusColor: '#888', statusDetail: 'Нет договора' }); continue }
-          const readingsMode = contract.readings_mode || 'manual'
-          const reminder = contract.reminder_days_before || 3
-          const { data: allPays } = await supabase.from('payments').select('*').eq('contract_id', contract.id).order('period', { ascending: false })
-          for (const p of allPays || []) allHistory.push({ ...p, objId: obj.id, address: obj.address })
-          const { data: dReq } = await supabase.from('deferred_requests').select('*').eq('contract_id', contract.id).eq('status', 'proposed')
-          const { data: fRows } = await supabase.from('frozen_penalties').select('*').eq('contract_id', contract.id).order('period', { ascending: true })
-          const frozenTotal = (fRows || []).reduce((s2: number, d: any) => s2 + Number(d.amount || 0), 0)
-          await ensureNextPayment(contract.id)
-          const openPays = (allPays || []).filter((p: any) => !p.confirmed_by_landlord)
-          const payment = openPays.length ? openPays[openPays.length - 1] : (allPays || [])[0]
-          if (!payment) { objectsWithStatus.push({ ...obj, status: 'no_payment', statusDetail: 'Платёж не создан', statusColor: '#a80', amount: contract.rent_amount, baseAmount: contract.rent_amount, penaltyAmount: 0, utilitiesAmount: 0, paymentId: null, contract, readingsMode, frozenTotal, frozenRows: fRows || [], deferredRequests: dReq || [] }); continue }
-          const { data: cashMeeting } = await supabase.from('cash_meetings').select('*').eq('contract_id', contract.id).eq('kind', 'meeting').eq('status', 'confirmed').order('created_at', { ascending: false }).limit(1).maybeSingle()
-          const dueMid = parseDate(payment.due_date)
-          const sd = contract.start_date ? parseDate(contract.start_date) : null
-          const isFirstMonth = !!sd && dueMid.getMonth() === sd.getMonth() && dueMid.getFullYear() === sd.getFullYear()
-          const isOverdue = todayMid > dueMid && !isFirstMonth
-          const daysUntilDue = Math.round((dueMid.getTime() - todayMid.getTime()) / 86400000)
-          const baseAmount = payment.base_amount || contract.rent_amount
-          const penaltyAmount = payment.penalty_amount || 0
-          const utilitiesAmount = Number(payment.utilities_amount || 0)
-          const paymentId = String(payment.id)
-          let waitingForReadings = false
-          if (readingsMode === 'manual' && contract.meter_deadline_day && today.getDate() > contract.meter_deadline_day) {
-            const { data: readingsData } = await supabase.from('meter_readings').select('*').eq('contract_id', contract.id).gte('submitted_at', new Date(currentYear, currentMonth, 1).toISOString()).lt('submitted_at', new Date(currentYear, currentMonth + 1, 1).toISOString())
-            if (!readingsData || readingsData.length === 0) waitingForReadings = true
-          }
-          const needUtilitiesReminder = !payment.confirmed_by_landlord && readingsMode !== 'self' && daysUntilDue >= 0 && daysUntilDue <= reminder && utilitiesAmount === 0
-          let status: 'paid' | 'overdue' | 'pending' = 'pending'
-          let statusDetail = ''
-          let statusColor = '#a80'
-          if (!payment.confirmed_by_landlord) {
-            if (isFirstMonth) { statusDetail = 'Первый месяц — ждёт оплаты'; statusColor = '#a80' }
-            else if (isOverdue) { status = 'overdue'; statusDetail = `Просрочка ${Math.round((todayMid.getTime() - dueMid.getTime()) / 86400000)} дн.`; statusColor = '#c00' }
-            else if (waitingForReadings) { statusDetail = 'Ждём показания'; statusColor = '#a80' }
-            else if (daysUntilDue === 0) { statusDetail = 'Сегодня последний день оплаты'; statusColor = '#a80' }
-            else if (daysUntilDue <= reminder) { statusDetail = `До оплаты ${daysUntilDue} дн.`; statusColor = '#a80' }
-            else { statusDetail = `До оплаты ${daysUntilDue} дн.`; statusColor = '#080' }
-          } else {
-            status = 'paid'
-            const periodDate = parseDate(payment.period)
-            const nextDue = new Date(periodDate.getFullYear(), periodDate.getMonth() + 1, contract.payment_day || 1)
-            const daysLeft = Math.round((nextDue.getTime() - todayMid.getTime()) / 86400000)
-            if (daysLeft < 0) { statusDetail = `Следующий платёж просрочен на ${-daysLeft} дн.`; statusColor = '#c00' }
-            else if (daysLeft === 0) { statusDetail = 'Следующая оплата: сегодня последний день'; statusColor = '#a80' }
-            else if (daysLeft <= reminder) { statusDetail = `${daysLeft} дн. до следующей оплаты`; statusColor = '#a80' }
-            else { statusDetail = `${daysLeft} дн. до следующей оплаты`; statusColor = '#080' }
-          }
-          objectsWithStatus.push({ ...obj, status, statusDetail, statusColor, amount: baseAmount + penaltyAmount + utilitiesAmount, baseAmount, penaltyAmount, utilitiesAmount, paymentId, contract, payment, daysOverdue: isOverdue ? Math.round((todayMid.getTime() - dueMid.getTime()) / 86400000) : undefined, waitingForReadings, needUtilitiesReminder, readingsMode, frozenTotal, frozenRows: fRows || [], deferredRequests: dReq || [], hasConfirmedCashMeeting: !!cashMeeting })
-        }
-        setHistory(allHistory)
-        const sortedObjects = objectsWithStatus.sort((a, b) => {
-          const order: Record<string, number> = { overdue: 0, pending: 1, no_payment: 1.5, paid: 2, no_contract: 3 }
-          const colorOrder = (o: ObjectWithStatus) => o.statusColor === '#c00' ? 0 : o.statusColor === '#a80' ? 1 : 2
-          const so = (order[a.status] ?? 9) - (order[b.status] ?? 9)
-          return so !== 0 ? so : colorOrder(a) - colorOrder(b)
-        })
-        setObjects(sortedObjects)
-      } catch (err) { setError(err instanceof Error ? err.message : 'Unknown error') } finally { setLoading(false) }
-    }
-    fetchData()
-    const onRefresh = () => fetchData()
-    window.addEventListener('rentflow-refresh', onRefresh)
-    const interval = setInterval(() => fetchData(), 30000)
-    return () => { window.removeEventListener('rentflow-refresh', onRefresh); clearInterval(interval) }
-  }, [user])
-
-  async function saveUtilities(paymentId: string, value: string) {
-    const { error } = await supabase.from('payments').update({ utilities_amount: Number(value) || 0 }).eq('id', paymentId)
-    if (error) showToast('Ошибка: ' + error.message); else { showToast('✅ Ресурсы добавлены к платежу'); window.dispatchEvent(new Event('rentflow-refresh')) }
+function formatPhoneInput(v: string): string {
+  const digits = (v || '').replace(/\D/g, '').slice(0, 11)
+  if (digits.length === 11 && (digits.startsWith('7') || digits.startsWith('8'))) {
+    const x = digits.slice(1)
+    let out = '+7'
+    if (x.length > 0) out += ' ' + x.slice(0, 3)
+    if (x.length > 3) out += ' ' + x.slice(3, 6)
+    if (x.length > 6) out += ' ' + x.slice(6, 8)
+    if (x.length > 8) out += ' ' + x.slice(8, 10)
+    return out
   }
+  return v
+}
 
-  function toISO(d: Date): string {
-    const m = String(d.getMonth() + 1).padStart(2, '0')
-    const dd = String(d.getDate()).padStart(2, '0')
-    return `${d.getFullYear()}-${m}-${dd}`
-  }
+function formatCardInput(v: string): string {
+  const d = (v || '').replace(/\D/g, '').slice(0, 16)
+  return d.replace(/(.{4})/g, '$1 ').trim()
+}
 
-  async function saveUtilitiesNext(value: string) {
-    if (!current?.payment) return
-    if (!current.payment.confirmed_by_landlord) {
-      await saveUtilities(current.payment.id, value)
-      return
-    }
-    const pd = parseDate(current.payment.period)
-    const nextPeriod = new Date(pd.getFullYear(), pd.getMonth() + 1, 1)
-    const due = new Date(nextPeriod.getFullYear(), nextPeriod.getMonth(), Number(contract?.payment_day) || 1)
-    const { error } = await supabase.from('payments').insert({
-      contract_id: contract!.id, period: toISO(nextPeriod), due_date: toISO(due),
-      base_amount: Number(contract!.rent_amount) || 0, penalty_amount: 0, utilities_amount: Number(value) || 0,
-    })
-    if (error) { showToast('Ошибка: ' + error.message); return }
-    showToast('✅ Счёт создан вместе с ресурсами')
-    window.dispatchEvent(new Event('rentflow-refresh'))
-  }
-
-  async function confirmSigning(paymentId: string) {
-    const { error } = await supabase.from('payments').update({ confirmed_by_landlord: true, confirmed_at: new Date().toISOString() }).eq('id', paymentId)
-    if (error) { showToast('Ошибка: ' + error.message); return }
-    showToast('✅ Первый месяц подтверждён')
-    const { data: pay } = await supabase.from('payments').select('*').eq('id', paymentId).maybeSingle()
-    if (pay) {
-      await ensureNextPayment(pay.contract_id)
-      const { data: con } = await supabase.from('contracts').select('*').eq('id', pay.contract_id).maybeSingle()
-      if (con) await supabase.from('notifications_log').insert({ user_id: con.tenant_id, type: 'payment_confirmed', related_id: pay.id, message: '🟢 Арендодатель подтвердил получение первого месяца и депозита при подписании', sent_at: new Date().toISOString() })
-    }
-    window.dispatchEvent(new Event('rentflow-refresh'))
-  }
-
-  async function doAddDeposit(amount: number) {
-    if (!contract) return
-    if (deposit <= 0) { showToast('Сначала укажите общую сумму депозита'); return }
-    if (isNaN(amount) || amount <= 0) { showToast('Некорректная сумма'); return }
-    const { error } = await supabase.from('contracts').update({ deposit_paid: Math.min(deposit, depositPaid + amount) }).eq('id', contract.id)
-    if (error) { showToast('Ошибка: ' + error.message); return }
-    showToast('✅ Платёж по депозиту внесён')
-    window.dispatchEvent(new Event('rentflow-refresh'))
-  }
-
-  async function doEditDeposit(v: number) {
-    if (!contract) return
-    if (isNaN(v) || v < 0) { showToast('Некорректное значение'); return }
-    const { error } = await supabase.from('contracts').update({ deposit_paid: Math.min(deposit, v) }).eq('id', contract.id)
-    if (error) { showToast('Ошибка: ' + error.message); return }
-    showToast('✅ Депозит обновлён')
-    window.dispatchEvent(new Event('rentflow-refresh'))
-  }
-
-  function openAdjust(id: string, zero: boolean) {
-    const row = (current?.frozenRows || []).find((f: any) => f.id === id)
-    setFzAmount(row ? String(row.amount) : '')
-    setFzNote('')
-    setFz({ id, zero })
-  }
-
-  async function confirmAdjust() {
-    if (!fz || !contract) return
-    const zero = fz.zero
-    const note = fzNote.trim()
-    if (zero && !note) { showToast('Обнуление требует причину'); return }
-    let newAmount = zero ? 0 : Number(fzAmount)
-    if (!zero && (isNaN(newAmount) || newAmount < 0)) { showToast('Некорректная сумма'); return }
-    if (!zero && !note) { showToast('Изменение требует примечание'); return }
-    const { error } = await supabase.from('frozen_penalties').update({
-      amount: newAmount, adjusted_at: new Date().toISOString(),
-      adjusted_note: zero ? `обнулено: ${note}` : `изменено на ${newAmount.toFixed(0)}: ${note}`,
-    }).eq('id', fz.id)
-    if (error) { showToast('Ошибка: ' + error.message); return }
-    await supabase.from('notifications_log').insert({ user_id: contract.tenant_id, type: 'deferred_confirmed', related_id: contract.id, message: zero ? '🧊 Замороженный штраф обнулён' : `🧊 Замороженный штраф изменён: теперь ${newAmount.toFixed(0)} ₽`, sent_at: new Date().toISOString() })
-    showToast('✅ Сохранено')
-    setFz(null)
-    window.dispatchEvent(new Event('rentflow-refresh'))
-  }
-
-  async function confirmDeferral(requestId: string, contractId: string, paymentId: string, amount: number, tenantId: string) {
-    const { data: pay } = await supabase.from('payments').select('*').eq('id', paymentId).maybeSingle()
-    const { error: e1 } = await supabase.from('frozen_penalties').insert({ contract_id: contractId, payment_id: paymentId, period: pay ? pay.period : null, amount, original_amount: amount, note: 'отсрочка штрафа подтверждена' })
-    if (e1) { showToast('Ошибка: ' + e1.message); return }
-    await supabase.from('deferred_requests').update({ status: 'confirmed' }).eq('id', requestId)
-    if (paymentId) {
-      const newPenalty = Math.max(0, Number(pay?.penalty_amount || 0) - amount)
-      await supabase.from('payments').update({ penalty_amount: newPenalty }).eq('id', paymentId)
-    }
-    await supabase.from('notifications_log').insert({ user_id: tenantId, type: 'deferred_confirmed', related_id: contractId, message: `🧊 Штраф ${Number(amount).toFixed(0)} ₽ заморожен и будет учтён в конце договора`, sent_at: new Date().toISOString() })
-    showToast('✅ Отсрочка подтверждена')
-    window.dispatchEvent(new Event('rentflow-refresh'))
-  }
-
-  async function freezePenalty(paymentId: string) {
-    const { data: pay } = await supabase.from('payments').select('*').eq('id', paymentId).maybeSingle()
-    if (!pay) return
-    const pen = Number(pay.penalty_amount || 0)
-    if (pen <= 0) { showToast('Нет штрафа для заморозки'); return }
-    const { error } = await supabase.from('frozen_penalties').insert({ contract_id: pay.contract_id, payment_id: pay.id, period: pay.period, amount: pen, original_amount: pen, note: 'штраф заморожен вручную' })
-    if (error) { showToast('Ошибка: ' + error.message); return }
-    await supabase.from('payments').update({ penalty_amount: 0 }).eq('id', paymentId)
-    const { data: con } = await supabase.from('contracts').select('*').eq('id', pay.contract_id).maybeSingle()
-    if (con) await supabase.from('notifications_log').insert({ user_id: con.tenant_id, type: 'deferred_confirmed', related_id: pay.id, message: `🧊 Штраф ${pen.toFixed(0)} ₽ заморожен и будет учтён в конце договора`, sent_at: new Date().toISOString() })
-    showToast('✅ Штраф заморожен')
-    window.dispatchEvent(new Event('rentflow-refresh'))
-  }
-
-  async function updatePaymentMethod(contractId: string, method: 'card' | 'cash' | 'both') {
-    const updateData: any = { payment_method: method }
-    if (method === 'cash') updateData.cash_slots = []
-    const { error } = await supabase.from('contracts').update(updateData).eq('id', contractId)
-    if (!error) {
-      showToast('✅ Способ оплаты обновлён')
-      setObjects(prev => prev.map(o => o.contract?.id === contractId ? { ...o, contract: { ...o.contract!, payment_method: method, cash_slots: method === 'cash' ? [] : o.contract!.cash_slots } } : o))
-    } else showToast('Ошибка: ' + error.message)
-  }
-
-  async function confirmChannel(paymentId: string, channel: 'card' | 'cash', close: boolean = false) {
-    const { data: pay } = await supabase.from('payments').select('*').eq('id', paymentId).maybeSingle()
-    if (!pay) { showToast('Платёж не найден'); return }
-    const { data: cashMeeting } = await supabase.from('cash_meetings').select('*').eq('contract_id', pay.contract_id).eq('kind', 'meeting').eq('status', 'confirmed').order('created_at', { ascending: false }).limit(1).maybeSingle()
-    const cardEngaged = !!pay.card_claimed
-    const update: any = {}
-    if (channel === 'card') { if (close) return; update.confirmed_card = true } else { if (close) update.cash_closed = true; else update.confirmed_cash = true }
-    const afterCard = channel === 'card' ? true : pay.confirmed_card
-    const afterCashConfirmed = channel === 'cash' && !close ? true : pay.confirmed_cash
-    const afterCashClosed = channel === 'cash' && close ? true : pay.cash_closed
-    const cashFinalClosed = afterCashClosed || afterCashConfirmed
-    const cardSatisfied = !cardEngaged || afterCard
-    const cashSatisfied = !(!!cashMeeting && !afterCashClosed) || cashFinalClosed
-    if (cardSatisfied && cashSatisfied) { update.confirmed_by_landlord = true; update.confirmed_at = new Date().toISOString() }
-    const { error: e1 } = await supabase.from('payments').update(update).eq('id', paymentId)
-    if (e1) { showToast('Ошибка: ' + e1.message); return }
-    showToast('✅ Подтверждено')
-    if (update.confirmed_by_landlord) await ensureNextPayment(pay.contract_id)
-    const { data: con } = await supabase.from('contracts').select('*').eq('id', pay.contract_id).maybeSingle()
-    if (con) {
-      const msg = channel === 'card' ? '🟢 Арендодатель подтвердил получение по безналу' : (close ? '⚪ Наличный канал закрыт' : '🟢 Арендодатель подтвердил получение наличных')
-      await supabase.from('notifications_log').insert({ user_id: con.tenant_id, type: 'payment_confirmed', related_id: pay.id, message: msg, sent_at: new Date().toISOString() })
-    }
-    window.dispatchEvent(new Event('rentflow-refresh'))
-  }
-  const getNotificationText = (type: string) => {
-    switch (type) {
-      case 'payment_claimed': return '✅ Арендатор сообщил об оплате'
-      case 'payment_confirmed': return '🟢 Арендодатель подтвердил оплату'
-      case 'meter_submitted': return '💦 Переданы новые показания'
-      case 'cash_proposed': return '💵 Предложено время встречи наличными'
-      case 'cash_confirmed': return '🤝 Время встречи наличными подтверждено'
-      case 'deferred_proposed': return '🙏 Арендатор попросил отсрочку штрафа'
-      case 'deferred_confirmed': return '🧊 Замороженный штраф обновлён'
-      default: return type
-    }
-  }
-
-  const iosBlue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: 4, flexShrink: 0 }
-  const iosRed: React.CSSProperties = { border: 'none', background: 'transparent', color: '#ff3b30', fontSize: 15, cursor: 'pointer', padding: 4, flexShrink: 0 }
-  const iosOk: React.CSSProperties = { color: '#1e7e34', fontSize: 14, fontWeight: 600 }
-  const iosMuted: React.CSSProperties = { color: '#8e8e93', fontSize: 14 }
-
-  const current = objects.find(o => o.id === openId) || null
-  const contract = current?.contract
-  const deposit = Number((contract as any)?.deposit_amount || 0)
-  const depositPaid = Number((contract as any)?.deposit_paid || 0)
-  const periodMid = current?.payment ? parseDate(current.payment.period) : null
-  const sd = (contract as any)?.start_date ? parseDate((contract as any).start_date) : null
-  const firstMonthPending = !!(contract && current?.payment && sd && periodMid && !current.payment.confirmed_by_landlord && periodMid.getFullYear() === sd.getFullYear() && periodMid.getMonth() === sd.getMonth())
-  const firstMonthCurrent = !!(contract && current?.payment && sd && periodMid && periodMid.getFullYear() === sd.getFullYear() && periodMid.getMonth() === sd.getMonth())
-  const openPay = current?.payment && !current.payment.confirmed_by_landlord ? current.payment : null
-  const lastConfirmedIsFirst = !!(contract && sd && current?.payment && current.payment.confirmed_by_landlord && periodMid && periodMid.getFullYear() === sd.getFullYear() && periodMid.getMonth() === sd.getMonth())
-  const showUtilities = !!(contract && current?.paymentId && current.readingsMode !== 'self' && (openPay ? !firstMonthCurrent : lastConfirmedIsFirst))
-  const tenantChoseCash = contract && (contract.payment_method === 'cash' || (contract.payment_method === 'both' && (contract as any).tenant_pay_method === 'cash'))
-  const objHistory = history.filter(h => h.objId === current?.id).slice(0, 10)
-
-  const payBadge = !!((current?.payment && !current.payment.confirmed_by_landlord) || firstMonthPending)
-  const metersBadge = !!current?.waitingForReadings
-
-  if (userLoading || loading) return <div style={T.page}>Загрузка…</div>
-  if (error) return <div style={T.page}><div style={T.card}>{error}</div></div>
-
-  if (!current) {
-    return (
-      <div style={{ ...T.page, paddingBottom: 40 }}>
-        <h1 style={T.h1}>Мои объекты</h1>
-        <div style={T.card}>
-          {objects.length === 0 && <div style={{ ...T.small, margin: '8px 0' }}>Пока нет объектов — добавьте первый.</div>}
-          {objects.map((o, i) => (
-            <div key={o.id}>
-              {i > 0 && <div style={{ height: 1, background: 'rgba(60,60,67,0.12)' }} />}
-              <button
-                onClick={() => { setOpenId(o.id); setTab('pay') }}
-                style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 52, border: 'none', background: 'transparent', cursor: 'pointer', padding: '8px 0', textAlign: 'left', boxSizing: 'border-box' }}
-              >
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f' }}>{o.address}</div>
-                  <div style={{ fontSize: 13, color: o.statusColor || '#8e8e93', marginTop: 2 }}>
-                    {o.statusDetail}{o.amount > 0 ? ` · ${o.amount.toFixed(0)} ₽` : ''}
-                  </div>
-                </div>
-                {Number((o.contract as any)?.deposit_amount || 0) > 0 && (
-                  <span style={{ fontSize: 12, color: '#8e8e93', flexShrink: 0 }}>депозит {Number((o.contract as any).deposit_paid || 0).toFixed(0)}/{Number((o.contract as any).deposit_amount).toFixed(0)}</span>
-                )}
-                <span style={{ color: '#c7c7cc', fontSize: 18 }}>›</span>
-              </button>
-            </div>
-          ))}
-        </div>
-
-        <ObjectAdd />
-
-        <div style={T.card}>
-          <div style={T.h2}>Уведомления</div>
-          {notifications.length === 0 ? (
-            <div style={{ ...T.small, margin: '8px 0' }}>Нет уведомлений</div>
-          ) : (
-            notifications.map(n => (
-              <div key={n.id} style={T.row}>
-                <span style={{ fontSize: 14 }}>{(n as any).message || getNotificationText(n.type)}</span>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-    )
-  }
-
+function DetailsEditor({ list, onChange }: { list: PayDetail[]; onChange: (v: PayDetail[]) => void }) {
   return (
-    <div style={{ ...T.page, paddingBottom: 90 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 0 8px' }}>
-        <button style={iosBlue} onClick={() => setOpenId(null)}>← Мои объекты</button>
-      </div>
-      <h1 style={{ ...T.h1, fontSize: 22 }}>{current.address}</h1>
-
-      {tab === 'meters' && (
-        <>
-          <div style={T.card}>
-            <div style={T.h2}>Счётчики объекта</div>
-            <MetersEditor objId={current.id} />
+    <div>
+      {list.map((d, i) => (
+        <div key={i} style={{ padding: '8px 0', borderBottom: '1px solid rgba(60,60,67,0.12)' }}>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <select value={d.type} onChange={e => { const v = [...list]; v[i] = { ...v[i], type: e.target.value as 'card' | 'sbp', number: '' }; onChange(v) }} style={{ ...S.sel, width: '45%' }}>
+              <option value="card">Карта банка</option>
+              <option value="sbp">СБП по телефону</option>
+            </select>
+            <select value={d.bank} onChange={e => { const v = [...list]; v[i] = { ...v[i], bank: e.target.value }; onChange(v) }} style={{ ...S.sel, flex: 1 }}>
+              {BANKS.map(b => <option key={b} value={b}>{b}</option>)}
+            </select>
           </div>
-          {current.readingsMode === 'manual' && contract && (
-            <div style={T.card}>
-              <div style={T.h2}>Показания за текущий месяц</div>
-              <ReadingsReview contractId={contract.id} tenantId={contract.tenant_id} />
-            </div>
-          )}
-        </>
-      )}
-
-      {tab === 'pay' && (
-        <>
-          {contract && (firstMonthPending || deposit > 0) && (
-            <div style={T.card}>
-              <div style={T.h2}>Первый месяц и депозит</div>
-              {firstMonthPending && (
-                <button style={T.btn} onClick={() => confirmSigning(current.paymentId!)}>Подтвердить: первый месяц и депозит получены</button>
-              )}
-              {deposit > 0 && (
-                <div style={{ padding: '8px 0' }}>
-                  <Progress value={depositPaid} max={deposit} />
-                  <div style={{ display: 'flex', gap: 16, marginTop: 8 }}>
-                    <button style={iosBlue} onClick={() => setDepModal('add')}>Внести</button>
-                    <button style={iosBlue} onClick={() => setDepModal('edit')}>Изменить</button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {contract && current.paymentId && !current.payment?.confirmed_by_landlord && (
-            <div style={T.card}>
-              <div style={T.h2}>Подтверждение оплаты</div>
-              <div style={T.row}>
-                <span>Безнал</span>
-                {current.payment?.confirmed_card
-                  ? <span style={iosOk}>получен</span>
-                  : current.payment?.card_claimed
-                    ? <button style={iosBlue} onClick={() => confirmChannel(current.paymentId!, 'card')}>Подтвердить</button>
-                    : <span style={iosMuted}>не заявлен</span>}
-              </div>
-              <div style={{ ...T.row, borderBottom: 'none' }}>
-                <span>Нал</span>
-                {current.payment?.confirmed_cash
-                  ? <span style={iosOk}>получен</span>
-                  : current.payment?.cash_closed
-                    ? <span style={iosMuted}>канал закрыт</span>
-                    : current.hasConfirmedCashMeeting
-                      ? (
-                        <span style={{ display: 'flex', gap: 14 }}>
-                          <button style={iosRed} onClick={() => confirmChannel(current.paymentId!, 'cash', true)}>закрыть</button>
-                          <button style={iosBlue} onClick={() => confirmChannel(current.paymentId!, 'cash')}>Подтвердить</button>
-                        </span>
-                      )
-                      : <span style={iosMuted}>не заявлен</span>}
-              </div>
-              {!current.payment?.card_claimed && !current.hasConfirmedCashMeeting && (
-                <button style={T.btn} onClick={() => confirmChannel(current.paymentId!, 'card')}>Подтвердить оплату полностью</button>
-              )}
-            </div>
-          )}
-
-          {showUtilities && (
-            <div style={T.card}>
-              <div style={T.h2}>Ресурсы по квитанции</div>
-              <div style={{ ...T.row, borderBottom: 'none' }}>
-                <input
-                  type="number"
-                  value={utilInputs[current.id] ?? String(current.utilitiesAmount || '')}
-                  onChange={(e) => setUtilInputs({ ...utilInputs, [current.id]: e.target.value })}
-                  placeholder="Сумма, ₽"
-                  style={{ flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'transparent', textAlign: 'right', fontSize: 15, color: '#1d1d1f', padding: 0 }}
-                  inputMode="numeric"
-                />
-                <button style={iosBlue} onClick={() => saveUtilitiesNext(utilInputs[current.id] ?? String(current.utilitiesAmount || 0))}>Включить в платёж</button>
-              </div>
-              <div style={T.tiny}>Добавляется к платежу отдельно, не растёт при просрочке и не входит в штрафы. Если следующего счёта ещё нет — он создаётся вместе с ресурсами.</div>
-            </div>
-          )}
-
-          {contract && (current.deferredRequests || []).length > 0 && (
-            <div style={T.card}>
-              <div style={T.h2}>Отсрочка штрафа</div>
-              {(current.deferredRequests || []).map((r: any) => (
-                <div key={r.id} style={T.row}>
-                  <span>Просьба отсрочить {Number(r.amount).toFixed(0)} ₽</span>
-                  <button style={iosBlue} onClick={() => confirmDeferral(r.id, contract.id, r.payment_id, Number(r.amount), contract.tenant_id)}>Подтвердить</button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {contract && (
-            <div style={T.card}>
-              <div style={T.h2}>Способ оплаты</div>
-              {[
-                { v: 'card', l: 'Безналичный расчёт' },
-                { v: 'cash', l: 'Наличные' },
-                { v: 'both', l: 'Оба способа' },
-              ].map((o, i) => (
-                <div key={o.v}>
-                  {i > 0 && <div style={{ height: 1, background: 'rgba(60,60,67,0.12)' }} />}
-                  <button
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', minHeight: 44, border: 'none', background: 'transparent', cursor: 'pointer', padding: '4px 0', fontSize: 15, color: '#1d1d1f' }}
-                    onClick={() => updatePaymentMethod(contract.id, o.v as any)}
-                  >
-                    {o.l}
-                    {contract.payment_method === o.v && <span style={{ color: '#0071e3', fontWeight: 600 }}>✓</span>}
-                  </button>
-                </div>
-              ))}
-              {contract.payment_method === 'both' && <div style={T.tiny}>Способ оплаты выбирает арендатор: карта или наличные.</div>}
-            </div>
-          )}
-
-          {contract && tenantChoseCash && (
-            <div>
-              <div style={{ fontSize: 13, color: '#8e8e93', margin: '14px 4px 6px', textTransform: 'uppercase', letterSpacing: 0.3 }}>Оплата наличными</div>
-              <CashNegotiation
-                contractId={contract.id}
-                myRole="landlord"
-                tenantId={contract.tenant_id}
-                landlordId={current.landlord_id}
-              />
-            </div>
-          )}
-
-          <div style={T.card}>
-            <div style={T.h2}>История платежей</div>
-            {objHistory.length === 0 ? (
-              <div style={{ ...T.small, margin: '8px 0' }}>Платежей пока нет</div>
-            ) : (
-              objHistory.map((h: any) => {
-                const late = h.confirmed_by_landlord && h.confirmed_at && new Date(h.confirmed_at) > parseDate(h.due_date)
-                const sum = Number(h.base_amount || 0) + Number(h.penalty_amount || 0) + Number(h.utilities_amount || 0)
-                return (
-                  <div key={h.id} style={T.row}>
-                    <span>{parseDate(h.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}</span>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 13, color: late ? '#ff3b30' : '#8e8e93' }}>{h.confirmed_by_landlord ? (late ? 'просрочка' : 'вовремя') : 'не подтверждён'}</span>
-                      <b>{sum.toFixed(0)} ₽</b>
-                    </span>
-                  </div>
-                )
-              })
-            )}
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 8 }}>
+            <input
+              value={d.number}
+              onChange={e => { const v = [...list]; v[i] = { ...v[i], number: d.type === 'card' ? formatCardInput(e.target.value) : formatPhoneInput(e.target.value) }; onChange(v) }}
+              placeholder={d.type === 'card' ? '0000 0000 0000 0000' : '+7 000 000 00-00'}
+              style={{ ...S.inp, flex: 1 }}
+              inputMode="numeric"
+            />
+            <button style={S.red} onClick={() => onChange(list.filter((_, x) => x !== i))}>удалить</button>
           </div>
-        </>
-      )}
-
-      {tab === 'contract' && contract && (
-        <>
-          <div style={T.card}>
-            <div style={T.h2}>Договор</div>
-            <div style={T.row}><span style={iosMuted}>Арендатор</span><b>{(contract as any).tenant?.full_name || '—'}</b></div>
-            {(contract as any).tenant?.phone && <div style={T.row}><span style={iosMuted}>Телефон</span><b>{(contract as any).tenant.phone}</b></div>}
-            {(contract as any).start_date && (contract as any).end_date && (
-              <div style={T.row}><span style={iosMuted}>Срок</span><b>{parseDate((contract as any).start_date).toLocaleDateString('ru-RU')} — {parseDate((contract as any).end_date).toLocaleDateString('ru-RU')}</b></div>
-            )}
-            <div style={T.row}><span style={iosMuted}>Аренда</span><b>{Number(contract.rent_amount).toFixed(0)} ₽/мес</b></div>
-            <div style={T.row}><span style={iosMuted}>Оплата</span><b>до {contract.payment_day} числа</b></div>
-            {deposit > 0 && (
-              <div style={{ padding: '8px 0 4px' }}>
-                <Progress value={depositPaid} max={deposit} />
-              </div>
-            )}
-          </div>
-
-          <div style={T.card}>
-            <div style={T.h2}>Замороженные штрафы</div>
-            {(current.penaltyAmount || 0) > 0 && !current.payment?.confirmed_by_landlord && (
-              <div style={{ padding: '6px 0' }}>
-                <button style={iosBlue} onClick={() => freezePenalty(current.paymentId!)}>Заморозить текущий штраф ({(current.penaltyAmount || 0).toFixed(0)} ₽)</button>
-              </div>
-            )}
-            {(current.frozenRows || []).length === 0 && <div style={{ ...T.small, margin: '8px 0' }}>Замороженных штрафов нет</div>}
-            {(current.frozenRows || []).map((f: any) => (
-              <div key={f.id} style={T.item}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 15 }}>
-                  <span>{f.period ? parseDate(f.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : 'без месяца'}</span>
-                  <b>{Number(f.amount).toFixed(0)} ₽</b>
-                </div>
-                {f.adjusted_note && <div style={T.tiny}>{f.adjusted_note}</div>}
-                <div style={{ display: 'flex', gap: 16, marginTop: 4 }}>
-                  <button style={iosBlue} onClick={() => openAdjust(f.id, false)}>изменить</button>
-                  <button style={iosRed} onClick={() => openAdjust(f.id, true)}>обнулить</button>
-                </div>
-              </div>
-            ))}
-            {!!current.frozenTotal && current.frozenTotal > 0 && (
-              deposit > 0
-                ? (deposit >= (current.frozenTotal || 0)
-                  ? <div style={T.small}>Будет удержано из депозита; остаток: {(deposit - (current.frozenTotal || 0)).toFixed(0)} ₽</div>
-                  : <div style={{ ...T.small, color: '#ff3b30' }}>Сверх депозита долг: {((current.frozenTotal || 0) - deposit).toFixed(0)} ₽</div>)
-                : <div style={{ ...T.small, color: '#ff3b30' }}>Долг арендатора (депозита нет)</div>
-            )}
-            <div style={T.tiny}>Записи не удаляются до конца договора; каждое изменение сохраняется с примечанием и датой.</div>
-          </div>
-
-          <ObjectEdit objectId={current.id} />
-        </>
-      )}
-
-      {tab === 'chat' && contract && (
-        <div style={T.card}>
-          <div style={T.h2}>Чат с арендатором</div>
-          <Chat contractId={contract.id} myId={user!.id} />
         </div>
-      )}
-
-      <div style={T.card}>
-        <div style={T.h2}>Уведомления</div>
-        {notifications.length === 0 ? (
-          <div style={{ ...T.small, margin: '8px 0' }}>Нет уведомлений</div>
-        ) : (
-          notifications.map(n => (
-            <div key={n.id} style={T.row}>
-              <span style={{ fontSize: 14 }}>{(n as any).message || getNotificationText(n.type)}</span>
-            </div>
-          ))
-        )}
+      ))}
+      <div style={{ padding: '10px 0' }}>
+        <button style={S.blue} onClick={() => onChange([...list, { type: 'sbp', bank: BANKS[0], number: '' }])}>+ Добавить способ оплаты</button>
       </div>
-
-      <BottomNav tabs={OBJ_TABS} tab={tab} setTab={setTab} badges={{ pay: payBadge, meters: metersBadge }} />
-
-      <PromptNumber
-        open={depModal === 'add'}
-        title="Взнос по депозиту"
-        label={`Внесено ${depositPaid.toFixed(0)} из ${deposit.toFixed(0)} ₽. Сумма взноса:`}
-        onClose={() => setDepModal(null)}
-        onSubmit={(n) => doAddDeposit(n)}
-      />
-      <PromptNumber
-        open={depModal === 'edit'}
-        title="Изменить «внесено»"
-        label={`Общая сумма депозита ${deposit.toFixed(0)} ₽. Новое значение «внесено»:`}
-        initial={String(depositPaid || 0)}
-        onClose={() => setDepModal(null)}
-        onSubmit={(n) => doEditDeposit(n)}
-      />
-
-      <Modal open={!!fz} title={fz?.zero ? 'Обнулить замороженный штраф' : 'Изменить замороженный штраф'} onClose={() => setFz(null)}>
-        {!fz?.zero && (
-          <>
-            <div style={{ fontSize: 14, marginBottom: 8 }}>Новая сумма, ₽</div>
-            <input value={fzAmount} onChange={(e) => setFzAmount(e.target.value)} inputMode="decimal" style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box', marginBottom: 12 }} />
-          </>
-        )}
-        <div style={{ fontSize: 14, marginBottom: 8 }}>{fz?.zero ? 'Причина обнуления (обязательно)' : 'Примечание к изменению (обязательно)'}</div>
-        <input value={fzNote} onChange={(e) => setFzNote(e.target.value)} placeholder="например: договорились с арендатором" style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box', marginBottom: 14 }} />
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }} onClick={confirmAdjust}>Сохранить</button>
-          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 15, cursor: 'pointer' }} onClick={() => setFz(null)}>Отмена</button>
-        </div>
-      </Modal>
     </div>
   )
 }
 
-export default LandlordDashboard
+function ReadingsModeSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <select style={S.sel} value={value} onChange={(e) => onChange(e.target.value)}>
+      <option value="manual">Арендатор подаёт показания вручную</option>
+      <option value="auto">Показания передаются автоматически</option>
+      <option value="self">Арендатор платит полную квитанцию сам</option>
+    </select>
+  )
+}
+
+function validPhone(phoneInput: string): boolean {
+  if (!phoneInput) return true
+  return phoneInput.replace(/\D/g, '').length === 11
+}
+
+async function findCounterparty(phoneInput: string): Promise<any | null> {
+  const digits = phoneInput.replace(/\D/g, '')
+  if (!digits) return null
+  const { data: users } = await supabase.from('users').select('*').not('phone', 'is', null)
+  return (users || []).find((u: any) => (u.phone || '').replace(/\D/g, '').slice(-10) === digits.slice(-10)) || null
+}
+
+const methodOptions = (
+  <>
+    <option value="card">Безналичный расчёт</option>
+    <option value="cash">Наличные</option>
+    <option value="both">Наличный и безналичный расчёт</option>
+  </>
+)
+
+export function ObjectAdd() {
+  const { user } = useTelegramUser()
+  const [showForm, setShowForm] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  const [address, setAddress] = useState('')
+  const [notes, setNotes] = useState('')
+  const [name, setName] = useState('')
+  const [phone, setPhone] = useState('')
+  const [startDate, setStartDate] = useState('')
+  const [rent, setRent] = useState('')
+  const [deposit, setDeposit] = useState('')
+  const [paymentDay, setPaymentDay] = useState('')
+  const [endDate, setEndDate] = useState('')
+  const [meterDay, setMeterDay] = useState('15')
+  const [readingsMode, setReadingsMode] = useState('manual')
+  const [method, setMethod] = useState('both')
+  const [penPay, setPenPay] = useState('500')
+  const [penRead, setPenRead] = useState('100')
+  const [remind, setRemind] = useState('3')
+  const [details, setDetails] = useState<PayDetail[]>([])
+  const [addDetailsErr, setAddDetailsErr] = useState<string | null>(null)
+
+  async function save() {
+    if (saving) return
+    if (!user || !address) { showToast('Укажите адрес объекта'); return }
+    if (!validPhone(phone)) { showToast('Проверьте номер телефона арендатора'); return }
+    if (method !== 'cash' && details.length === 0) { setAddDetailsErr('Добавьте хотя бы один способ безналичной оплаты'); return }
+    setAddDetailsErr(null)
+    setSaving(true)
+    try {
+      const normalizedPhone = phone ? normalizePhone(phone) : null
+      let counter: any = null
+      if (normalizedPhone) counter = await findCounterparty(normalizedPhone)
+      if (!counter) {
+        const { data, error } = await supabase.from('users').insert({ full_name: name || 'Арендатор', phone: normalizedPhone, role: 'tenant' }).select().single()
+        if (error) { showToast('Ошибка арендатора: ' + error.message); return }
+        counter = data
+      } else if (name) {
+        await supabase.from('users').update({ full_name: name }).eq('id', counter.id)
+      }
+      const { data: obj, error: objErr } = await supabase.from('objects').insert({ landlord_id: user.id, address, notes: notes || null }).select().single()
+      if (objErr) { showToast('Ошибка: ' + objErr.message); return }
+      const firstCard = details.find(d => d.type === 'card')
+      const startISO = startDate || new Date().toISOString().slice(0, 10)
+      const { data: contract, error: conErr } = await supabase.from('contracts').insert({
+        object_id: obj.id, tenant_id: counter.id,
+        rent_amount: Number(rent) || 0,
+        deposit_amount: Number(deposit) || 0,
+        payment_day: Number(paymentDay) || 1,
+        meter_deadline_day: Number(meterDay) || 15,
+        readings_mode: readingsMode,
+        start_date: startISO,
+        end_date: endDate || null,
+        payment_method: method,
+        card_number: firstCard ? firstCard.number : null,
+        payment_details: details,
+        reminder_days_before: Number(remind) || 3,
+        status: 'active',
+      }).select().single()
+      if (conErr) { showToast('Ошибка: ' + conErr.message); return }
+      await supabase.from('penalty_rules').insert([
+        { contract_id: contract.id, violation_type: 'payment_overdue', rate: Number(penPay) || 500, rate_unit: 'per_day_rub', starts_after_days: 0 },
+        { contract_id: contract.id, violation_type: 'readings_overdue', rate: Number(penRead) || 100, rate_unit: 'per_day_rub', starts_after_days: 0 },
+      ])
+      const now = new Date()
+      const payDay = Number(paymentDay) || 1
+      let due = new Date(now.getFullYear(), now.getMonth(), payDay)
+      const todayMid = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      if (due < todayMid) due = new Date(now.getFullYear(), now.getMonth() + 1, payDay)
+      const period = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10)
+      await supabase.from('payments').insert({
+        contract_id: contract.id, period, due_date: due.toISOString().slice(0, 10),
+        base_amount: Number(rent) || 0, penalty_amount: 0, utilities_amount: 0,
+      })
+      showToast('✅ Объект, договор и первый платёж сохранены')
+      setShowForm(false)
+      setAddress(''); setNotes(''); setName(''); setPhone(''); setRent(''); setDeposit(''); setStartDate(''); setPaymentDay(''); setMeterDay('15'); setDetails([]); setReadingsMode('manual'); setMethod('both')
+      window.dispatchEvent(new Event('rentflow-refresh'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div style={T.card}>
+      {!showForm ? (
+        <div style={{ ...T.row, borderBottom: 'none' }}>
+          <span style={{ fontSize: 15 }}>Новый объект</span>
+          <button style={S.blue} onClick={() => setShowForm(true)}>Добавить объект</button>
+        </div>
+      ) : (
+        <div>
+          <div style={{ ...T.row, borderBottom: 'none', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 15, fontWeight: 600 }}>Новый объект</span>
+            <button style={S.blue} onClick={() => setShowForm(false)}>Свернуть</button>
+          </div>
+          <div style={S.lab}>Адрес объекта *</div>
+          <input style={S.inp} value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Квартира, дом, гараж, коммерция" />
+          <div style={S.lab}>Заметка</div>
+          <input style={S.inp} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Необязательно" />
+          <div style={S.lab}>Арендатор (имя)</div>
+          <input style={S.inp} value={name} onChange={(e) => setName(e.target.value)} placeholder="Имя" />
+          <div style={S.lab}>Телефон арендатора</div>
+          <input style={S.inp} value={phone} onChange={(e) => setPhone(formatPhoneInput(e.target.value))} placeholder="+7 905 000-00-00" inputMode="tel" />
+          <div style={S.lab}>Начало договора</div>
+          <input style={S.inp} type="date" value={startDate} onChange={(e) => { const v = e.target.value; setStartDate(v); const d = Number(v.slice(8, 10)); if (d >= 1 && d <= 31) setPaymentDay(String(d)) }} />
+          <div style={S.lab}>Сумма аренды, руб</div>
+          <input style={S.inp} value={rent} onChange={(e) => setRent(e.target.value)} placeholder="85000" inputMode="numeric" />
+          <div style={S.lab}>Залоговый депозит, руб</div>
+          <input style={S.inp} value={deposit} onChange={(e) => setDeposit(e.target.value)} placeholder="Например: 85000" inputMode="numeric" />
+          <div style={S.lab}>День платежа (число месяца)</div>
+          <input style={S.inp} value={paymentDay} onChange={(e) => setPaymentDay(e.target.value)} placeholder="1" inputMode="numeric" />
+          <div style={S.lab}>Режим показаний счётчиков</div>
+          <ReadingsModeSelect value={readingsMode} onChange={setReadingsMode} />
+          {readingsMode === 'manual' && (
+            <div>
+              <div style={S.lab}>Крайний день подачи показаний</div>
+              <input style={S.inp} value={meterDay} onChange={(e) => setMeterDay(e.target.value)} placeholder="15" inputMode="numeric" />
+            </div>
+          )}
+          <div style={S.lab}>Окончание договора</div>
+          <input style={S.inp} type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+          <div style={S.lab}>Способ оплаты</div>
+          <select style={S.sel} value={method} onChange={(e) => setMethod(e.target.value)}>{methodOptions}</select>
+          {method !== 'cash' && (
+            <div>
+              <div style={S.lab}>Способы оплаты (карты банков и СБП) *</div>
+              <DetailsEditor list={details} onChange={(v) => { setDetails(v); if (v.length > 0) setAddDetailsErr(null) }} />
+              {addDetailsErr && <div style={T.noteRed}>{addDetailsErr}</div>}
+            </div>
+          )}
+          <div style={S.lab}>Штраф за просрочку оплаты, руб/день</div>
+          <input style={S.inp} value={penPay} onChange={(e) => setPenPay(e.target.value)} placeholder="500" inputMode="numeric" />
+          {readingsMode === 'manual' && (
+            <div>
+              <div style={S.lab}>Штраф за просрочку показаний, руб/день</div>
+              <input style={S.inp} value={penRead} onChange={(e) => setPenRead(e.target.value)} placeholder="100" inputMode="numeric" />
+            </div>
+          )}
+          <div style={S.lab}>Напоминать за сколько дней до срока</div>
+          <input style={S.inp} value={remind} onChange={(e) => setRemind(e.target.value)} placeholder="3" inputMode="numeric" />
+          <button style={T.btn} onClick={save}>{saving ? 'Сохранение…' : 'Сохранить'}</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export function ObjectEdit({ objectId }: { objectId: string }) {
+  const [ready, setReady] = useState(false)
+  const [delOpen, setDelOpen] = useState(false)
+
+  const [editContractId, setEditContractId] = useState<string | null>(null)
+  const [editCounterId, setEditCounterId] = useState<string | null>(null)
+  const [eAddress, setEAddress] = useState('')
+  const [eNotes, setENotes] = useState('')
+  const [eName, setEName] = useState('')
+  const [ePhone, setEPhone] = useState('')
+  const [eStartDate, setEStartDate] = useState('')
+  const [eRent, setERent] = useState('')
+  const [eDeposit, setEDeposit] = useState('')
+  const [ePaymentDay, setEPaymentDay] = useState('')
+  const [eMeterDay, setEMeterDay] = useState('15')
+  const [eReadingsMode, setEReadingsMode] = useState('manual')
+  const [eEndDate, setEEndDate] = useState('')
+  const [eMethod, setEMethod] = useState('both')
+  const [ePenPay, setEPenPay] = useState('')
+  const [ePenRead, setEPenRead] = useState('')
+  const [eRemind, setERemind] = useState('')
+  const [eDetails, setEDetails] = useState<PayDetail[]>([])
+  const [editDetailsErr, setEditDetailsErr] = useState<string | null>(null)
+
+  useEffect(() => {
+    (async () => {
+      const { data: o } = await supabase.from('objects').select('*').eq('id', objectId).maybeSingle()
+      if (!o) return
+      setEAddress(o.address || '')
+      setENotes(o.notes || '')
+      const { data: contract } = await supabase.from('contracts').select('*').eq('object_id', objectId).eq('status', 'active').maybeSingle()
+      if (contract) {
+        setEditContractId(contract.id)
+        setEStartDate(contract.start_date || '')
+        setERent(String(contract.rent_amount ?? ''))
+        setEDeposit(String(contract.deposit_amount ?? ''))
+        setEPaymentDay(String(contract.payment_day ?? ''))
+        setEMeterDay(String(contract.meter_deadline_day || 15))
+        setEReadingsMode(contract.readings_mode || 'manual')
+        setEEndDate(contract.end_date || '')
+        setEMethod(contract.payment_method || 'both')
+        setERemind(String(contract.reminder_days_before ?? ''))
+        setEDetails((contract.payment_details as PayDetail[]) || [])
+        setEditCounterId(contract.tenant_id)
+        const { data: counter } = await supabase.from('users').select('*').eq('id', contract.tenant_id).maybeSingle()
+        setEName(counter?.full_name || '')
+        setEPhone(counter?.phone || '')
+        const { data: rules } = await supabase.from('penalty_rules').select('*').eq('contract_id', contract.id)
+        const rp = (rules || []).find((r: any) => r.violation_type === 'payment_overdue')
+        const rr = (rules || []).find((r: any) => r.violation_type === 'readings_overdue')
+        setEPenPay(rp ? String(rp.rate) : '')
+        setEPenRead(rr ? String(rr.rate) : '')
+      }
+      setReady(true)
+    })()
+  }, [objectId])
+
+  async function saveEdit() {
+    if (!validPhone(ePhone)) { showToast('Проверьте номер телефона арендатора'); return }
+    if (eMethod !== 'cash' && eDetails.length === 0) { setEditDetailsErr('Добавьте хотя бы один способ безналичной оплаты'); return }
+    setEditDetailsErr(null)
+    const { error: oe } = await supabase.from('objects').update({ address: eAddress, notes: eNotes || null }).eq('id', objectId)
+    if (oe) { showToast('Ошибка: ' + oe.message); return }
+    if (editContractId) {
+      const firstCard = eDetails.find(d => d.type === 'card')
+      const { error: ce } = await supabase.from('contracts').update({
+        rent_amount: Number(eRent) || 0,
+        deposit_amount: Number(eDeposit) || 0,
+        payment_day: Number(ePaymentDay) || 1,
+        meter_deadline_day: Number(eMeterDay) || 15,
+        readings_mode: eReadingsMode,
+        start_date: eStartDate || null,
+        end_date: eEndDate || null,
+        payment_method: eMethod,
+        card_number: firstCard ? firstCard.number : null,
+        payment_details: eDetails,
+        reminder_days_before: Number(eRemind) || 3,
+      }).eq('id', editContractId)
+      if (ce) { showToast('Ошибка: ' + ce.message); return }
+      const rules: Array<['payment_overdue' | 'readings_overdue', number]> = [
+        ['payment_overdue', Number(ePenPay) || 500],
+        ['readings_overdue', Number(ePenRead) || 100],
+      ]
+      for (const [vt, rate] of rules) {
+        const { data: ex } = await supabase.from('penalty_rules').select('id').eq('contract_id', editContractId).eq('violation_type', vt).limit(1)
+        if (ex && ex.length) await supabase.from('penalty_rules').update({ rate }).eq('id', ex[0].id)
+        else await supabase.from('penalty_rules').insert({ contract_id: editContractId, violation_type: vt, rate, rate_unit: 'per_day_rub', starts_after_days: 0 })
+      }
+      if (editCounterId) {
+        await supabase.from('users').update({ full_name: eName || 'Арендатор', phone: ePhone ? normalizePhone(ePhone) : null }).eq('id', editCounterId)
+      }
+    }
+    showToast('✅ Изменения сохранены')
+    window.dispatchEvent(new Event('rentflow-refresh'))
+  }
+
+  async function doRemove() {
+    const { data: contracts } = await supabase.from('contracts').select('id').eq('object_id', objectId)
+    const ids = (contracts || []).map((c: any) => c.id)
+    if (ids.length) {
+      await supabase.from('meter_readings').delete().in('contract_id', ids)
+      await supabase.from('payments').delete().in('contract_id', ids)
+      await supabase.from('penalty_rules').delete().in('contract_id', ids)
+      await supabase.from('cash_meetings').delete().in('contract_id', ids)
+      await supabase.from('deferred_requests').delete().in('contract_id', ids)
+      await supabase.from('deferred_debts').delete().in('contract_id', ids)
+      await supabase.from('frozen_penalties').delete().in('contract_id', ids)
+      await supabase.from('contracts').delete().in('id', ids)
+    }
+    await supabase.from('object_meters').delete().eq('object_id', objectId)
+    const { error } = await supabase.from('objects').delete().eq('id', objectId)
+    if (error) { showToast('Ошибка: ' + error.message); return }
+    showToast('Объект удалён')
+    window.dispatchEvent(new Event('rentflow-refresh'))
+  }
+
+  if (!ready) return null
+
+  return (
+    <div style={T.card}>
+      <div style={T.h2}>Объект и договор</div>
+      <div style={S.lab}>Адрес</div>
+      <input style={S.inp} value={eAddress} onChange={(e) => setEAddress(e.target.value)} />
+      <div style={S.lab}>Заметка</div>
+      <input style={S.inp} value={eNotes} onChange={(e) => setENotes(e.target.value)} />
+      <div style={S.lab}>Арендатор (имя)</div>
+      <input style={S.inp} value={eName} onChange={(e) => setEName(e.target.value)} />
+      <div style={S.lab}>Телефон арендатора</div>
+      <input style={S.inp} value={ePhone} onChange={(e) => setEPhone(formatPhoneInput(e.target.value))} inputMode="tel" />
+      <div style={S.lab}>Начало договора</div>
+      <input style={S.inp} type="date" value={eStartDate} onChange={(e) => { const v = e.target.value; setEStartDate(v); const d = Number(v.slice(8, 10)); if (d >= 1 && d <= 31) setEPaymentDay(String(d)) }} />
+      <div style={S.lab}>Сумма аренды, руб</div>
+      <input style={S.inp} value={eRent} onChange={(e) => setERent(e.target.value)} inputMode="numeric" />
+      <div style={S.lab}>Залоговый депозит, руб</div>
+      <input style={S.inp} value={eDeposit} onChange={(e) => setEDeposit(e.target.value)} inputMode="numeric" />
+      <div style={S.lab}>День платежа</div>
+      <input style={S.inp} value={ePaymentDay} onChange={(e) => setEPaymentDay(e.target.value)} inputMode="numeric" />
+      <div style={S.lab}>Режим показаний счётчиков</div>
+      <ReadingsModeSelect value={eReadingsMode} onChange={setEReadingsMode} />
+      {eReadingsMode === 'manual' && (
+        <div>
+          <div style={S.lab}>Крайний день показаний</div>
+          <input style={S.inp} value={eMeterDay} onChange={(e) => setEMeterDay(e.target.value)} inputMode="numeric" />
+        </div>
+      )}
+      <div style={S.lab}>Окончание договора</div>
+      <input style={S.inp} type="date" value={eEndDate} onChange={(e) => setEEndDate(e.target.value)} />
+      <div style={S.lab}>Способ оплаты</div>
+      <select style={S.sel} value={eMethod} onChange={(e) => setEMethod(e.target.value)}>{methodOptions}</select>
+      {eMethod !== 'cash' && (
+        <div>
+          <div style={S.lab}>Способы оплаты (карты банков и СБП) *</div>
+          <DetailsEditor list={eDetails} onChange={(v) => { setEDetails(v); if (v.length > 0) setEditDetailsErr(null) }} />
+          {editDetailsErr && <div style={T.noteRed}>{editDetailsErr}</div>}
+        </div>
+      )}
+      <div style={S.lab}>Штраф за просрочку оплаты, руб/день</div>
+      <input style={S.inp} value={ePenPay} onChange={(e) => setEPenPay(e.target.value)} inputMode="numeric" />
+      {eReadingsMode === 'manual' && (
+        <div>
+          <div style={S.lab}>Штраф за просрочку показаний, руб/день</div>
+          <input style={S.inp} value={ePenRead} onChange={(e) => setEPenRead(e.target.value)} inputMode="numeric" />
+        </div>
+      )}
+      <div style={S.lab}>Напоминать за сколько дней</div>
+      <input style={S.inp} value={eRemind} onChange={(e) => setERemind(e.target.value)} inputMode="numeric" />
+      <div style={S.btnRow}>
+        <button style={S.blue} onClick={saveEdit}>Сохранить</button>
+        <button style={S.red} onClick={() => setDelOpen(true)}>Удалить объект</button>
+      </div>
+
+      <ConfirmDelete
+        open={delOpen}
+        text="Объект, договор, платежи и вся история будут удалены безвозвратно."
+        onClose={() => setDelOpen(false)}
+        onConfirm={doRemove}
+      />
+    </div>
+  )
+}
+
+export default ObjectAdd
