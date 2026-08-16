@@ -37,6 +37,12 @@ function parseDate(d: any): Date {
   return new Date(y, (m || 1) - 1, dd || 1)
 }
 
+function isFirstPeriod(period: any, sd: Date | null): boolean {
+  if (!sd) return false
+  const p = parseDate(period)
+  return p.getMonth() === sd.getMonth() && p.getFullYear() === sd.getFullYear()
+}
+
 const OBJ_TABS = [
   { id: 'pay', l: 'Оплата' },
   { id: 'meters', l: 'Счётчики' },
@@ -90,8 +96,8 @@ export function LandlordDashboard() {
           const { data: cashMeeting } = await supabase.from('cash_meetings').select('*').eq('contract_id', contract.id).eq('kind', 'meeting').eq('status', 'confirmed').order('created_at', { ascending: false }).limit(1).maybeSingle()
           const dueMid = parseDate(payment.due_date)
           const sd = contract.start_date ? parseDate(contract.start_date) : null
-          const isFirstMonth = !!sd && dueMid.getMonth() === sd.getMonth() && dueMid.getFullYear() === sd.getFullYear()
-          const isOverdue = todayMid > dueMid && !isFirstMonth && (!sd || dueMid >= sd)
+          const firstMonth = isFirstPeriod(payment.period, sd)
+          const isOverdue = todayMid > dueMid && !firstMonth && (!sd || dueMid >= sd)
           const daysUntilDue = Math.round((dueMid.getTime() - todayMid.getTime()) / 86400000)
           const baseAmount = payment.base_amount || contract.rent_amount
           const penaltyAmount = payment.penalty_amount || 0
@@ -107,7 +113,7 @@ export function LandlordDashboard() {
           let statusDetail = ''
           let statusColor = '#a80'
           if (!payment.confirmed_by_landlord) {
-            if (isFirstMonth) { statusDetail = 'Первый месяц — ждёт оплаты'; statusColor = '#a80' }
+            if (firstMonth) { statusDetail = 'Первый месяц — ждёт оплаты'; statusColor = '#a80' }
             else if (isOverdue) { status = 'overdue'; statusDetail = `Просрочка ${Math.round((todayMid.getTime() - dueMid.getTime()) / 86400000)} дн.`; statusColor = '#c00' }
             else if (waitingForReadings) { statusDetail = 'Ждём показания'; statusColor = '#a80' }
             else if (daysUntilDue === 0) { statusDetail = 'Сегодня последний день оплаты'; statusColor = '#a80' }
@@ -324,10 +330,10 @@ export function LandlordDashboard() {
   const depositPaid = Number((contract as any)?.deposit_paid || 0)
   const periodMid = current?.payment ? parseDate(current.payment.period) : null
   const sd = (contract as any)?.start_date ? parseDate((contract as any).start_date) : null
-  const firstMonthPending = !!(contract && current?.payment && sd && periodMid && !current.payment.confirmed_by_landlord && periodMid.getFullYear() === sd.getFullYear() && periodMid.getMonth() === sd.getMonth())
-  const firstMonthCurrent = !!(contract && current?.payment && sd && periodMid && periodMid.getFullYear() === sd.getFullYear() && periodMid.getMonth() === sd.getMonth())
+  const firstMonthPending = !!(contract && current?.payment && !current.payment.confirmed_by_landlord && isFirstPeriod(current.payment.period, sd))
+  const firstMonthCurrent = !!(contract && current?.payment && isFirstPeriod(current.payment.period, sd))
   const openPay = current?.payment && !current.payment.confirmed_by_landlord ? current.payment : null
-  const lastConfirmedIsFirst = !!(contract && sd && current?.payment && current.payment.confirmed_by_landlord && periodMid && periodMid.getFullYear() === sd.getFullYear() && periodMid.getMonth() === sd.getMonth())
+  const lastConfirmedIsFirst = !!(contract && current?.payment && current.payment.confirmed_by_landlord && isFirstPeriod(current.payment.period, sd))
   const showUtilities = !!(contract && current?.paymentId && current.readingsMode !== 'self' && (openPay ? !firstMonthCurrent : lastConfirmedIsFirst))
   const tenantChoseCash = contract && (contract.payment_method === 'cash' || (contract.payment_method === 'both' && (contract as any).tenant_pay_method === 'cash'))
   const objHistory = history.filter(h => h.objId === current?.id).slice(0, 10)
@@ -483,11 +489,12 @@ export function LandlordDashboard() {
               <div style={{ ...T.small, margin: '8px 0' }}>Платежей пока нет</div>
             ) : (
               objHistory.map((h: any) => {
-                const late = h.confirmed_by_landlord && h.confirmed_at && new Date(h.confirmed_at) > parseDate(h.due_date) && !(sd && parseDate(h.due_date) < sd)
+                const firstP = isFirstPeriod(h.period, sd)
+                const late = !firstP && h.confirmed_by_landlord && h.confirmed_at && new Date(h.confirmed_at) > parseDate(h.due_date) && !(sd && parseDate(h.due_date) < sd)
                 const sum = Number(h.base_amount || 0) + Number(h.penalty_amount || 0) + Number(h.utilities_amount || 0)
                 return (
                   <div key={h.id} style={T.row}>
-                    <span>{parseDate(h.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}</span>
+                    <span>{parseDate(h.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}{firstP ? ' · первый месяц' : ''}</span>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={{ fontSize: 13, color: late ? '#ff3b30' : '#8e8e93' }}>{h.confirmed_by_landlord ? (late ? 'просрочка' : 'вовремя') : 'не подтверждён'}</span>
                       <b>{sum.toFixed(0)} ₽</b>
