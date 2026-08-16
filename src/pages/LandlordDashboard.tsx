@@ -294,7 +294,7 @@ export function LandlordDashboard() {
     if (update.confirmed_by_landlord) await ensureNextPayment(pay.contract_id)
     const { data: con } = await supabase.from('contracts').select('*').eq('id', pay.contract_id).maybeSingle()
     if (con) {
-      const msg = channel === 'card' ? '🟢 Арендодатель подтвердил получение по безналу' : (close ? '⚪ Наличный канал закрыт' : '🟢 Арендодатель подтвердил получение наличных')
+      const msg = channel === 'card' ? '🟢 Арендодатель подтвердил безналичную оплату' : (close ? '⚪ Наличный расчёт завершён' : '🟢 Арендодатель подтвердил оплату наличными')
       await supabase.from('notifications_log').insert({ user_id: con.tenant_id, type: 'payment_confirmed', related_id: pay.id, message: msg, sent_at: new Date().toISOString() })
     }
     window.dispatchEvent(new Event('rentflow-refresh'))
@@ -401,30 +401,30 @@ export function LandlordDashboard() {
             <div style={T.card}>
               <div style={T.h2}>Подтверждение оплаты</div>
               <div style={T.row}>
-                <span>Безнал</span>
+                <span>Безналичная оплата</span>
                 {current.payment?.confirmed_card
-                  ? <span style={iosOk}>получен</span>
+                  ? <span style={iosOk}>получена</span>
                   : current.payment?.card_claimed
                     ? <button style={iosBlue} onClick={() => confirmChannel(current.paymentId!, 'card')}>Подтвердить</button>
-                    : <span style={iosMuted}>не заявлен</span>}
+                    : <span style={iosMuted}>не заявлена</span>}
               </div>
               <div style={{ ...T.row, borderBottom: 'none' }}>
-                <span>Нал</span>
+                <span>Оплата наличными</span>
                 {current.payment?.confirmed_cash
-                  ? <span style={iosOk}>получен</span>
+                  ? <span style={iosOk}>получена</span>
                   : current.payment?.cash_closed
-                    ? <span style={iosMuted}>канал закрыт</span>
+                    ? <span style={iosMuted}>расчёт завершён</span>
                     : current.hasConfirmedCashMeeting
                       ? (
                         <span style={{ display: 'flex', gap: 14 }}>
-                          <button style={iosRed} onClick={() => confirmChannel(current.paymentId!, 'cash', true)}>закрыть</button>
+                          <button style={iosRed} onClick={() => confirmChannel(current.paymentId!, 'cash', true)}>завершить</button>
                           <button style={iosBlue} onClick={() => confirmChannel(current.paymentId!, 'cash')}>Подтвердить</button>
                         </span>
                       )
-                      : <span style={iosMuted}>не заявлен</span>}
+                      : <span style={iosMuted}>не заявлена</span>}
               </div>
               {!current.payment?.card_claimed && !current.hasConfirmedCashMeeting && (
-                <button style={T.btn} onClick={() => confirmChannel(current.paymentId!, 'card')}>Подтвердить оплату полностью</button>
+                <button style={T.btn} onClick={() => confirmChannel(current.paymentId!, 'card')}>Подтвердить получение оплаты</button>
               )}
             </div>
           )}
