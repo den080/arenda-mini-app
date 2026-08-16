@@ -103,7 +103,10 @@ export function TenantDashboard() {
         <h1 style={T.h1}>Моя аренда</h1>
         {notifCard}
         {contracts.length === 0 ? (
-          <div style={T.card}>🤝 У вас пока нет активной аренды. Попросите арендодателя добавить объект и указать ваш номер телефона в договоре — после этого аренда появится здесь.</div>
+                    <div style={{ ...T.card, padding: '28px 20px', textAlign: 'center' }}>
+            <div style={{ fontSize: 17, fontWeight: 600, color: '#1d1d1f', marginBottom: 6 }}>Пока нет активной аренды</div>
+            <div style={{ fontSize: 14, color: '#8e8e93', lineHeight: 1.45 }}>Попросите арендодателя добавить объект и указать ваш номер телефона в договоре — аренда появится здесь автоматически.</div>
+          </div>
         ) : (
           <div style={T.card}>
             {contracts.map((c, i) => (
