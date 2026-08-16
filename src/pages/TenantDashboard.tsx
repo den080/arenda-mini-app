@@ -159,12 +159,18 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
     const { data: landlord } = await supabase.from('users').select('*').eq('id', obj?.landlord_id).maybeSingle()
     await ensureNextPayment(contract.id)
     const { data: payments } = await supabase.from('payments').select('*').eq('contract_id', contract.id).order('period', { ascending: false })
-    const { data: meters } = await supabase.from('object_meters').select('*').eq('object_id', contract.object_id).eq('is_active', true)
+    const { data: metersRaw } = await supabase.from('object_meters').select('*').eq('object_id', contract.object_id).eq('is_active', true)
     const { data: meterTypes } = await supabase.from('meter_types').select('*')
+    const g = (c: string) => c === 'water_cold' ? 0 : c === 'water_hot' ? 1 : c.startsWith('electricity') ? 2 : c === 'heat' ? 3 : c === 'gas' ? 4 : 5
+    const meters = (metersRaw || []).slice().sort((a: any, b: any) => {
+      const ca = (meterTypes || []).find((x: any) => x.id === a.meter_type_id)?.code || ''
+      const cb = (meterTypes || []).find((x: any) => x.id === b.meter_type_id)?.code || ''
+      return g(ca) - g(cb) || String(a.label || '').localeCompare(String(b.label || ''))
+    })
     const { data: penaltyRules } = await supabase.from('penalty_rules').select('*').eq('contract_id', contract.id)
     const { data: frozenRows } = await supabase.from('frozen_penalties').select('*').eq('contract_id', contract.id).order('period', { ascending: true })
     const { data: deferredReqs } = await supabase.from('deferred_requests').select('*').eq('contract_id', contract.id).order('created_at', { ascending: false }).limit(1)
-    const ids = (meters || []).map((m: any) => m.id)
+    const ids = meters.map((m: any) => m.id)
     const readingsByMeter: Record<string, any[]> = {}
     if (ids.length) {
       const { data: rd } = await supabase
@@ -176,7 +182,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
         readingsByMeter[r.object_meter_id].push(r)
       }
     }
-    setData({ obj, landlord, payments: payments || [], meters: meters || [], meterTypes: meterTypes || [], penaltyRules: penaltyRules || [], frozenRows: frozenRows || [], deferredReqs: deferredReqs || [], readingsByMeter })
+    setData({ obj, landlord, payments: payments || [], meters, meterTypes: meterTypes || [], penaltyRules: penaltyRules || [], frozenRows: frozenRows || [], deferredReqs: deferredReqs || [], readingsByMeter })
   }
 
   useEffect(() => {
