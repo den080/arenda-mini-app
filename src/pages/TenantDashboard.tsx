@@ -368,7 +368,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
 
             {effectiveMethod === 'card' && details.length > 0 && !payment?.confirmed_by_landlord && (
               payment.card_claimed ? (
-                <div style={T.note}>Безнал заявлен: ждёт подтверждения арендодателем</div>
+                <div style={T.note}>Безналичная оплата отмечена: ожидает подтверждения арендодателем</div>
               ) : (
                 <button onClick={claimPaid} style={T.btn}>Я оплатил</button>
               )
@@ -448,7 +448,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
               <div key={p.id} style={T.row}>
                 <span>{new Date(p.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}</span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 13, color: p.confirmed_by_landlord ? '#1e7e34' : '#b25000' }}>{p.confirmed_by_landlord ? 'оплачен' : 'ждёт'}</span>
+                  <span style={{ fontSize: 13, color: p.confirmed_by_landlord ? '#1e7e34' : '#b25000' }}>{p.confirmed_by_landlord ? 'оплачен' : 'ожидает'}</span>
                   <b>{(Number(p.base_amount) + Number(p.penalty_amount || 0) + Number(p.utilities_amount || 0)).toFixed(0)} ₽</b>
                 </span>
               </div>
@@ -498,7 +498,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
                       </div>
                     )}
                     {open && hist.slice(0, 10).map((r: any) => (
-                      <div key={r.id} style={T.tiny}>{r.value} · подано {new Date(r.submitted_at).toLocaleDateString('ru-RU')} · {r.status === 'confirmed' ? 'подтверждены' : r.status === 'incomplete' ? 'не полностью' : 'ждут'}</div>
+                      <div key={r.id} style={T.tiny}>{r.value} · подано {new Date(r.submitted_at).toLocaleDateString('ru-RU')} · {r.status === 'confirmed' ? 'подтверждены' : r.status === 'incomplete' ? 'не полностью' : 'ожидают'}</div>
                     ))}
                   </div>
                 )
@@ -518,7 +518,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
           {readingsMode === 'self' && (
             <div style={T.card}>
               <div style={T.h2}>Показания счётчиков</div>
-              <div style={{ ...T.small, margin: '8px 0' }}>Вы платите полную квитанцию сами — показания подавать не нужно.</div>
+              <div style={{ ...T.small, margin: '8px 0' }}>Вы оплачиваете полную квитанцию самостоятельно — показания подавать не нужно.</div>
             </div>
           )}
         </>
@@ -564,7 +564,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
                 ? (deposit >= frozenTotal
                   ? <div style={T.small}>Будет удержано из депозита; остаток депозита: {(deposit - frozenTotal).toFixed(0)} ₽</div>
                   : <div style={{ ...T.small, color: '#ff3b30' }}>Сверх депозита долг: {(frozenTotal - deposit).toFixed(0)} ₽</div>)
-                : <div style={{ ...T.small, color: '#ff3b30' }}>Долг арендатора (депозита нет)</div>}
+                : <div style={{ ...T.small, color: '#ff3b30' }}>Задолженность арендатора (депозит не внесён)</div>}
               <div style={T.tiny}>Записи хранятся до конца договора</div>
             </div>
           )}
