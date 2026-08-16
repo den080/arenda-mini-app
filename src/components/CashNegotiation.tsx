@@ -111,8 +111,9 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
   const todayMid = new Date(today.getFullYear(), today.getMonth(), today.getDate())
   const D = pay ? parseDate(pay.due_date) : null
   const M = confirmed && confirmed.meeting_date ? parseDate(confirmed.meeting_date) : null
-  const effectiveCash = !!con && (con.payment_method === 'cash' || (con.payment_method === 'both' && con.tenant_pay_method === 'cash'))
-  const pauseActive = !!(pay && !pay.confirmed_by_landlord && effectiveCash && D && M && M >= D && M <= new Date(D.getFullYear(), D.getMonth(), D.getDate() + 3) && todayMid <= M)
+    const effectiveCash = !!con && (con.payment_method === 'cash' || (con.payment_method === 'both' && con.tenant_pay_method === 'cash'))
+  const cashWarning = !!(confirmed && pay && !pay.confirmed_by_landlord && effectiveCash)
+  const pauseActive = !!(cashWarning && D && M && M >= D && M <= new Date(D.getFullYear(), D.getMonth(), D.getDate() + 3) && todayMid <= M)
 
   async function notifyOther() {
     const other = myRole === 'landlord' ? tenantId : landlordId
