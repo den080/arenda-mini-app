@@ -111,7 +111,7 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
   const todayMid = new Date(today.getFullYear(), today.getMonth(), today.getDate())
   const D = pay ? parseDate(pay.due_date) : null
   const M = confirmed && confirmed.meeting_date ? parseDate(confirmed.meeting_date) : null
-    const effectiveCash = !!con && (con.payment_method === 'cash' || (con.payment_method === 'both' && con.tenant_pay_method === 'cash'))
+  const effectiveCash = !!con && (con.payment_method === 'cash' || (con.payment_method === 'both' && con.tenant_pay_method === 'cash'))
   const cashWarning = !!(confirmed && pay && !pay.confirmed_by_landlord && effectiveCash)
   const pauseActive = !!(cashWarning && D && M && M >= D && M <= new Date(D.getFullYear(), D.getMonth(), D.getDate() + 3) && todayMid <= M)
 
@@ -241,8 +241,12 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
         </div>
       )}
 
-      {pauseActive && D && (
-        <div style={T.note}>Штраф приостановлен до встречи {fmtDate(confirmed?.meeting_date)}: встреча в пределах 3 дней после срока оплаты. Если встреча пройдёт без оплаты — штраф начислится с {D.toLocaleDateString('ru-RU')} полностью. Переключение на безналичную оплату также вернёт штраф за пропущенные дни.</div>
+      {cashWarning && D && (
+        pauseActive ? (
+          <div style={T.note}>Штраф приостановлен до встречи {fmtDate(confirmed?.meeting_date)}: встреча в пределах 3 дней после срока оплаты. Если встреча пройдёт без оплаты — штраф начислится с {D.toLocaleDateString('ru-RU')} полностью. Переключение на безналичную оплату также вернёт штраф за пропущенные дни.</div>
+        ) : (
+          <div style={T.note}>Согласована встреча для оплаты наличными: {fmtDate(confirmed?.meeting_date)}. До получения оплаты штраф начисляется по обычным правилам. Переключение на безналичную оплату не отменяет начисленный штраф за пропущенные дни.</div>
+        )
       )}
 
       {resched && !firstMonthActive && (
