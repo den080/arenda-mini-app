@@ -91,7 +91,7 @@ export function LandlordDashboard() {
           const dueMid = parseDate(payment.due_date)
           const sd = contract.start_date ? parseDate(contract.start_date) : null
           const isFirstMonth = !!sd && dueMid.getMonth() === sd.getMonth() && dueMid.getFullYear() === sd.getFullYear()
-          const isOverdue = todayMid > dueMid && !isFirstMonth
+          const isOverdue = todayMid > dueMid && !isFirstMonth && (!sd || dueMid >= sd)
           const daysUntilDue = Math.round((dueMid.getTime() - todayMid.getTime()) / 86400000)
           const baseAmount = payment.base_amount || contract.rent_amount
           const penaltyAmount = payment.penalty_amount || 0
@@ -397,7 +397,7 @@ export function LandlordDashboard() {
             </div>
           )}
 
-          {contract && current.paymentId && !current.payment?.confirmed_by_landlord && (
+          {contract && current.paymentId && !current.payment?.confirmed_by_landlord && !firstMonthPending && (
             <div style={T.card}>
               <div style={T.h2}>Подтверждение оплаты</div>
               <div style={T.row}>
@@ -483,7 +483,7 @@ export function LandlordDashboard() {
               <div style={{ ...T.small, margin: '8px 0' }}>Платежей пока нет</div>
             ) : (
               objHistory.map((h: any) => {
-                const late = h.confirmed_by_landlord && h.confirmed_at && new Date(h.confirmed_at) > parseDate(h.due_date)
+                const late = h.confirmed_by_landlord && h.confirmed_at && new Date(h.confirmed_at) > parseDate(h.due_date) && !(sd && parseDate(h.due_date) < sd)
                 const sum = Number(h.base_amount || 0) + Number(h.penalty_amount || 0) + Number(h.utilities_amount || 0)
                 return (
                   <div key={h.id} style={T.row}>
