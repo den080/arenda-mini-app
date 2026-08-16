@@ -109,7 +109,7 @@ export function Chat({ contractId, myId }: { contractId: string; myId: string })
       const { error } = await supabase.from('messages').insert({
         contract_id: contractId,
         sender_id: myId,
-        body: text.trim() || null,
+        body: text.trim() || '',
         attachment_url: att?.url || null,
         attachment_name: att?.name || null,
         attachment_kind: att?.kind || null,
