@@ -86,25 +86,22 @@ export function TenantDashboard() {
 
   const current = contracts.find(c => c.id === openId) || null
 
-  const notifCard = (
+  const notifCard = notifications.length > 0 ? (
     <div style={T.card}>
       <div style={T.h2}>Уведомления</div>
-      {notifications.length === 0 ? (
-        <div style={{ ...T.small, margin: '8px 0' }}>Нет уведомлений</div>
-      ) : (
-        notifications.map(n => (
-          <div key={n.id} style={T.row}>
-            <span style={{ fontSize: 14 }}>{(n as any).message || getNotificationText(n.type)}</span>
-          </div>
-        ))
-      )}
+      {notifications.map(n => (
+        <div key={n.id} style={T.row}>
+          <span style={{ fontSize: 14 }}>{(n as any).message || getNotificationText(n.type)}</span>
+        </div>
+      ))}
     </div>
-  )
+  ) : null
 
   if (!current) {
     return (
       <div style={{ ...T.page, paddingBottom: 40 }}>
         <h1 style={T.h1}>Моя аренда</h1>
+        {notifCard}
         {contracts.length === 0 ? (
           <div style={T.card}>🤝 У вас пока нет активной аренды. Попросите арендодателя добавить объект и указать ваш номер телефона в договоре — после этого аренда появится здесь.</div>
         ) : (
@@ -126,7 +123,6 @@ export function TenantDashboard() {
             ))}
           </div>
         )}
-        {notifCard}
       </div>
     )
   }
@@ -141,7 +137,6 @@ export function TenantDashboard() {
       </div>
       <h1 style={{ ...T.h1, fontSize: 22 }}>{current._address}</h1>
       <TenantRental contract={current} tab={tab} setTab={setTab} />
-      {notifCard}
     </div>
   )
 }
