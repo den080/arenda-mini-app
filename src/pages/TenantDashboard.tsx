@@ -40,7 +40,7 @@ export function TenantDashboard() {
   const [contracts, setContracts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [notifications, setNotifications] = useState<Notification[]>([])
-  const [sel, setSel] = useState(0)
+  const [openId, setOpenId] = useState<string | null>(null)
   const [tab, setTab] = useState('overview')
 
   async function load() {
@@ -85,35 +85,64 @@ export function TenantDashboard() {
 
   if (userLoading || loading) return <div style={T.page}>Загрузка…</div>
 
-  const current = contracts[Math.min(sel, contracts.length - 1)]
+  const current = contracts.find(c => c.id === openId) || null
+
+  const notifCard = (
+    <div style={T.card}>
+      <div style={T.h2}>Уведомления</div>
+      {notifications.length === 0 ? (
+        <div style={{ ...T.small, margin: '8px 0' }}>Нет уведомлений</div>
+      ) : (
+        notifications.map(n => (
+          <div key={n.id} style={T.row}>
+            <span style={{ fontSize: 14 }}>{(n as any).message || getNotificationText(n.type)}</span>
+          </div>
+        ))
+      )}
+    </div>
+  )
+
+  if (!current) {
+    return (
+      <div style={{ ...T.page, paddingBottom: 40 }}>
+        <h1 style={T.h1}>Моя аренда</h1>
+        {contracts.length === 0 ? (
+          <div style={T.card}>🤝 У вас пока нет активной аренды. Попросите арендодателя добавить объект и указать ваш номер телефона в договоре — после этого аренда появится здесь.</div>
+        ) : (
+          <div style={T.card}>
+            {contracts.map((c, i) => (
+              <div key={c.id}>
+                {i > 0 && <div style={{ height: 1, background: 'rgba(60,60,67,0.12)' }} />}
+                <button
+                  onClick={() => { setOpenId(c.id); setTab('overview') }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 52, border: 'none', background: 'transparent', cursor: 'pointer', padding: '8px 0', textAlign: 'left', boxSizing: 'border-box' }}
+                >
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f' }}>{c._address}</div>
+                    <div style={{ fontSize: 13, color: '#8e8e93', marginTop: 2 }}>{Number(c.rent_amount).toFixed(0)} ₽/мес</div>
+                  </div>
+                  <span style={{ color: '#c7c7cc', fontSize: 18 }}>›</span>
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {notifCard}
+      </div>
+    )
+  }
 
   return (
     <div style={{ ...T.page, paddingBottom: 90 }}>
-      <h1 style={T.h1}>Моя аренда</h1>
-      {contracts.length === 0 ? (
-        <div style={T.card}>🤝 У вас пока нет активной аренды. Попросите арендодателя добавить объект и указать ваш номер телефона в договоре — после этого аренда появится здесь.</div>
-      ) : (
-        <>
-          {contracts.length > 1 && (
-            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', marginBottom: 10, paddingBottom: 4 }}>
-              {contracts.map((c, i) => (
-                <button key={c.id} style={{ ...(i === sel ? T.btnSmall : T.btnSecondary), whiteSpace: 'nowrap' }} onClick={() => setSel(i)}>{c._address}</button>
-              ))}
-            </div>
-          )}
-          <TenantRental contract={current} tab={tab} setTab={setTab} />
-        </>
-      )}
-      <div style={T.card}>
-        <div style={T.h2}>Уведомления</div>
-        {notifications.length === 0 ? (
-          <div style={T.small}>Нет уведомлений</div>
-        ) : (
-          notifications.map(n => (
-            <div key={n.id} style={{ padding: '8px 0', borderBottom: `1px solid ${C.line}`, fontSize: 14 }}>{(n as any).message || getNotificationText(n.type)}</div>
-          ))
-        )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 0 8px' }}>
+        <button
+          style={{ border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: 4 }}
+          onClick={() => setOpenId(null)}
+        >← Моя аренда</button>
       </div>
+      <h1 style={{ ...T.h1, fontSize: 22 }}>{current._address}</h1>
+      <TenantRental contract={current} tab={tab} setTab={setTab} />
+      {notifCard}
     </div>
   )
 }
@@ -261,6 +290,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
 
   const iosBlue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: 4, flexShrink: 0 }
   const iosMuted: React.CSSProperties = { color: '#8e8e93', fontSize: 14 }
+  const secHead: React.CSSProperties = { fontSize: 13, color: '#8e8e93', margin: '14px 4px 6px', textTransform: 'uppercase', letterSpacing: 0.3 }
   const rightInput: React.CSSProperties = { width: 110, border: 'none', outline: 'none', background: 'rgba(120,120,128,0.08)', borderRadius: 8, padding: '8px 10px', fontSize: 15, textAlign: 'right', color: '#1d1d1f', boxSizing: 'border-box' }
   const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProperties
 
@@ -320,9 +350,6 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
       {tab === 'overview' && (
         <>
           <div style={T.card}>
-            <div style={{ ...T.row, borderBottom: 'none', fontSize: 16, fontWeight: 600 }}>{obj?.address}</div>
-          </div>
-          <div style={T.card}>
             <div style={T.h2}>Счёт за {monthLabel}</div>
             <div style={T.row}><span style={iosMuted}>Итого</span><span style={T.total}>{total.toFixed(2)} ₽</span></div>
             {payment && <div style={{ ...T.row, borderBottom: 'none' }}><span style={iosMuted}>{firstMonth ? 'Оплата при подписании договора' : 'Оплатить до'}</span><b>{firstMonth ? '' : parseDate(payment.due_date).toLocaleDateString('ru-RU')}</b></div>}
@@ -335,21 +362,26 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
       {tab === 'meters' && (
         <>
           {readingsMode === 'manual' && meters.length > 0 && (
-            <div style={T.card}>
-              <div style={T.h2}>Передать показания</div>
-              <div style={T.small}>Срок подачи: до {contract.meter_deadline_day} числа</div>
-              {overallReading === 'incomplete' && <div style={T.noteRed}>Арендодатель отметил: показания получены не полностью — передайте недостающие ещё раз</div>}
-              {overallReading === 'confirmed' && <div style={T.noteGreen}>Показания получены арендодателем</div>}
-              {overallReading === 'proposed' && <div style={T.note}>Показания отправлены и ждут подтверждения арендодателем</div>}
+            <>
+              <div style={secHead}>Передать показания</div>
+              <div style={T.card}>
+                <div style={{ ...T.row, borderBottom: 'none' }}>
+                  <span style={iosMuted}>Срок подачи</span>
+                  <b>до {contract.meter_deadline_day} числа</b>
+                </div>
+                {overallReading === 'incomplete' && <div style={T.noteRed}>Арендодатель отметил: показания получены не полностью — передайте недостающие ещё раз</div>}
+                {overallReading === 'confirmed' && <div style={T.noteGreen}>Показания получены арендодателем</div>}
+                {overallReading === 'proposed' && <div style={T.note}>Показания отправлены и ждут подтверждения арендодателем</div>}
+              </div>
               {meters.map((m: any) => {
                 const t = meterTypes.find((x: any) => x.id === m.meter_type_id)
                 const hist = (readingsByMeter || {})[m.id] || []
                 const last = hist[0]
                 const open = !!historyOpen[m.id]
                 return (
-                  <div key={m.id} style={T.item}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span style={{ flex: 1, minWidth: 0, fontSize: 15 }}>{t?.label || 'Счётчик'}{m.label ? ` · № ${m.label}` : ''}</span>
+                  <div key={m.id} style={T.card}>
+                    <div style={{ ...T.row, borderBottom: 'none', alignItems: 'center' }}>
+                      <span style={{ fontSize: 15, fontWeight: 600 }}>{t?.label || 'Счётчик'}{m.label ? ` · № ${m.label}` : ''}</span>
                       <input
                         value={vals[m.id] || ''}
                         onChange={(e) => setVals({ ...vals, [m.id]: e.target.value })}
@@ -358,9 +390,12 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
                         inputMode="decimal"
                       />
                     </div>
-                    {m.initial_value != null && <div style={T.tiny}>стартовые показания: {Number(m.initial_value).toFixed(0)}</div>}
+                    {m.initial_value != null && <div style={{ ...T.tiny, margin: '0 0 6px' }}>стартовые показания: {Number(m.initial_value).toFixed(0)}</div>}
                     {last && (
-                      <div style={{ ...iosBlue, fontSize: 14, padding: '6px 0' }} onClick={() => setHistoryOpen({ ...historyOpen, [m.id]: !open })}>
+                      <div style={{ ...hair }} />
+                    )}
+                    {last && (
+                      <div style={{ ...iosBlue, fontSize: 14, padding: '8px 0 6px' }} onClick={() => setHistoryOpen({ ...historyOpen, [m.id]: !open })}>
                         последнее: {last.value} · подано {new Date(last.submitted_at).toLocaleDateString('ru-RU')} {open ? '▲' : '▼'}
                       </div>
                     )}
@@ -371,7 +406,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
                 )
               })}
               <button onClick={submitMeters} style={T.btn}>Передать показания</button>
-            </div>
+            </>
           )}
           {readingsMode === 'manual' && meters.length === 0 && (
             <div style={T.card}><div style={{ ...T.small, margin: '8px 0' }}>На объекте нет счётчиков с ручной подачей.</div></div>
@@ -422,7 +457,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
 
             {contract.payment_method === 'both' && (
               <div style={{ marginTop: 6 }}>
-                <div style={{ fontSize: 13, color: '#8e8e93', margin: '8px 0 4px', textTransform: 'uppercase', letterSpacing: 0.3 }}>Как вы будете платить</div>
+                <div style={secHead}>Как вы будете платить</div>
                 {[
                   { v: 'card', l: 'Безналичный расчёт' },
                   { v: 'cash', l: 'Наличные' },
@@ -443,7 +478,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
 
             {effectiveMethod === 'card' && (
               <div style={{ marginTop: 6 }}>
-                <div style={{ fontSize: 13, color: '#8e8e93', margin: '8px 0 4px', textTransform: 'uppercase', letterSpacing: 0.3 }}>Способы оплаты</div>
+                <div style={secHead}>Способы оплаты</div>
                 {details.length === 0 ? (
                   <div style={{ ...T.small, margin: '8px 0' }}>Арендодатель ещё не добавил реквизиты для безналичной оплаты.</div>
                 ) : (
@@ -464,7 +499,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
 
             {effectiveMethod === 'cash' && (
               <div style={{ marginTop: 6 }}>
-                <div style={{ fontSize: 13, color: '#8e8e93', margin: '8px 0 4px', textTransform: 'uppercase', letterSpacing: 0.3 }}>Оплата наличными</div>
+                <div style={secHead}>Оплата наличными</div>
                 <CashNegotiation
                   contractId={contract.id}
                   myRole="tenant"
