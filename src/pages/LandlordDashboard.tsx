@@ -5,10 +5,10 @@ import CashNegotiation from '../components/CashNegotiation'
 import MetersEditor from '../components/MetersEditor'
 import ReadingsReview from '../components/ReadingsReview'
 import Chat from '../components/Chat'
-import ObjectManager from '../components/ObjectManager'
+import { ObjectAdd, ObjectEdit } from '../components/ObjectManager'
 import { ensureNextPayment } from '../lib/nextPayment'
 import { BottomNav, Modal, PromptNumber, Progress, showToast } from '../components/ui'
-import { T, C } from '../theme'
+import { T } from '../theme'
 import type { Object as PropertyObject, Contract, NotificationLog, User } from '../types/database'
 
 interface ObjectWithStatus extends PropertyObject {
@@ -37,8 +37,7 @@ function parseDate(d: any): Date {
   return new Date(y, (m || 1) - 1, dd || 1)
 }
 
-const TABS = [
-  { id: 'overview', l: 'Обзор' },
+const OBJ_TABS = [
   { id: 'meters', l: 'Счётчики' },
   { id: 'pay', l: 'Оплата' },
   { id: 'contract', l: 'Договор' },
@@ -53,10 +52,8 @@ export function LandlordDashboard() {
   const [notifications, setNotifications] = useState<NotificationLog[]>([])
   const [utilInputs, setUtilInputs] = useState<Record<string, string>>({})
   const [history, setHistory] = useState<any[]>([])
-  const [statsPeriod, setStatsPeriod] = useState<'6m' | '12m'>('6m')
-  const [statsObject, setStatsObject] = useState<string>('all')
-  const [sel, setSel] = useState(0)
-  const [tab, setTab] = useState('overview')
+  const [openId, setOpenId] = useState<string | null>(null)
+  const [tab, setTab] = useState('pay')
   const [depModal, setDepModal] = useState<'add' | 'edit' | null>(null)
   const [fz, setFz] = useState<{ id: string; zero: boolean } | null>(null)
   const [fzAmount, setFzAmount] = useState('')
@@ -313,19 +310,7 @@ export function LandlordDashboard() {
   const iosOk: React.CSSProperties = { color: '#1e7e34', fontSize: 14, fontWeight: 600 }
   const iosMuted: React.CSSProperties = { color: '#8e8e93', fontSize: 14 }
 
-  const todayNow = new Date()
-  const todayMidNow = new Date(todayNow.getFullYear(), todayNow.getMonth(), todayNow.getDate())
-  const periodStart = statsPeriod === '6m' ? new Date(todayMidNow.getFullYear(), todayMidNow.getMonth() - 5, 1) : new Date(todayMidNow.getFullYear() - 1, todayMidNow.getMonth(), 1)
-  const filteredHistory = history.filter(h => (statsObject === 'all' || h.objId === statsObject) && parseDate(h.period) >= periodStart).sort((a, b) => parseDate(b.period).getTime() - parseDate(a.period).getTime())
-  const collected = filteredHistory.filter(h => h.confirmed_by_landlord).reduce((s: number, h: any) => s + Number(h.base_amount || 0) + Number(h.penalty_amount || 0) + Number(h.utilities_amount || 0), 0)
-  const penaltiesAccrued = filteredHistory.reduce((s: number, h: any) => s + Number(h.penalty_amount || 0), 0)
-  const confirmedCount = filteredHistory.filter(h => h.confirmed_by_landlord).length
-  const onTimeCount = filteredHistory.filter(h => h.confirmed_by_landlord && h.confirmed_at && new Date(h.confirmed_at) <= parseDate(h.due_date)).length
-  const onTimePct = confirmedCount > 0 ? Math.round((onTimeCount / confirmedCount) * 100) : 0
-  const overdueNow = objects.filter(o => o.statusColor === '#c00').length
-
-  const selIdx = Math.min(sel, Math.max(0, objects.length - 1))
-  const current = objects[selIdx]
+  const current = objects.find(o => o.id === openId) || null
   const contract = current?.contract
   const deposit = Number((contract as any)?.deposit_amount || 0)
   const depositPaid = Number((contract as any)?.deposit_paid || 0)
@@ -345,295 +330,272 @@ export function LandlordDashboard() {
   if (userLoading || loading) return <div style={T.page}>Загрузка…</div>
   if (error) return <div style={T.page}><div style={T.card}>{error}</div></div>
 
+  if (!current) {
+    return (
+      <div style={{ ...T.page, paddingBottom: 40 }}>
+        <h1 style={T.h1}>Мои объекты</h1>
+        <div style={T.card}>
+          {objects.length === 0 && <div style={{ ...T.small, margin: '8px 0' }}>Пока нет объектов — добавьте первый.</div>}
+          {objects.map((o, i) => (
+            <div key={o.id}>
+              {i > 0 && <div style={{ height: 1, background: 'rgba(60,60,67,0.12)' }} />}
+              <button
+                onClick={() => { setOpenId(o.id); setTab('pay') }}
+                style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 52, border: 'none', background: 'transparent', cursor: 'pointer', padding: '8px 0', textAlign: 'left', boxSizing: 'border-box' }}
+              >
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f' }}>{o.address}</div>
+                  <div style={{ fontSize: 13, color: o.statusColor || '#8e8e93', marginTop: 2 }}>
+                    {o.statusDetail}{o.amount > 0 ? ` · ${o.amount.toFixed(0)} ₽` : ''}
+                  </div>
+                </div>
+                {Number((o.contract as any)?.deposit_amount || 0) > 0 && (
+                  <span style={{ fontSize: 12, color: '#8e8e93', flexShrink: 0 }}>депозит {Number((o.contract as any).deposit_paid || 0).toFixed(0)}/{Number((o.contract as any).deposit_amount).toFixed(0)}</span>
+                )}
+                <span style={{ color: '#c7c7cc', fontSize: 18 }}>›</span>
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <ObjectAdd />
+
+        <div style={T.card}>
+          <div style={T.h2}>Уведомления</div>
+          {notifications.length === 0 ? (
+            <div style={{ ...T.small, margin: '8px 0' }}>Нет уведомлений</div>
+          ) : (
+            notifications.map(n => (
+              <div key={n.id} style={T.row}>
+                <span style={{ fontSize: 14 }}>{(n as any).message || getNotificationText(n.type)}</span>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div style={{ ...T.page, paddingBottom: 90 }}>
-      <h1 style={T.h1}>Мои объекты</h1>
-      {objects.length === 0 ? (
-        <div style={T.card}>Объектов нет — добавьте первый в блоке «Управление объектами» ниже.</div>
-      ) : (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 0 8px' }}>
+        <button style={iosBlue} onClick={() => setOpenId(null)}>← Мои объекты</button>
+      </div>
+      <h1 style={{ ...T.h1, fontSize: 22 }}>{current.address}</h1>
+
+      {tab === 'meters' && (
         <>
-          {objects.length > 1 && (
-            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', marginBottom: 10, paddingBottom: 4 }}>
-              {objects.map((o, i) => (
-                <button key={o.id} style={{ ...(i === selIdx ? T.btnSmall : T.btnSecondary), whiteSpace: 'nowrap' }} onClick={() => setSel(i)}>{o.address}</button>
+          <div style={T.card}>
+            <div style={T.h2}>Счётчики объекта</div>
+            <MetersEditor objId={current.id} />
+          </div>
+          {current.readingsMode === 'manual' && contract && (
+            <div style={T.card}>
+              <div style={T.h2}>Показания за текущий месяц</div>
+              <ReadingsReview contractId={contract.id} tenantId={contract.tenant_id} />
+            </div>
+          )}
+        </>
+      )}
+
+      {tab === 'pay' && (
+        <>
+          {contract && (firstMonthPending || deposit > 0) && (
+            <div style={T.card}>
+              <div style={T.h2}>Первый месяц и депозит</div>
+              {firstMonthPending && (
+                <button style={T.btn} onClick={() => confirmSigning(current.paymentId!)}>Подтвердить: первый месяц и депозит получены</button>
+              )}
+              {deposit > 0 && (
+                <div style={{ padding: '8px 0' }}>
+                  <Progress value={depositPaid} max={deposit} />
+                  <div style={{ display: 'flex', gap: 16, marginTop: 8 }}>
+                    <button style={iosBlue} onClick={() => setDepModal('add')}>Внести</button>
+                    <button style={iosBlue} onClick={() => setDepModal('edit')}>Изменить</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {contract && current.paymentId && !current.payment?.confirmed_by_landlord && (
+            <div style={T.card}>
+              <div style={T.h2}>Подтверждение оплаты</div>
+              <div style={T.row}>
+                <span>Безнал</span>
+                {current.payment?.confirmed_card
+                  ? <span style={iosOk}>получен</span>
+                  : current.payment?.card_claimed
+                    ? <button style={iosBlue} onClick={() => confirmChannel(current.paymentId!, 'card')}>Подтвердить</button>
+                    : <span style={iosMuted}>не заявлен</span>}
+              </div>
+              <div style={{ ...T.row, borderBottom: 'none' }}>
+                <span>Нал</span>
+                {current.payment?.confirmed_cash
+                  ? <span style={iosOk}>получен</span>
+                  : current.payment?.cash_closed
+                    ? <span style={iosMuted}>канал закрыт</span>
+                    : current.hasConfirmedCashMeeting
+                      ? (
+                        <span style={{ display: 'flex', gap: 14 }}>
+                          <button style={iosRed} onClick={() => confirmChannel(current.paymentId!, 'cash', true)}>закрыть</button>
+                          <button style={iosBlue} onClick={() => confirmChannel(current.paymentId!, 'cash')}>Подтвердить</button>
+                        </span>
+                      )
+                      : <span style={iosMuted}>не заявлен</span>}
+              </div>
+              {!current.payment?.card_claimed && !current.hasConfirmedCashMeeting && (
+                <button style={T.btn} onClick={() => confirmChannel(current.paymentId!, 'card')}>Подтвердить оплату полностью</button>
+              )}
+            </div>
+          )}
+
+          {showUtilities && (
+            <div style={T.card}>
+              <div style={T.h2}>Ресурсы по квитанции</div>
+              <div style={{ ...T.row, borderBottom: 'none' }}>
+                <input
+                  type="number"
+                  value={utilInputs[current.id] ?? String(current.utilitiesAmount || '')}
+                  onChange={(e) => setUtilInputs({ ...utilInputs, [current.id]: e.target.value })}
+                  placeholder="Сумма, ₽"
+                  style={{ flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'transparent', textAlign: 'right', fontSize: 15, color: '#1d1d1f', padding: 0 }}
+                  inputMode="numeric"
+                />
+                <button style={iosBlue} onClick={() => saveUtilitiesNext(utilInputs[current.id] ?? String(current.utilitiesAmount || 0))}>Включить в платёж</button>
+              </div>
+              <div style={T.tiny}>Добавляется к платежу отдельно, не растёт при просрочке и не входит в штрафы. Если следующего счёта ещё нет — он создаётся вместе с ресурсами.</div>
+            </div>
+          )}
+
+          {contract && (current.deferredRequests || []).length > 0 && (
+            <div style={T.card}>
+              <div style={T.h2}>Отсрочка штрафа</div>
+              {(current.deferredRequests || []).map((r: any) => (
+                <div key={r.id} style={T.row}>
+                  <span>Просьба отсрочить {Number(r.amount).toFixed(0)} ₽</span>
+                  <button style={iosBlue} onClick={() => confirmDeferral(r.id, contract.id, r.payment_id, Number(r.amount), contract.tenant_id)}>Подтвердить</button>
+                </div>
               ))}
             </div>
           )}
 
-          {tab === 'overview' && (
-            <>
-              <div style={T.card}>
-                {objects.map((o, i) => (
-                  <div key={o.id}>
-                    {i > 0 && <div style={{ height: 1, background: 'rgba(60,60,67,0.12)' }} />}
-                    <button
-                      onClick={() => setSel(i)}
-                      style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 52, border: 'none', background: 'transparent', cursor: 'pointer', padding: '8px 0', textAlign: 'left', boxSizing: 'border-box' }}
-                    >
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f' }}>{o.address}</div>
-                        <div style={{ fontSize: 13, color: o.statusColor || '#8e8e93', marginTop: 2 }}>
-                          {o.statusDetail}{o.amount > 0 ? ` · ${o.amount.toFixed(0)} ₽` : ''}
-                        </div>
-                      </div>
-                      {Number((o.contract as any)?.deposit_amount || 0) > 0 && (
-                        <span style={{ fontSize: 12, color: '#8e8e93', flexShrink: 0 }}>депозит {Number((o.contract as any).deposit_paid || 0).toFixed(0)}/{Number((o.contract as any).deposit_amount).toFixed(0)}</span>
-                      )}
-                      {i === selIdx && <span style={{ color: '#0071e3', fontSize: 17, fontWeight: 600, flexShrink: 0 }}>✓</span>}
-                    </button>
-                  </div>
-                ))}
-              </div>
-
-              <div style={T.card}>
-                <div style={T.h2}>Статистика</div>
-                <div style={L.filtersRow}>
-                  <select value={statsObject} onChange={(e) => setStatsObject(e.target.value)} style={{ ...T.select, flex: 1 }}>
-                    <option value="all">Все объекты</option>
-                    {objects.map(o => <option key={o.id} value={o.id}>{o.address}</option>)}
-                  </select>
-                  <select value={statsPeriod} onChange={(e) => setStatsPeriod(e.target.value as '6m' | '12m')} style={T.select}>
-                    <option value="6m">6 мес</option>
-                    <option value="12m">Год</option>
-                  </select>
-                </div>
-                <div style={L.statsGrid}>
-                  <div style={L.statTile}>
-                    <div style={L.statLabel}>Собрано</div>
-                    <div style={L.statValue}>{collected.toFixed(0)} ₽</div>
-                  </div>
-                  <div style={L.statTile}>
-                    <div style={L.statLabel}>Штрафов</div>
-                    <div style={{ ...L.statValue, color: C.red }}>{penaltiesAccrued.toFixed(0)} ₽</div>
-                  </div>
-                  <div style={L.statTile}>
-                    <div style={L.statLabel}>Вовремя</div>
-                    <div style={L.statValue}>{onTimePct}%</div>
-                  </div>
-                  <div style={L.statTile}>
-                    <div style={L.statLabel}>Просрочено</div>
-                    <div style={{ ...L.statValue, color: overdueNow > 0 ? C.red : C.green }}>{overdueNow}</div>
-                  </div>
-                </div>
-              </div>
-
-              <ObjectManager />
-            </>
-          )}
-
-          {tab === 'meters' && current && (
-            <>
-              <div style={T.card}>
-                <div style={T.h2}>Счётчики объекта</div>
-                <MetersEditor objId={current.id} />
-              </div>
-              {current.readingsMode === 'manual' && contract && (
-                <div style={T.card}>
-                  <div style={T.h2}>Показания за текущий месяц</div>
-                  <ReadingsReview contractId={contract.id} tenantId={contract.tenant_id} />
-                </div>
-              )}
-            </>
-          )}
-
-          {tab === 'pay' && current && (
-            <>
-              {contract && (firstMonthPending || deposit > 0) && (
-                <div style={T.card}>
-                  <div style={T.h2}>Первый месяц и депозит</div>
-                  {firstMonthPending && (
-                    <button style={T.btn} onClick={() => confirmSigning(current.paymentId!)}>Подтвердить: первый месяц и депозит получены</button>
-                  )}
-                  {deposit > 0 && (
-                    <div style={{ padding: '8px 0' }}>
-                      <Progress value={depositPaid} max={deposit} />
-                      <div style={{ display: 'flex', gap: 16, marginTop: 8 }}>
-                        <button style={iosBlue} onClick={() => setDepModal('add')}>Внести</button>
-                        <button style={iosBlue} onClick={() => setDepModal('edit')}>Изменить</button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {contract && current.paymentId && !current.payment?.confirmed_by_landlord && (
-                <div style={T.card}>
-                  <div style={T.h2}>Подтверждение оплаты</div>
-                  <div style={T.row}>
-                    <span>Безнал</span>
-                    {current.payment?.confirmed_card
-                      ? <span style={iosOk}>получен</span>
-                      : current.payment?.card_claimed
-                        ? <button style={iosBlue} onClick={() => confirmChannel(current.paymentId!, 'card')}>Подтвердить</button>
-                        : <span style={iosMuted}>не заявлен</span>}
-                  </div>
-                  <div style={{ ...T.row, borderBottom: 'none' }}>
-                    <span>Нал</span>
-                    {current.payment?.confirmed_cash
-                      ? <span style={iosOk}>получен</span>
-                      : current.payment?.cash_closed
-                        ? <span style={iosMuted}>канал закрыт</span>
-                        : current.hasConfirmedCashMeeting
-                          ? (
-                            <span style={{ display: 'flex', gap: 14 }}>
-                              <button style={iosRed} onClick={() => confirmChannel(current.paymentId!, 'cash', true)}>закрыть</button>
-                              <button style={iosBlue} onClick={() => confirmChannel(current.paymentId!, 'cash')}>Подтвердить</button>
-                            </span>
-                          )
-                          : <span style={iosMuted}>не заявлен</span>}
-                  </div>
-                  {!current.payment?.card_claimed && !current.hasConfirmedCashMeeting && (
-                    <button style={T.btn} onClick={() => confirmChannel(current.paymentId!, 'card')}>Подтвердить оплату полностью</button>
-                  )}
-                </div>
-              )}
-
-              {showUtilities && (
-                <div style={T.card}>
-                  <div style={T.h2}>Ресурсы по квитанции</div>
-                  <div style={{ ...T.row, borderBottom: 'none' }}>
-                    <input
-                      type="number"
-                      value={utilInputs[current.id] ?? String(current.utilitiesAmount || '')}
-                      onChange={(e) => setUtilInputs({ ...utilInputs, [current.id]: e.target.value })}
-                      placeholder="Сумма, ₽"
-                      style={{ flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'transparent', textAlign: 'right', fontSize: 15, color: '#1d1d1f', padding: 0 }}
-                      inputMode="numeric"
-                    />
-                    <button style={iosBlue} onClick={() => saveUtilitiesNext(utilInputs[current.id] ?? String(current.utilitiesAmount || 0))}>Включить в платёж</button>
-                  </div>
-                  <div style={T.tiny}>Добавляется к платежу отдельно, не растёт при просрочке и не входит в штрафы. Если следующего счёта ещё нет — он создаётся вместе с ресурсами.</div>
-                </div>
-              )}
-
-              {contract && (current.deferredRequests || []).length > 0 && (
-                <div style={T.card}>
-                  <div style={T.h2}>Отсрочка штрафа</div>
-                  {(current.deferredRequests || []).map((r: any) => (
-                    <div key={r.id} style={T.row}>
-                      <span>Просьба отсрочить {Number(r.amount).toFixed(0)} ₽</span>
-                      <button style={iosBlue} onClick={() => confirmDeferral(r.id, contract.id, r.payment_id, Number(r.amount), contract.tenant_id)}>Подтвердить</button>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {contract && (
-                <div style={T.card}>
-                  <div style={T.h2}>Способ оплаты</div>
-                  {[
-                    { v: 'card', l: 'Безналичный расчёт' },
-                    { v: 'cash', l: 'Наличные' },
-                    { v: 'both', l: 'Оба способа' },
-                  ].map((o, i) => (
-                    <div key={o.v}>
-                      {i > 0 && <div style={{ height: 1, background: 'rgba(60,60,67,0.12)' }} />}
-                      <button
-                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', minHeight: 44, border: 'none', background: 'transparent', cursor: 'pointer', padding: '4px 0', fontSize: 15, color: '#1d1d1f' }}
-                        onClick={() => updatePaymentMethod(contract.id, o.v as any)}
-                      >
-                        {o.l}
-                        {contract.payment_method === o.v && <span style={{ color: '#0071e3', fontWeight: 600 }}>✓</span>}
-                      </button>
-                    </div>
-                  ))}
-                  {contract.payment_method === 'both' && <div style={T.tiny}>Способ оплаты выбирает арендатор: карта или наличные.</div>}
-                </div>
-              )}
-
-              {contract && tenantChoseCash && (
-                <div>
-                  <div style={{ fontSize: 13, color: '#8e8e93', margin: '14px 4px 6px', textTransform: 'uppercase', letterSpacing: 0.3 }}>Оплата наличными</div>
-                  <CashNegotiation
-                    contractId={contract.id}
-                    myRole="landlord"
-                    tenantId={contract.tenant_id}
-                    landlordId={current.landlord_id}
-                  />
-                </div>
-              )}
-
-              <div style={T.card}>
-                <div style={T.h2}>История платежей</div>
-                {objHistory.length === 0 ? (
-                  <div style={{ ...T.small, margin: '8px 0' }}>Платежей пока нет</div>
-                ) : (
-                  objHistory.map((h: any) => {
-                    const late = h.confirmed_by_landlord && h.confirmed_at && new Date(h.confirmed_at) > parseDate(h.due_date)
-                    const sum = Number(h.base_amount || 0) + Number(h.penalty_amount || 0) + Number(h.utilities_amount || 0)
-                    return (
-                      <div key={h.id} style={T.row}>
-                        <span>{parseDate(h.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}</span>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ fontSize: 13, color: late ? '#ff3b30' : '#8e8e93' }}>{h.confirmed_by_landlord ? (late ? 'просрочка' : 'вовремя') : 'не подтверждён'}</span>
-                          <b>{sum.toFixed(0)} ₽</b>
-                        </span>
-                      </div>
-                    )
-                  })
-                )}
-              </div>
-            </>
-          )}
-
-          {tab === 'contract' && current && contract && (
-            <>
-              <div style={T.card}>
-                <div style={T.h2}>Договор</div>
-                <div style={T.row}><span style={iosMuted}>Арендатор</span><b>{(contract as any).tenant?.full_name || '—'}</b></div>
-                {(contract as any).tenant?.phone && <div style={T.row}><span style={iosMuted}>Телефон</span><b>{(contract as any).tenant.phone}</b></div>}
-                {(contract as any).start_date && (contract as any).end_date && (
-                  <div style={T.row}><span style={iosMuted}>Срок</span><b>{parseDate((contract as any).start_date).toLocaleDateString('ru-RU')} — {parseDate((contract as any).end_date).toLocaleDateString('ru-RU')}</b></div>
-                )}
-                <div style={T.row}><span style={iosMuted}>Аренда</span><b>{Number(contract.rent_amount).toFixed(0)} ₽/мес</b></div>
-                <div style={T.row}><span style={iosMuted}>Оплата</span><b>до {contract.payment_day} числа</b></div>
-                {deposit > 0 && (
-                  <div style={{ padding: '8px 0 4px' }}>
-                    <Progress value={depositPaid} max={deposit} />
-                  </div>
-                )}
-              </div>
-
-              <div style={T.card}>
-                <div style={T.h2}>Замороженные штрафы</div>
-                {(current.penaltyAmount || 0) > 0 && !current.payment?.confirmed_by_landlord && (
-                  <div style={{ padding: '6px 0' }}>
-                    <button style={iosBlue} onClick={() => freezePenalty(current.paymentId!)}>Заморозить текущий штраф ({(current.penaltyAmount || 0).toFixed(0)} ₽)</button>
-                  </div>
-                )}
-                {(current.frozenRows || []).length === 0 && <div style={{ ...T.small, margin: '8px 0' }}>Замороженных штрафов нет</div>}
-                {(current.frozenRows || []).map((f: any) => (
-                  <div key={f.id} style={T.item}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 15 }}>
-                      <span>{f.period ? parseDate(f.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : 'без месяца'}</span>
-                      <b>{Number(f.amount).toFixed(0)} ₽</b>
-                    </div>
-                    {f.adjusted_note && <div style={T.tiny}>{f.adjusted_note}</div>}
-                    <div style={{ display: 'flex', gap: 16, marginTop: 4 }}>
-                      <button style={iosBlue} onClick={() => openAdjust(f.id, false)}>изменить</button>
-                      <button style={iosRed} onClick={() => openAdjust(f.id, true)}>обнулить</button>
-                    </div>
-                  </div>
-                ))}
-                {!!current.frozenTotal && current.frozenTotal > 0 && (
-                  deposit > 0
-                    ? (deposit >= (current.frozenTotal || 0)
-                      ? <div style={T.small}>Будет удержано из депозита; остаток: {(deposit - (current.frozenTotal || 0)).toFixed(0)} ₽</div>
-                      : <div style={{ ...T.small, color: '#ff3b30' }}>Сверх депозита долг: {((current.frozenTotal || 0) - deposit).toFixed(0)} ₽</div>)
-                    : <div style={{ ...T.small, color: '#ff3b30' }}>Долг арендатора (депозита нет)</div>
-                )}
-                <div style={T.tiny}>Записи не удаляются до конца договора; каждое изменение сохраняется с примечанием и датой.</div>
-              </div>
-            </>
-          )}
-
-          {tab === 'chat' && contract && (
+          {contract && (
             <div style={T.card}>
-              <div style={T.h2}>Чат с арендатором</div>
-              <Chat contractId={contract.id} myId={user!.id} />
+              <div style={T.h2}>Способ оплаты</div>
+              {[
+                { v: 'card', l: 'Безналичный расчёт' },
+                { v: 'cash', l: 'Наличные' },
+                { v: 'both', l: 'Оба способа' },
+              ].map((o, i) => (
+                <div key={o.v}>
+                  {i > 0 && <div style={{ height: 1, background: 'rgba(60,60,67,0.12)' }} />}
+                  <button
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', minHeight: 44, border: 'none', background: 'transparent', cursor: 'pointer', padding: '4px 0', fontSize: 15, color: '#1d1d1f' }}
+                    onClick={() => updatePaymentMethod(contract.id, o.v as any)}
+                  >
+                    {o.l}
+                    {contract.payment_method === o.v && <span style={{ color: '#0071e3', fontWeight: 600 }}>✓</span>}
+                  </button>
+                </div>
+              ))}
+              {contract.payment_method === 'both' && <div style={T.tiny}>Способ оплаты выбирает арендатор: карта или наличные.</div>}
             </div>
           )}
+
+          {contract && tenantChoseCash && (
+            <div>
+              <div style={{ fontSize: 13, color: '#8e8e93', margin: '14px 4px 6px', textTransform: 'uppercase', letterSpacing: 0.3 }}>Оплата наличными</div>
+              <CashNegotiation
+                contractId={contract.id}
+                myRole="landlord"
+                tenantId={contract.tenant_id}
+                landlordId={current.landlord_id}
+              />
+            </div>
+          )}
+
+          <div style={T.card}>
+            <div style={T.h2}>История платежей</div>
+            {objHistory.length === 0 ? (
+              <div style={{ ...T.small, margin: '8px 0' }}>Платежей пока нет</div>
+            ) : (
+              objHistory.map((h: any) => {
+                const late = h.confirmed_by_landlord && h.confirmed_at && new Date(h.confirmed_at) > parseDate(h.due_date)
+                const sum = Number(h.base_amount || 0) + Number(h.penalty_amount || 0) + Number(h.utilities_amount || 0)
+                return (
+                  <div key={h.id} style={T.row}>
+                    <span>{parseDate(h.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 13, color: late ? '#ff3b30' : '#8e8e93' }}>{h.confirmed_by_landlord ? (late ? 'просрочка' : 'вовремя') : 'не подтверждён'}</span>
+                      <b>{sum.toFixed(0)} ₽</b>
+                    </span>
+                  </div>
+                )
+              })
+            )}
+          </div>
         </>
+      )}
+
+      {tab === 'contract' && contract && (
+        <>
+          <div style={T.card}>
+            <div style={T.h2}>Договор</div>
+            <div style={T.row}><span style={iosMuted}>Арендатор</span><b>{(contract as any).tenant?.full_name || '—'}</b></div>
+            {(contract as any).tenant?.phone && <div style={T.row}><span style={iosMuted}>Телефон</span><b>{(contract as any).tenant.phone}</b></div>}
+            {(contract as any).start_date && (contract as any).end_date && (
+              <div style={T.row}><span style={iosMuted}>Срок</span><b>{parseDate((contract as any).start_date).toLocaleDateString('ru-RU')} — {parseDate((contract as any).end_date).toLocaleDateString('ru-RU')}</b></div>
+            )}
+            <div style={T.row}><span style={iosMuted}>Аренда</span><b>{Number(contract.rent_amount).toFixed(0)} ₽/мес</b></div>
+            <div style={T.row}><span style={iosMuted}>Оплата</span><b>до {contract.payment_day} числа</b></div>
+            {deposit > 0 && (
+              <div style={{ padding: '8px 0 4px' }}>
+                <Progress value={depositPaid} max={deposit} />
+              </div>
+            )}
+          </div>
+
+          <div style={T.card}>
+            <div style={T.h2}>Замороженные штрафы</div>
+            {(current.penaltyAmount || 0) > 0 && !current.payment?.confirmed_by_landlord && (
+              <div style={{ padding: '6px 0' }}>
+                <button style={iosBlue} onClick={() => freezePenalty(current.paymentId!)}>Заморозить текущий штраф ({(current.penaltyAmount || 0).toFixed(0)} ₽)</button>
+              </div>
+            )}
+            {(current.frozenRows || []).length === 0 && <div style={{ ...T.small, margin: '8px 0' }}>Замороженных штрафов нет</div>}
+            {(current.frozenRows || []).map((f: any) => (
+              <div key={f.id} style={T.item}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 15 }}>
+                  <span>{f.period ? parseDate(f.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : 'без месяца'}</span>
+                  <b>{Number(f.amount).toFixed(0)} ₽</b>
+                </div>
+                {f.adjusted_note && <div style={T.tiny}>{f.adjusted_note}</div>}
+                <div style={{ display: 'flex', gap: 16, marginTop: 4 }}>
+                  <button style={iosBlue} onClick={() => openAdjust(f.id, false)}>изменить</button>
+                  <button style={iosRed} onClick={() => openAdjust(f.id, true)}>обнулить</button>
+                </div>
+              </div>
+            ))}
+            {!!current.frozenTotal && current.frozenTotal > 0 && (
+              deposit > 0
+                ? (deposit >= (current.frozenTotal || 0)
+                  ? <div style={T.small}>Будет удержано из депозита; остаток: {(deposit - (current.frozenTotal || 0)).toFixed(0)} ₽</div>
+                  : <div style={{ ...T.small, color: '#ff3b30' }}>Сверх депозита долг: {((current.frozenTotal || 0) - deposit).toFixed(0)} ₽</div>)
+                : <div style={{ ...T.small, color: '#ff3b30' }}>Долг арендатора (депозита нет)</div>
+            )}
+            <div style={T.tiny}>Записи не удаляются до конца договора; каждое изменение сохраняется с примечанием и датой.</div>
+          </div>
+
+          <ObjectEdit objectId={current.id} />
+        </>
+      )}
+
+      {tab === 'chat' && contract && (
+        <div style={T.card}>
+          <div style={T.h2}>Чат с арендатором</div>
+          <Chat contractId={contract.id} myId={user!.id} />
+        </div>
       )}
 
       <div style={T.card}>
@@ -649,7 +611,7 @@ export function LandlordDashboard() {
         )}
       </div>
 
-      <BottomNav tabs={TABS} tab={tab} setTab={setTab} badges={{ pay: payBadge, meters: metersBadge }} />
+      <BottomNav tabs={OBJ_TABS} tab={tab} setTab={setTab} badges={{ pay: payBadge, meters: metersBadge }} />
 
       <PromptNumber
         open={depModal === 'add'}
@@ -683,14 +645,6 @@ export function LandlordDashboard() {
       </Modal>
     </div>
   )
-}
-
-const L: Record<string, React.CSSProperties> = {
-  filtersRow: { display: 'flex', gap: 8, marginBottom: 12, marginTop: 8 },
-  statsGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 },
-  statTile: { backgroundColor: 'rgba(120,120,128,0.06)', borderRadius: 10, padding: 12 },
-  statLabel: { fontSize: 12, color: C.text2, marginBottom: 4 },
-  statValue: { fontSize: 17, fontWeight: 700 },
 }
 
 export default LandlordDashboard
