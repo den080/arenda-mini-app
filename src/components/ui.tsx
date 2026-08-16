@@ -100,7 +100,7 @@ export function BottomNav({ tabs, tab, setTab, badges }: { tabs: { id: string; l
       WebkitBackdropFilter: 'blur(20px)',
       borderTop: '1px solid rgba(60,60,67,0.12)',
       display: 'flex',
-      paddingBottom: 'env(safe-area-inset-bottom)',
+      paddingBottom: 'calc(10px + env(safe-area-inset-bottom))',
     }}>
       {tabs.map(t => (
         <button
@@ -110,7 +110,8 @@ export function BottomNav({ tabs, tab, setTab, badges }: { tabs: { id: string; l
             flex: 1,
             border: 'none',
             background: 'transparent',
-            padding: '11px 0 12px',
+            padding: '14px 0 12px',
+            minHeight: 50,
             fontSize: 13,
             fontWeight: 600,
             color: tab === t.id ? '#0071e3' : '#8e8e93',
@@ -119,7 +120,7 @@ export function BottomNav({ tabs, tab, setTab, badges }: { tabs: { id: string; l
           }}
         >
           {badges?.[t.id] && (
-            <span style={{ position: 'absolute', top: 6, left: '50%', marginLeft: 16, width: 7, height: 7, borderRadius: 4, background: '#ff3b30' }} />
+            <span style={{ position: 'absolute', top: 8, left: '50%', marginLeft: 18, width: 7, height: 7, borderRadius: 4, background: '#ff3b30' }} />
           )}
           {t.l}
         </button>
