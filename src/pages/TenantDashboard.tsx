@@ -152,6 +152,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
   const [vals, setVals] = useState<Record<string, string>>({})
   const [historyOpen, setHistoryOpen] = useState<Record<string, boolean>>({})
   const [advOpen, setAdvOpen] = useState(false)
+  const [methodOverride, setMethodOverride] = useState<string | null>(null)
 
   async function load() {
     if (!user) return
@@ -187,9 +188,9 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
   }, [contract.id])
 
   async function choosePayMethod(m: string) {
+    setMethodOverride(m)
     const { error: e } = await supabase.from('contracts').update({ tenant_pay_method: m }).eq('id', contract.id)
     if (e) showToast('Ошибка: ' + e.message)
-    else load()
   }
 
   async function claimPaid() {
@@ -302,9 +303,10 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
       : latests.every((r: any) => (r.status || 'proposed') === 'confirmed')
         ? 'confirmed'
         : 'proposed'
-  const effectiveMethod = contract.payment_method === 'both'
-    ? (contract.tenant_pay_method || 'card')
-    : contract.payment_method
+  const effectiveMethod = methodOverride
+    ?? (contract.payment_method === 'both'
+      ? (contract.tenant_pay_method || 'card')
+      : contract.payment_method)
 
   let statusChip: any = T.chipGray
   let statusText = 'Нет счёта'
