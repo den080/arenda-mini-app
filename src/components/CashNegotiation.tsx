@@ -34,6 +34,12 @@ function fmtDate(d: any): string {
   return `${String(dt.getDate()).padStart(2, '0')}.${String(dt.getMonth() + 1).padStart(2, '0')}.${dt.getFullYear()} (${wd})`
 }
 
+function plusHour(t: string): string {
+  const [h, m] = t.split(':').map(Number)
+  const nh = Math.min(23, h + 1)
+  return `${String(nh).padStart(2, '0')}:${String(m || 0).padStart(2, '0')}`
+}
+
 const S: Record<string, React.CSSProperties> = {
   head: { fontSize: 13, color: '#8e8e93', margin: '14px 4px 6px', textTransform: 'uppercase', letterSpacing: 0.3 },
   card: { background: '#fff', borderRadius: 12, margin: '0 0 10px', padding: '0 16px' },
@@ -59,8 +65,8 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
   const [con, setCon] = useState<any>(null)
   const [pay, setPay] = useState<any>(null)
   const [date, setDate] = useState('')
-  const [from, setFrom] = useState('')
-  const [to, setTo] = useState('')
+  const [from, setFrom] = useState('08:50')
+  const [to, setTo] = useState('09:50')
   const [sub, setSub] = useState<Record<string, { from: string; to: string }>>({})
   const [resched, setResched] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -128,7 +134,7 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
         meeting_date: date, day: parseDate(date).getDay(), time_from: from, time_to: to,
       })
       if (error) { showToast('Ошибка: ' + error.message); return }
-      setDate(''); setFrom(''); setTo('')
+      setDate(''); setFrom('08:50'); setTo('09:50')
       showToast('✅ Окно добавлено')
       window.dispatchEvent(new Event('rentflow-refresh'))
     } finally {
@@ -200,7 +206,7 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
         </div>
         <div style={S.sep} />
         <div style={S.row}>
-          <select value={s.from} onChange={(e) => setSub({ ...sub, [w.id]: { ...s, from: e.target.value } })} style={{ ...S.sel, flex: 1 }}>
+          <select value={s.from} onChange={(e) => setSub({ ...sub, [w.id]: { ...s, from: e.target.value, to: plusHour(e.target.value) } })} style={{ ...S.sel, flex: 1 }}>
             <option value="">с --:--</option>
             {opts.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
@@ -264,7 +270,7 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
             <div style={S.sep} />
             <div style={S.row}>
               <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ ...S.sel, flex: 1, minWidth: 0 }} />
-              <select value={from} onChange={(e) => setFrom(e.target.value)} style={S.sel}>
+              <select value={from} onChange={(e) => { setFrom(e.target.value); setTo(plusHour(e.target.value)) }} style={S.sel}>
                 <option value="">с --:--</option>
                 {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
