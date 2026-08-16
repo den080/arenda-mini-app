@@ -328,7 +328,6 @@ export function LandlordDashboard() {
   const contract = current?.contract
   const deposit = Number((contract as any)?.deposit_amount || 0)
   const depositPaid = Number((contract as any)?.deposit_paid || 0)
-  const periodMid = current?.payment ? parseDate(current.payment.period) : null
   const sd = (contract as any)?.start_date ? parseDate((contract as any).start_date) : null
   const firstMonthPending = !!(contract && current?.payment && !current.payment.confirmed_by_landlord && isFirstPeriod(current.payment.period, sd))
   const firstMonthCurrent = !!(contract && current?.payment && isFirstPeriod(current.payment.period, sd))
