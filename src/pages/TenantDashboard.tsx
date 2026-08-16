@@ -103,7 +103,7 @@ export function TenantDashboard() {
         <h1 style={T.h1}>Моя аренда</h1>
         {notifCard}
         {contracts.length === 0 ? (
-                    <div style={{ ...T.card, padding: '28px 20px', textAlign: 'center' }}>
+          <div style={{ ...T.card, padding: '28px 20px', textAlign: 'center' }}>
             <div style={{ fontSize: 17, fontWeight: 600, color: '#1d1d1f', marginBottom: 6 }}>Пока нет активной аренды</div>
             <div style={{ fontSize: 14, color: '#8e8e93', lineHeight: 1.45 }}>Попросите арендодателя добавить объект и указать ваш номер телефона в договоре — аренда появится здесь автоматически.</div>
           </div>
@@ -323,7 +323,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
       const isFirstMonth = !!sd && dueMid.getMonth() === sd.getMonth() && dueMid.getFullYear() === sd.getFullYear()
       const daysUntilDue = Math.round((dueMid.getTime() - todayMid.getTime()) / 86400000)
       if (isFirstMonth) { firstMonth = true; statusChip = T.chipOrange; statusText = 'Первый месяц — оплата при подписании' }
-      else if (todayMid > dueMid) { isOverdue = true; statusChip = T.chipRed; statusText = `Просрочка ${-daysUntilDue} дн.` }
+      else if (todayMid > dueMid && (!sd || dueMid >= sd)) { isOverdue = true; statusChip = T.chipRed; statusText = `Просрочка ${-daysUntilDue} дн.` }
       else if (daysUntilDue === 0) { statusChip = T.chipOrange; statusText = 'Сегодня последний день оплаты' }
       else if (daysUntilDue <= reminder) { statusChip = T.chipOrange; statusText = `До оплаты ${daysUntilDue} дн.` }
       else { statusChip = T.chipGreen; statusText = `До оплаты ${daysUntilDue} дн.` }
@@ -369,7 +369,11 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
             <div style={{ padding: '0 0 8px' }}><span style={statusChip}>{statusText}</span></div>
             {isOverdue && <div style={T.noteRed}>+{penaltyRate} руб за каждый день просрочки</div>}
 
-            {effectiveMethod === 'card' && details.length > 0 && !payment?.confirmed_by_landlord && (
+            {firstMonth && !payment?.confirmed_by_landlord && (
+              <div style={T.note}>Первый месяц оплачивается при подписании договора — подтверждение выставляет арендодатель.</div>
+            )}
+
+            {effectiveMethod === 'card' && details.length > 0 && !payment?.confirmed_by_landlord && !firstMonth && (
               payment.card_claimed ? (
                 <div style={T.note}>Безналичная оплата отмечена: ожидает подтверждения арендодателем</div>
               ) : (
