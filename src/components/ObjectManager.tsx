@@ -11,6 +11,7 @@ interface PayDetail { type: 'card' | 'sbp'; bank: string; number: string }
 const S: Record<string, React.CSSProperties> = {
   lab: { fontSize: 13, color: '#8e8e93', margin: '12px 0 2px' },
   inp: { width: '100%', padding: '8px 0', border: 'none', borderBottom: '1px solid rgba(60,60,67,0.12)', background: 'transparent', fontSize: 15, color: '#1d1d1f', outline: 'none', borderRadius: 0, boxSizing: 'border-box' },
+  inpLocked: { width: '100%', padding: '8px 0', border: 'none', borderBottom: '1px solid rgba(60,60,67,0.12)', background: 'transparent', fontSize: 15, color: '#8e8e93', outline: 'none', borderRadius: 0, boxSizing: 'border-box', opacity: 0.6 },
   sel: { width: '100%', padding: '9px 10px', border: 'none', background: 'rgba(120,120,128,0.08)', borderRadius: 8, fontSize: 14, color: '#1d1d1f', outline: 'none', boxSizing: 'border-box' },
   blue: { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: 4 },
   red: { border: 'none', background: 'transparent', color: '#ff3b30', fontSize: 15, cursor: 'pointer', padding: 4 },
@@ -81,7 +82,7 @@ function ReadingsModeSelect({ value, onChange }: { value: string; onChange: (v: 
     <select style={S.sel} value={value} onChange={(e) => onChange(e.target.value)}>
       <option value="manual">Арендатор подаёт показания вручную</option>
       <option value="auto">Показания передаются автоматически</option>
-      <option value="self">Арендатор платит полную квитанцию сам</option>
+      <option value="self">Арендатор оплачивает полную квитанцию самостоятельно</option>
     </select>
   )
 }
@@ -258,6 +259,7 @@ export function ObjectAdd() {
 export function ObjectEdit({ objectId }: { objectId: string }) {
   const [ready, setReady] = useState(false)
   const [delOpen, setDelOpen] = useState(false)
+  const [locked, setLocked] = useState(false)
 
   const [editContractId, setEditContractId] = useState<string | null>(null)
   const [editCounterId, setEditCounterId] = useState<string | null>(null)
@@ -307,6 +309,9 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
         const rr = (rules || []).find((r: any) => r.violation_type === 'readings_overdue')
         setEPenPay(rp ? String(rp.rate) : '')
         setEPenRead(rr ? String(rr.rate) : '')
+        const { data: pays } = await supabase.from('payments').select('confirmed_by_landlord').eq('contract_id', contract.id)
+        const list = pays || []
+        setLocked(list.some((p: any) => p.confirmed_by_landlord) || list.length > 1)
       }
       setReady(true)
     })()
@@ -320,28 +325,33 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
     if (oe) { showToast('Ошибка: ' + oe.message); return }
     if (editContractId) {
       const firstCard = eDetails.find(d => d.type === 'card')
-      const { error: ce } = await supabase.from('contracts').update({
-        rent_amount: Number(eRent) || 0,
-        deposit_amount: Number(eDeposit) || 0,
-        payment_day: Number(ePaymentDay) || 1,
-        meter_deadline_day: Number(eMeterDay) || 15,
-        readings_mode: eReadingsMode,
-        start_date: eStartDate || null,
-        end_date: eEndDate || null,
+      const upd: any = {
         payment_method: eMethod,
         card_number: firstCard ? firstCard.number : null,
         payment_details: eDetails,
         reminder_days_before: Number(eRemind) || 3,
-      }).eq('id', editContractId)
+        meter_deadline_day: Number(eMeterDay) || 15,
+        readings_mode: eReadingsMode,
+        end_date: eEndDate || null,
+      }
+      if (!locked) {
+        upd.rent_amount = Number(eRent) || 0
+        upd.deposit_amount = Number(eDeposit) || 0
+        upd.payment_day = Number(ePaymentDay) || 1
+        upd.start_date = eStartDate || null
+      }
+      const { error: ce } = await supabase.from('contracts').update(upd).eq('id', editContractId)
       if (ce) { showToast('Ошибка: ' + ce.message); return }
-      const rules: Array<['payment_overdue' | 'readings_overdue', number]> = [
-        ['payment_overdue', Number(ePenPay) || 500],
-        ['readings_overdue', Number(ePenRead) || 100],
-      ]
-      for (const [vt, rate] of rules) {
-        const { data: ex } = await supabase.from('penalty_rules').select('id').eq('contract_id', editContractId).eq('violation_type', vt).limit(1)
-        if (ex && ex.length) await supabase.from('penalty_rules').update({ rate }).eq('id', ex[0].id)
-        else await supabase.from('penalty_rules').insert({ contract_id: editContractId, violation_type: vt, rate, rate_unit: 'per_day_rub', starts_after_days: 0 })
+      if (!locked) {
+        const rules: Array<['payment_overdue' | 'readings_overdue', number]> = [
+          ['payment_overdue', Number(ePenPay) || 500],
+          ['readings_overdue', Number(ePenRead) || 100],
+        ]
+        for (const [vt, rate] of rules) {
+          const { data: ex } = await supabase.from('penalty_rules').select('id').eq('contract_id', editContractId).eq('violation_type', vt).limit(1)
+          if (ex && ex.length) await supabase.from('penalty_rules').update({ rate }).eq('id', ex[0].id)
+          else await supabase.from('penalty_rules').insert({ contract_id: editContractId, violation_type: vt, rate, rate_unit: 'per_day_rub', starts_after_days: 0 })
+        }
       }
       if (editCounterId) {
         await supabase.from('users').update({ full_name: eName || 'Арендатор', phone: ePhone ? normalizePhone(ePhone) : null }).eq('id', editCounterId)
@@ -376,6 +386,9 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
   return (
     <div style={T.card}>
       <div style={T.h2}>Объект и договор</div>
+      {locked && (
+        <div style={T.note}>Платежи начались — ключевые условия (аренда, депозит, день оплаты, дата начала, штрафы) защищены от изменений. Остальные поля можно редактировать.</div>
+      )}
       <div style={S.lab}>Адрес</div>
       <input style={S.inp} value={eAddress} onChange={(e) => setEAddress(e.target.value)} />
       <div style={S.lab}>Заметка</div>
@@ -385,13 +398,13 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
       <div style={S.lab}>Телефон арендатора</div>
       <input style={S.inp} value={ePhone} onChange={(e) => setEPhone(formatPhoneInput(e.target.value))} inputMode="tel" />
       <div style={S.lab}>Начало договора</div>
-      <input style={S.inp} type="date" value={eStartDate} onChange={(e) => { const v = e.target.value; setEStartDate(v); const d = Number(v.slice(8, 10)); if (d >= 1 && d <= 31) setEPaymentDay(String(d)) }} />
+      <input style={locked ? S.inpLocked : S.inp} type="date" value={eStartDate} disabled={locked} onChange={(e) => { const v = e.target.value; setEStartDate(v); const d = Number(v.slice(8, 10)); if (d >= 1 && d <= 31) setEPaymentDay(String(d)) }} />
       <div style={S.lab}>Сумма аренды, руб</div>
-      <input style={S.inp} value={eRent} onChange={(e) => setERent(e.target.value)} inputMode="numeric" />
+      <input style={locked ? S.inpLocked : S.inp} value={eRent} disabled={locked} onChange={(e) => setERent(e.target.value)} inputMode="numeric" />
       <div style={S.lab}>Залоговый депозит, руб</div>
-      <input style={S.inp} value={eDeposit} onChange={(e) => setEDeposit(e.target.value)} inputMode="numeric" />
+      <input style={locked ? S.inpLocked : S.inp} value={eDeposit} disabled={locked} onChange={(e) => setEDeposit(e.target.value)} inputMode="numeric" />
       <div style={S.lab}>День платежа</div>
-      <input style={S.inp} value={ePaymentDay} onChange={(e) => setEPaymentDay(e.target.value)} inputMode="numeric" />
+      <input style={locked ? S.inpLocked : S.inp} value={ePaymentDay} disabled={locked} onChange={(e) => setEPaymentDay(e.target.value)} inputMode="numeric" />
       <div style={S.lab}>Режим показаний счётчиков</div>
       <ReadingsModeSelect value={eReadingsMode} onChange={setEReadingsMode} />
       {eReadingsMode === 'manual' && (
@@ -412,11 +425,11 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
         </div>
       )}
       <div style={S.lab}>Штраф за просрочку оплаты, руб/день</div>
-      <input style={S.inp} value={ePenPay} onChange={(e) => setEPenPay(e.target.value)} inputMode="numeric" />
+      <input style={locked ? S.inpLocked : S.inp} value={ePenPay} disabled={locked} onChange={(e) => setEPenPay(e.target.value)} inputMode="numeric" />
       {eReadingsMode === 'manual' && (
         <div>
           <div style={S.lab}>Штраф за просрочку показаний, руб/день</div>
-          <input style={S.inp} value={ePenRead} onChange={(e) => setEPenRead(e.target.value)} inputMode="numeric" />
+          <input style={locked ? S.inpLocked : S.inp} value={ePenRead} disabled={locked} onChange={(e) => setEPenRead(e.target.value)} inputMode="numeric" />
         </div>
       )}
       <div style={S.lab}>Напоминать за сколько дней</div>
