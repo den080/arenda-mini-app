@@ -5,7 +5,7 @@ import CashNegotiation from '../components/CashNegotiation'
 import { ensureNextPayment } from '../lib/nextPayment'
 import Chat from '../components/Chat'
 import { BottomNav, PromptNumber, Progress, showToast } from '../components/ui'
-import { T, C } from '../theme'
+import { T } from '../theme'
 
 interface PayDetail { type: 'card' | 'sbp'; bank: string; number: string }
 interface Notification { id: string; user_id: string; type: string; related_id: string; sent_at: string }
