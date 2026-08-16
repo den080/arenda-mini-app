@@ -154,20 +154,27 @@ export function LandlordDashboard() {
   }
 
   async function saveUtilitiesNext(value: string) {
-    if (!current?.payment) return
-    if (!current.payment.confirmed_by_landlord) {
-      await saveUtilities(current.payment.id, value)
-      return
+    if (!contract) return
+    const amount = Number(value) || 0
+    const { data: openPays } = await supabase
+      .from('payments').select('*')
+      .eq('contract_id', contract.id).eq('confirmed_by_landlord', false)
+      .order('period', { ascending: false })
+    if (openPays && openPays.length > 0) {
+      await saveUtilities(openPays[openPays.length - 1].id, String(amount))
+    } else {
+      const { data: lastp } = await supabase.from('payments').select('*').eq('contract_id', contract.id).order('period', { ascending: false }).limit(1)
+      const base = lastp && lastp[0] ? parseDate(lastp[0].period) : parseDate((contract as any).start_date || new Date().toISOString())
+      const nextPeriod = new Date(base.getFullYear(), base.getMonth() + 1, 1)
+      const due = new Date(nextPeriod.getFullYear(), nextPeriod.getMonth(), Number(contract.payment_day) || 1)
+      const { error } = await supabase.from('payments').insert({
+        contract_id: contract.id, period: toISO(nextPeriod), due_date: toISO(due),
+        base_amount: Number(contract.rent_amount) || 0, penalty_amount: 0, utilities_amount: amount,
+      })
+      if (error) { showToast('Ошибка: ' + error.message); return }
+      showToast('✅ Счёт создан вместе с ресурсами')
     }
-    const pd = parseDate(current.payment.period)
-    const nextPeriod = new Date(pd.getFullYear(), pd.getMonth() + 1, 1)
-    const due = new Date(nextPeriod.getFullYear(), nextPeriod.getMonth(), Number(contract?.payment_day) || 1)
-    const { error } = await supabase.from('payments').insert({
-      contract_id: contract!.id, period: toISO(nextPeriod), due_date: toISO(due),
-      base_amount: Number(contract!.rent_amount) || 0, penalty_amount: 0, utilities_amount: Number(value) || 0,
-    })
-    if (error) { showToast('Ошибка: ' + error.message); return }
-    showToast('✅ Счёт создан вместе с ресурсами')
+    if (current) setUtilInputs(prev => ({ ...prev, [current.id]: String(amount) }))
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
 
@@ -436,7 +443,7 @@ export function LandlordDashboard() {
                 />
                 <button style={iosBlue} onClick={() => saveUtilitiesNext(utilInputs[current.id] ?? String(current.utilitiesAmount || 0))}>Включить в платёж</button>
               </div>
-              <div style={T.tiny}>Добавляется к платежу отдельно, не растёт при просрочке и не входит в штрафы. Если следующего счёта ещё нет — он создаётся вместе с ресурсами.</div>
+              <div style={T.tiny}>Введённая сумма записывается как есть (заменяет предыдущую), добавляется к платежу отдельно, не растёт при просрочке и не входит в штрафы. Если следующего счёта ещё нет — он создаётся вместе с ресурсами.</div>
             </div>
           )}
 
