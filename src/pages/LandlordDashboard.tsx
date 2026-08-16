@@ -306,6 +306,7 @@ export function LandlordDashboard() {
   }
 
   const iosBlue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: 4, flexShrink: 0 }
+  const secHead: React.CSSProperties = { fontSize: 13, color: '#8e8e93', margin: '14px 4px 6px', textTransform: 'uppercase', letterSpacing: 0.3 }
   const iosRed: React.CSSProperties = { border: 'none', background: 'transparent', color: '#ff3b30', fontSize: 15, cursor: 'pointer', padding: 4, flexShrink: 0 }
   const iosOk: React.CSSProperties = { color: '#1e7e34', fontSize: 14, fontWeight: 600 }
   const iosMuted: React.CSSProperties = { color: '#8e8e93', fontSize: 14 }
@@ -383,20 +384,18 @@ export function LandlordDashboard() {
       </div>
       <h1 style={{ ...T.h1, fontSize: 22 }}>{current.address}</h1>
 
-      {tab === 'meters' && (
-        <>
-          <div style={T.card}>
-            <div style={T.h2}>Счётчики объекта</div>
-            <MetersEditor objId={current.id} />
-          </div>
-          {current.readingsMode === 'manual' && contract && (
-            <div style={T.card}>
-              <div style={T.h2}>Показания за текущий месяц</div>
-              <ReadingsReview contractId={contract.id} tenantId={contract.tenant_id} />
-            </div>
+          {tab === 'meters' && current && (
+            <>
+              <div style={secHead}>Счётчики объекта</div>
+              <MetersEditor objId={current.id} />
+              {current.readingsMode === 'manual' && contract && (
+                <>
+                  <div style={secHead}>Показания за текущий месяц</div>
+                  <ReadingsReview contractId={contract.id} tenantId={contract.tenant_id} />
+                </>
+              )}
+            </>
           )}
-        </>
-      )}
 
       {tab === 'pay' && (
         <>
