@@ -25,15 +25,19 @@ export function useTelegramUser() {
 
     const isPhone = /\d/.test(input) && input.length >= 10
     const searchValue = isPhone ? normPhone(input) : input
+    const digits = input.replace(/\D/g, '')
 
     try {
       localStorage.setItem('rentflow_tg_id', input)
     } catch {}
     try {
+      const orCond = digits.length >= 10
+        ? `telegram_id.eq."${searchValue}",phone.like."%${digits.slice(-10)}%"`
+        : `telegram_id.eq."${searchValue}"`
       const { data, error: dbError } = await supabase
         .from('users')
         .select('*')
-        .or(`telegram_id.eq."${searchValue}",phone.eq."${searchValue}"`)
+        .or(orCond)
         .limit(1)
       const found = data && data[0]
       if (dbError) setError('Ошибка базы: ' + dbError.message)
