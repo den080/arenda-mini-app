@@ -172,14 +172,15 @@ export function ObjectAdd() {
         { contract_id: contract.id, violation_type: 'payment_overdue', rate: Number(penPay) || 500, rate_unit: 'per_day_rub', starts_after_days: 0 },
         { contract_id: contract.id, violation_type: 'readings_overdue', rate: Number(penRead) || 100, rate_unit: 'per_day_rub', starts_after_days: 0 },
       ])
-      const now = new Date()
+      const startD = new Date(startISO + 'T00:00:00')
+      const periodD = new Date(startD.getFullYear(), startD.getMonth(), 1)
       const payDay = Number(paymentDay) || 1
-      let due = new Date(now.getFullYear(), now.getMonth(), payDay)
-      const todayMid = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-      if (due < todayMid) due = new Date(now.getFullYear(), now.getMonth() + 1, payDay)
-      const period = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10)
+      let due = new Date(periodD.getFullYear(), periodD.getMonth(), payDay)
+      if (due < startD) due = new Date(startD.getFullYear(), startD.getMonth(), startD.getDate())
+      const period = `${periodD.getFullYear()}-${String(periodD.getMonth() + 1).padStart(2, '0')}-01`
+      const dueISO = `${due.getFullYear()}-${String(due.getMonth() + 1).padStart(2, '0')}-${String(due.getDate()).padStart(2, '0')}`
       await supabase.from('payments').insert({
-        contract_id: contract.id, period, due_date: due.toISOString().slice(0, 10),
+        contract_id: contract.id, period, due_date: dueISO,
         base_amount: Number(rent) || 0, penalty_amount: 0, utilities_amount: 0,
       })
       showToast('✅ Объект, договор и первый платёж сохранены')
