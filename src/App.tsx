@@ -3,7 +3,7 @@ import { supabase } from './lib/supabase'
 import { useTelegramUser } from './hooks/useTelegramUser'
 import LandlordDashboard from './pages/LandlordDashboard'
 import TenantDashboard from './pages/TenantDashboard'
-import { Toaster } from './components/ui'
+import { Toaster, showToast } from './components/ui'
 import { C } from './theme'
 
 const GLOBAL_CSS = `
@@ -13,13 +13,18 @@ const GLOBAL_CSS = `
 `
 
 const TEST_PHONES = ['+79057674225', '+77475885016', '+79651947084', '+79999110921', '+79063190766']
-const TEST_IDS = ['28606967', '999999999']
+const TEST_IDS = ['28606967']
 
 function normPhone(v: string): string {
   let c = (v || '').replace(/[\s\-\(\)]/g, '')
   if (c.startsWith('8') && c.length === 11) c = '+7' + c.slice(1)
   if (c && !c.startsWith('+')) c = '+' + c
   return c
+}
+
+function canLoginManual(v: string): boolean {
+  if (TEST_IDS.includes(v.trim())) return true
+  return TEST_PHONES.includes(normPhone(v))
 }
 
 export default function App() {
@@ -55,6 +60,16 @@ export default function App() {
     })
   }, [user])
 
+  function tryLogin() {
+    const v = value.trim()
+    if (!v) return
+    if (!canLoginManual(v)) {
+      showToast('Вход по номеру доступен только тестовым пользователям. Откройте мини-приложение из Telegram.')
+      return
+    }
+    loginWithId(v)
+  }
+
   if (loading) return <div style={st.wrap}>Загрузка...</div>
 
   if (!user) {
@@ -64,8 +79,9 @@ export default function App() {
         <Toaster />
         <h2 style={st.h2}>Вход</h2>
         <p style={st.p}>{error}</p>
-        <input style={st.input} value={value} onChange={(e) => setValue(e.target.value)} placeholder="Telegram ID или телефон" />
-        <button style={st.button} onClick={() => value.trim() && loginWithId(value.trim())}>Войти</button>
+        <input style={st.input} value={value} onChange={(e) => setValue(e.target.value)} placeholder="Телефон тестового пользователя" />
+        <button style={st.button} onClick={tryLogin}>Войти</button>
+        <p style={{ ...st.p, marginTop: 12 }}>Работаете из Telegram? Мини-приложение определит вас автоматически — вводить ничего не нужно.</p>
       </div>
     )
   }
