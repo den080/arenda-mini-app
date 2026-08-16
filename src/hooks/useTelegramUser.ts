@@ -81,7 +81,6 @@ export function useTelegramUser() {
 
     if (autoId) {
       if (LOCKDOWN && !isAllowed(autoId)) {
-        // Telegram ID не в whitelist — доступ закрыт
         cachedDenied = true
         setAccessDenied(true)
         setLoading(false)
@@ -91,7 +90,6 @@ export function useTelegramUser() {
       return
     }
 
-    // Нет Telegram ID — пробуем сохранённый тестовый
     try {
       const saved = localStorage.getItem('rentflow_tg_id') || undefined
       if (saved && (!LOCKDOWN || isAllowed(saved))) {
