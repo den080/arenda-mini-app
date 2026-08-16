@@ -335,6 +335,16 @@ export function LandlordDashboard() {
     return (
       <div style={{ ...T.page, paddingBottom: 40 }}>
         <h1 style={T.h1}>Мои объекты</h1>
+        {notifications.length > 0 && (
+          <div style={T.card}>
+            <div style={T.h2}>Уведомления</div>
+            {notifications.map(n => (
+              <div key={n.id} style={T.row}>
+                <span style={{ fontSize: 14 }}>{(n as any).message || getNotificationText(n.type)}</span>
+              </div>
+            ))}
+          </div>
+        )}
         <div style={T.card}>
           {objects.length === 0 && <div style={{ ...T.small, margin: '8px 0' }}>Пока нет объектов — добавьте первый.</div>}
           {objects.map((o, i) => (
@@ -360,19 +370,6 @@ export function LandlordDashboard() {
         </div>
 
         <ObjectAdd />
-
-        <div style={T.card}>
-          <div style={T.h2}>Уведомления</div>
-          {notifications.length === 0 ? (
-            <div style={{ ...T.small, margin: '8px 0' }}>Нет уведомлений</div>
-          ) : (
-            notifications.map(n => (
-              <div key={n.id} style={T.row}>
-                <span style={{ fontSize: 14 }}>{(n as any).message || getNotificationText(n.type)}</span>
-              </div>
-            ))
-          )}
-        </div>
       </div>
     )
   }
@@ -588,19 +585,6 @@ export function LandlordDashboard() {
           <Chat contractId={contract.id} myId={user!.id} />
         </div>
       )}
-
-      <div style={T.card}>
-        <div style={T.h2}>Уведомления</div>
-        {notifications.length === 0 ? (
-          <div style={{ ...T.small, margin: '8px 0' }}>Нет уведомлений</div>
-        ) : (
-          notifications.map(n => (
-            <div key={n.id} style={T.row}>
-              <span style={{ fontSize: 14 }}>{(n as any).message || getNotificationText(n.type)}</span>
-            </div>
-          ))
-        )}
-      </div>
 
       <BottomNav tabs={OBJ_TABS} tab={tab} setTab={setTab} badges={{ pay: payBadge, meters: metersBadge }} />
 
