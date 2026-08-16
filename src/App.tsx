@@ -33,6 +33,21 @@ export default function App() {
   )
 
   useEffect(() => {
+    const tg = (window as any).Telegram?.WebApp
+    if (tg) {
+      try {
+        tg.ready()
+        tg.expand()
+        if (typeof tg.onEvent === 'function') {
+          tg.onEvent('viewportChanged', () => {
+            if (!tg.isExpanded) tg.expand()
+          })
+        }
+      } catch {}
+    }
+  }, [])
+
+  useEffect(() => {
     if (!user) { setMode(null); return }
     if (mode !== null) return
     supabase.from('contracts').select('id').eq('tenant_id', user.id).eq('status', 'active').limit(1).then(({ data }) => {
