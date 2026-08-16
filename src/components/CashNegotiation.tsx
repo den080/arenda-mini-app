@@ -241,7 +241,7 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
       )}
 
       {pauseActive && D && (
-        <div style={T.note}>Штраф на паузе до встречи {fmtDate(confirmed?.meeting_date)}: встреча в пределах 3 дней после срока оплаты. Если встреча пройдёт без оплаты — штраф начислится с {D.toLocaleDateString('ru-RU')} полностью. Переключение на безнал тоже вернёт штраф за пропущенные дни.</div>
+        <div style={T.note}>Штраф приостановлен до встречи {fmtDate(confirmed?.meeting_date)}: встреча в пределах 3 дней после срока оплаты. Если встреча пройдёт без оплаты — штраф начислится с {D.toLocaleDateString('ru-RU')} полностью. Переключение на безналичную оплату также вернёт штраф за пропущенные дни.</div>
       )}
 
       {resched && !firstMonthActive && (
@@ -319,7 +319,7 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
                 <div style={S.row}>
                   <span style={S.label}>{fmtDate(m.meeting_date)} · {m.time_from}–{m.time_to}</span>
                   <span style={{ flex: 1 }} />
-                  <span style={S.orange}>ждёт</span>
+                  <span style={S.orange}>ожидает</span>
                 </div>
               </div>
             ))}
