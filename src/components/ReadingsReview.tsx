@@ -17,6 +17,15 @@ const S: Record<string, React.CSSProperties> = {
   foot: { fontSize: 12, color: '#8e8e93', margin: '4px 16px 12px' },
 }
 
+function groupOf(code: string): number {
+  if (code === 'water_cold') return 0
+  if (code === 'water_hot') return 1
+  if (code.startsWith('electricity')) return 2
+  if (code === 'heat') return 3
+  if (code === 'gas') return 4
+  return 5
+}
+
 export function ReadingsReview({ contractId, tenantId }: { contractId: string; tenantId: string }) {
   const [meters, setMeters] = useState<any[]>([])
   const [types, setTypes] = useState<any[]>([])
@@ -36,7 +45,12 @@ export function ReadingsReview({ contractId, tenantId }: { contractId: string; t
     }
     const byMeter: Record<string, any[]> = {}
     for (const r of rd) { (byMeter[r.object_meter_id] = byMeter[r.object_meter_id] || []).push(r) }
-    setMeters(m || [])
+    const sorted = (m || []).slice().sort((a: any, b: any) => {
+      const ca = (t || []).find((x: any) => x.id === a.meter_type_id)?.code || ''
+      const cb = (t || []).find((x: any) => x.id === b.meter_type_id)?.code || ''
+      return groupOf(ca) - groupOf(cb) || String(a.label || '').localeCompare(String(b.label || ''))
+    })
+    setMeters(sorted)
     setTypes(t || [])
     setReads(byMeter)
   }
