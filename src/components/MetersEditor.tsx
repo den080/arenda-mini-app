@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 import { ConfirmDelete, showToast } from './ui'
 
 const S: Record<string, React.CSSProperties> = {
-  editRow: { position: 'sticky', top: 0, zIndex: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 4px', background: '#f2f2f7' },
+  editRow: { position: 'sticky', top: 0, zIndex: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px', background: '#f2f2f7' },
   editBtn: { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: 4 },
   head: { fontSize: 13, color: '#8e8e93', margin: '16px 16px 6px', textTransform: 'uppercase', letterSpacing: 0.3 },
   card: { background: '#fff', borderRadius: 12, margin: '0 0 10px', padding: '0 16px' },
