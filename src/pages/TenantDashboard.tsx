@@ -138,12 +138,11 @@ export function TenantDashboard() {
           onClick={() => setOpenId(null)}
         >← Моя аренда</button>
       </div>
-      <h1 style={{ ...T.h1, fontSize: 22 }}>{current._address}</h1>
+      <h1 style={T.h1}>{current._address}</h1>
       <TenantRental contract={current} tab={tab} setTab={setTab} />
     </div>
   )
 }
-
 function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; setTab: (t: string) => void }) {
   const { user } = useTelegramUser()
   const [data, setData] = useState<any>(null)
@@ -295,7 +294,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
 
   const iosBlue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: 4, flexShrink: 0 }
   const iosMuted: React.CSSProperties = { color: '#8e8e93', fontSize: 14 }
-  const secHead: React.CSSProperties = { fontSize: 13, color: '#8e8e93', margin: '14px 4px 6px', textTransform: 'uppercase', letterSpacing: 0.3 }
+  const secHead: React.CSSProperties = { fontSize: 13, color: '#8e8e93', margin: '14px 16px 6px', textTransform: 'uppercase', letterSpacing: 0.3 }
   const rightInput: React.CSSProperties = { width: 110, border: 'none', outline: 'none', background: 'rgba(120,120,128,0.08)', borderRadius: 8, padding: '8px 10px', fontSize: 15, textAlign: 'right', color: '#1d1d1f', boxSizing: 'border-box' }
   const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProperties
 
