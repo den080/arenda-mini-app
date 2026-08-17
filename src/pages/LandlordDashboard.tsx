@@ -322,7 +322,7 @@ export function LandlordDashboard() {
   const iosRed: React.CSSProperties = { border: 'none', background: 'transparent', color: '#ff3b30', fontSize: 15, cursor: 'pointer', padding: 4, flexShrink: 0 }
   const iosOk: React.CSSProperties = { color: '#1e7e34', fontSize: 14, fontWeight: 600 }
   const iosMuted: React.CSSProperties = { color: '#8e8e93', fontSize: 14 }
-  const secHead: React.CSSProperties = { fontSize: 13, color: '#8e8e93', margin: '14px 4px 6px', textTransform: 'uppercase', letterSpacing: 0.3 }
+  const secHead: React.CSSProperties = { fontSize: 13, color: '#8e8e93', margin: '14px 16px 6px', textTransform: 'uppercase', letterSpacing: 0.3 }
 
   const current = objects.find(o => o.id === openId) || null
   const contract = current?.contract
@@ -391,7 +391,7 @@ export function LandlordDashboard() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 0 8px' }}>
         <button style={iosBlue} onClick={() => setOpenId(null)}>← Мои объекты</button>
       </div>
-      <h1 style={{ ...T.h1, fontSize: 22 }}>{current.address}</h1>
+      <h1 style={T.h1}>{current.address}</h1>
 
       {tab === 'pay' && (
         <>
