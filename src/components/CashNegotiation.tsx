@@ -49,10 +49,9 @@ function plusHour(t: string): string {
 }
 
 const S: Record<string, React.CSSProperties> = {
-  head: { fontSize: 13, color: '#8e8e93', margin: '14px 4px 6px', textTransform: 'uppercase', letterSpacing: 0.3 },
+  head: { fontSize: 13, color: '#8e8e93', margin: '14px 16px 6px', textTransform: 'uppercase', letterSpacing: 0.3 },
   card: { background: '#fff', borderRadius: 12, margin: '0 0 10px', padding: '0 16px' },
   row: { display: 'flex', alignItems: 'center', gap: 10, minHeight: 44, padding: '6px 0', boxSizing: 'border-box' },
-  rowBtn: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, minHeight: 44, padding: '6px 0', boxSizing: 'border-box', width: '100%', border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left' },
   sep: { height: 1, background: 'rgba(60,60,67,0.12)' },
   label: { fontSize: 15, color: '#1d1d1f' },
   sub: { fontSize: 13, color: '#8e8e93', marginTop: 2 },
@@ -60,8 +59,9 @@ const S: Record<string, React.CSSProperties> = {
   red: { border: 'none', background: 'transparent', color: '#ff3b30', fontSize: 15, cursor: 'pointer', padding: 4, flexShrink: 0 },
   orange: { color: '#b25000', fontSize: 14, flexShrink: 0 },
   ok: { color: '#1e7e34', fontSize: 15, fontWeight: 600, flexShrink: 0 },
-  sel: { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, outline: 'none', padding: '4px 0', textAlign: 'right', maxWidth: '52%' },
-  foot: { fontSize: 12, color: '#8e8e93', margin: '4px 4px 10px' },
+  sel: { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, outline: 'none', padding: '4px 0', textAlign: 'right' },
+  selTime: { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, outline: 'none', padding: '4px 0', textAlign: 'right', width: 104, flexShrink: 0 },
+  foot: { fontSize: 12, color: '#8e8e93', margin: '4px 16px 10px' },
   rightRow: { display: 'flex', justifyContent: 'flex-end', padding: '2px 0 10px' },
 }
 
@@ -220,11 +220,12 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
         </div>
         <div style={S.row}>
           <span style={S.label}>Время встречи</span>
-          <select value={s.from} onChange={(e) => setSub({ ...sub, [w.id]: { ...s, from: e.target.value, to: plusHour(e.target.value) } })} style={S.sel}>
+          <span style={{ flex: 1 }} />
+          <select value={s.from} onChange={(e) => setSub({ ...sub, [w.id]: { ...s, from: e.target.value, to: plusHour(e.target.value) } })} style={S.selTime}>
             <option value="">с --:--</option>
             {opts.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
-          <select value={s.to} onChange={(e) => setSub({ ...sub, [w.id]: { ...s, to: e.target.value } })} style={S.sel}>
+          <select value={s.to} onChange={(e) => setSub({ ...sub, [w.id]: { ...s, to: e.target.value } })} style={S.selTime}>
             <option value="">по --:--</option>
             {opts.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
@@ -292,7 +293,7 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
             <div style={S.sep} />
             <div style={S.row}>
               <span style={S.label}>Дата</span>
-              <select value={date} onChange={(e) => setDate(e.target.value)} style={S.sel}>
+              <select value={date} onChange={(e) => setDate(e.target.value)} style={{ ...S.sel, flex: 1 }}>
                 <option value="">выбрать</option>
                 {DATE_OPTIONS.map(o => <option key={o.iso} value={o.iso}>{o.label}</option>)}
               </select>
@@ -300,10 +301,11 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
             <div style={S.sep} />
             <div style={S.row}>
               <span style={S.label}>Время</span>
-              <select value={from} onChange={(e) => { setFrom(e.target.value); setTo(plusHour(e.target.value)) }} style={S.sel}>
+              <span style={{ flex: 1 }} />
+              <select value={from} onChange={(e) => { setFrom(e.target.value); setTo(plusHour(e.target.value)) }} style={S.selTime}>
                 {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
-              <select value={to} onChange={(e) => setTo(e.target.value)} style={S.sel}>
+              <select value={to} onChange={(e) => setTo(e.target.value)} style={S.selTime}>
                 {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
