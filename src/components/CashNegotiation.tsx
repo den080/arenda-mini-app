@@ -59,10 +59,11 @@ const S: Record<string, React.CSSProperties> = {
   red: { border: 'none', background: 'transparent', color: '#ff3b30', fontSize: 15, cursor: 'pointer', padding: 4, flexShrink: 0 },
   orange: { color: '#b25000', fontSize: 14, flexShrink: 0 },
   ok: { color: '#1e7e34', fontSize: 15, fontWeight: 600, flexShrink: 0 },
-  sel: { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, outline: 'none', padding: '4px 0', textAlign: 'right' },
-  selTime: { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, outline: 'none', padding: '4px 0', textAlign: 'right', width: 104, flexShrink: 0 },
+  sel: { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, outline: 'none', padding: 0, textAlign: 'right', flex: 1, minWidth: 0, appearance: 'none', WebkitAppearance: 'none' } as any,
+  selTime: { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, outline: 'none', padding: 0, textAlign: 'right', width: 74, flexShrink: 0, appearance: 'none', WebkitAppearance: 'none' } as any,
+  chev: { color: '#c7c7cc', fontSize: 12, marginLeft: 4, flexShrink: 0 },
+  actionRow: { display: 'flex', justifyContent: 'center', padding: '10px 0 12px' },
   foot: { fontSize: 12, color: '#8e8e93', margin: '4px 16px 10px' },
-  rightRow: { display: 'flex', justifyContent: 'flex-end', padding: '2px 0 10px' },
 }
 
 export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
@@ -207,6 +208,17 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
 
+  const timeRow = (label: string, value: string, onChange: (v: string) => void, opts: string[], placeholder?: string) => (
+    <div style={S.row}>
+      <span style={S.label}>{label}</span>
+      <select value={value} onChange={(e) => onChange(e.target.value)} style={S.sel}>
+        {placeholder && <option value="">{placeholder}</option>}
+        {opts.map(t => <option key={t} value={t}>{t}</option>)}
+      </select>
+      <span style={S.chev}>▾</span>
+    </div>
+  )
+
   const windowPicker = (list: Meeting[]) => list.map(w => {
     const opts = TIME_OPTIONS.filter(t => t >= w.time_from && t <= w.time_to)
     const s = sub[w.id] || { from: '', to: '' }
@@ -218,20 +230,27 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
             <div style={S.sub}>окно {w.time_from}–{w.time_to}</div>
           </div>
         </div>
+        <div style={S.sep} />
         <div style={S.row}>
-          <span style={S.label}>Время встречи</span>
-          <span style={{ flex: 1 }} />
-          <select value={s.from} onChange={(e) => setSub({ ...sub, [w.id]: { ...s, from: e.target.value, to: plusHour(e.target.value) } })} style={S.selTime}>
-            <option value="">с --:--</option>
+          <span style={S.label}>Начало</span>
+          <select value={s.from} onChange={(e) => setSub({ ...sub, [w.id]: { ...s, from: e.target.value, to: plusHour(e.target.value) } })} style={S.sel}>
+            <option value="">--:--</option>
             {opts.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
-          <select value={s.to} onChange={(e) => setSub({ ...sub, [w.id]: { ...s, to: e.target.value } })} style={S.selTime}>
-            <option value="">по --:--</option>
-            {opts.map(t => <option key={t} value={t}>{t}</option>)}
-          </select>
+          <span style={S.chev}>▾</span>
         </div>
-        <div style={S.rightRow}>
-          <button style={S.blue} disabled={busy} onClick={() => propose(w, resched && confirmed ? confirmed.id : undefined)}>{resched ? 'Перенести' : 'Предложить'}</button>
+        <div style={S.sep} />
+        <div style={S.row}>
+          <span style={S.label}>Окончание</span>
+          <select value={s.to} onChange={(e) => setSub({ ...sub, [w.id]: { ...s, to: e.target.value } })} style={S.sel}>
+            <option value="">--:--</option>
+            {opts.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+          <span style={S.chev}>▾</span>
+        </div>
+        <div style={S.sep} />
+        <div style={S.actionRow}>
+          <button style={S.blue} disabled={busy} onClick={() => propose(w, resched && confirmed ? confirmed.id : undefined)}>{resched ? 'Перенести встречу' : 'Предложить время'}</button>
         </div>
       </div>
     )
@@ -239,8 +258,6 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
 
   return (
     <div>
-      <div style={S.foot}>Место встречи по умолчанию — арендуемый объект, если не обсуждалось иное.</div>
-
       {confirmed && (
         <div style={S.card}>
           <div style={S.row}>
@@ -293,23 +310,18 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
             <div style={S.sep} />
             <div style={S.row}>
               <span style={S.label}>Дата</span>
-              <select value={date} onChange={(e) => setDate(e.target.value)} style={{ ...S.sel, flex: 1 }}>
+              <select value={date} onChange={(e) => setDate(e.target.value)} style={S.sel}>
                 <option value="">выбрать</option>
                 {DATE_OPTIONS.map(o => <option key={o.iso} value={o.iso}>{o.label}</option>)}
               </select>
+              <span style={S.chev}>▾</span>
             </div>
             <div style={S.sep} />
-            <div style={S.row}>
-              <span style={S.label}>Время</span>
-              <span style={{ flex: 1 }} />
-              <select value={from} onChange={(e) => { setFrom(e.target.value); setTo(plusHour(e.target.value)) }} style={S.selTime}>
-                {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
-              <select value={to} onChange={(e) => setTo(e.target.value)} style={S.selTime}>
-                {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
-            </div>
-            <div style={S.rightRow}>
+            {timeRow('Начало', from, (v) => { setFrom(v); setTo(plusHour(v)) }, TIME_OPTIONS)}
+            <div style={S.sep} />
+            {timeRow('Окончание', to, setTo, TIME_OPTIONS)}
+            <div style={S.sep} />
+            <div style={S.actionRow}>
               <button style={S.blue} disabled={busy} onClick={addWindow}>Добавить окно</button>
             </div>
           </div>
@@ -360,6 +372,8 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
           </div>
         </>
       )}
+
+      <div style={S.foot}>Место встречи по умолчанию — арендуемый объект, если не обсуждалось иное.</div>
     </div>
   )
 }
