@@ -19,8 +19,8 @@ export function TeamManager() {
   const [del, setDel] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  if (role !== 'owner') {
-    return role ? (
+  if (role === 'manager' || role === 'viewer') {
+    return (
       <div style={T.card}>
         <div style={T.h2}>Команда</div>
         <div style={{ ...T.row, borderBottom: 'none' }}>
@@ -28,7 +28,7 @@ export function TeamManager() {
           <b>{ROLE_LABEL[role] || role}</b>
         </div>
       </div>
-    ) : null
+    )
   }
 
   async function invite() {
