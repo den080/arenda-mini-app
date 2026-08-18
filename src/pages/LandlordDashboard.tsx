@@ -69,31 +69,67 @@ export function LandlordDashboard() {
     if (!user) return
     async function fetchData() {
       try {
-        const { data: notifData } = await supabase.from('notifications_log').select('*').eq('user_id', user!.id).order('sent_at', { ascending: false }).limit(5)
-        if (notifData) setNotifications(notifData)
-        const { data: objectsData } = await supabase.from('objects').select('*').eq('landlord_id', user!.id)
-        if (!objectsData) { setObjects([]); setHistory([]); setLoading(false); return }
-        const objectsWithStatus: ObjectWithStatus[] = []
-        const allHistory: any[] = []
         const today = new Date()
         const todayMid = new Date(today.getFullYear(), today.getMonth(), today.getDate())
         const currentMonth = today.getMonth()
         const currentYear = today.getFullYear()
+
+        const [notifRes, objRes] = await Promise.all([
+          supabase.from('notifications_log').select('*').eq('user_id', user!.id).order('sent_at', { ascending: false }).limit(5),
+          supabase.from('objects').select('*').eq('landlord_id', user!.id),
+        ])
+        if (notifRes.data) setNotifications(notifRes.data)
+        const objectsData = objRes.data
+        if (!objectsData || objectsData.length === 0) { setObjects([]); setHistory([]); setLoading(false); return }
+
+        const objIds = objectsData.map((o: any) => o.id)
+        const { data: contractsData } = await supabase
+          .from('contracts').select('*, tenant:users!tenant_id(full_name, phone)')
+          .in('object_id', objIds).eq('status', 'active')
+        const contractByObj: Record<string, any> = {}
+        for (const c of contractsData || []) contractByObj[c.object_id] = c
+        const contractIds = (contractsData || []).map((c: any) => c.id)
+
+        if (contractIds.length) {
+          await Promise.all(contractIds.map((id: string) => ensureNextPayment(id).catch(() => {})))
+        }
+
+        const [paysRes, dReqRes, fRowsRes, meetRes, readRes] = await Promise.all([
+          supabase.from('payments').select('*').in('contract_id', contractIds).order('period', { ascending: false }),
+          supabase.from('deferred_requests').select('*').in('contract_id', contractIds).eq('status', 'proposed'),
+          supabase.from('frozen_penalties').select('*').in('contract_id', contractIds).order('period', { ascending: true }),
+          supabase.from('cash_meetings').select('*').in('contract_id', contractIds).eq('kind', 'meeting').eq('status', 'confirmed'),
+          supabase.from('meter_readings').select('contract_id').in('contract_id', contractIds)
+            .gte('submitted_at', new Date(currentYear, currentMonth, 1).toISOString())
+            .lt('submitted_at', new Date(currentYear, currentMonth + 1, 1).toISOString()),
+        ])
+
+        const paysBy: Record<string, any[]> = {}
+        for (const p of paysRes.data || []) { (paysBy[p.contract_id] = paysBy[p.contract_id] || []).push(p) }
+        const dReqBy: Record<string, any[]> = {}
+        for (const r of dReqRes.data || []) { (dReqBy[r.contract_id] = dReqBy[r.contract_id] || []).push(r) }
+        const fRowsBy: Record<string, any[]> = {}
+        for (const f of fRowsRes.data || []) { (fRowsBy[f.contract_id] = fRowsBy[f.contract_id] || []).push(f) }
+        const meetBy: Record<string, any> = {}
+        for (const m of meetRes.data || []) if (!meetBy[m.contract_id]) meetBy[m.contract_id] = m
+        const readCountBy: Record<string, number> = {}
+        for (const r of readRes.data || []) readCountBy[r.contract_id] = (readCountBy[r.contract_id] || 0) + 1
+
+        const objectsWithStatus: ObjectWithStatus[] = []
+        const allHistory: any[] = []
         for (const obj of objectsData) {
-          const { data: contract } = await supabase.from('contracts').select('*, tenant:users!tenant_id(full_name, phone)').eq('object_id', obj.id).eq('status', 'active').maybeSingle()
+          const contract = contractByObj[obj.id]
           if (!contract) { objectsWithStatus.push({ ...obj, status: 'no_contract', amount: 0, paymentId: null, statusColor: '#888', statusDetail: 'Нет договора' }); continue }
           const readingsMode = contract.readings_mode || 'manual'
           const reminder = contract.reminder_days_before || 3
-          const { data: allPays } = await supabase.from('payments').select('*').eq('contract_id', contract.id).order('period', { ascending: false })
-          for (const p of allPays || []) allHistory.push({ ...p, objId: obj.id, address: obj.address })
-          const { data: dReq } = await supabase.from('deferred_requests').select('*').eq('contract_id', contract.id).eq('status', 'proposed')
-          const { data: fRows } = await supabase.from('frozen_penalties').select('*').eq('contract_id', contract.id).order('period', { ascending: true })
-          const frozenTotal = (fRows || []).reduce((s2: number, d: any) => s2 + Number(d.amount || 0), 0)
-          await ensureNextPayment(contract.id)
-          const openPays = (allPays || []).filter((p: any) => !p.confirmed_by_landlord)
-          const payment = openPays.length ? openPays[openPays.length - 1] : (allPays || [])[0]
-          if (!payment) { objectsWithStatus.push({ ...obj, status: 'no_payment', statusDetail: 'Платёж не создан', statusColor: '#a80', amount: contract.rent_amount, baseAmount: contract.rent_amount, penaltyAmount: 0, utilitiesAmount: 0, paymentId: null, contract, readingsMode, frozenTotal, frozenRows: fRows || [], deferredRequests: dReq || [] }); continue }
-          const { data: cashMeeting } = await supabase.from('cash_meetings').select('*').eq('contract_id', contract.id).eq('kind', 'meeting').eq('status', 'confirmed').order('created_at', { ascending: false }).limit(1).maybeSingle()
+          const allPays = paysBy[contract.id] || []
+          for (const p of allPays) allHistory.push({ ...p, objId: obj.id, address: obj.address })
+          const fRows = fRowsBy[contract.id] || []
+          const frozenTotal = fRows.reduce((s2: number, d: any) => s2 + Number(d.amount || 0), 0)
+          const openPays = allPays.filter((p: any) => !p.confirmed_by_landlord)
+          const payment = openPays.length ? openPays[openPays.length - 1] : allPays[0]
+          if (!payment) { objectsWithStatus.push({ ...obj, status: 'no_payment', statusDetail: 'Платёж не создан', statusColor: '#a80', amount: contract.rent_amount, baseAmount: contract.rent_amount, penaltyAmount: 0, utilitiesAmount: 0, paymentId: null, contract, readingsMode, frozenTotal, frozenRows: fRows, deferredRequests: dReqBy[contract.id] || [] }); continue }
+          const cashMeeting = meetBy[contract.id] || null
           const dueMid = parseDate(payment.due_date)
           const sd = contract.start_date ? parseDate(contract.start_date) : null
           const firstMonth = isFirstPeriod(payment.period, sd)
@@ -105,8 +141,7 @@ export function LandlordDashboard() {
           const paymentId = String(payment.id)
           let waitingForReadings = false
           if (readingsMode === 'manual' && contract.meter_deadline_day && today.getDate() > contract.meter_deadline_day) {
-            const { data: readingsData } = await supabase.from('meter_readings').select('*').eq('contract_id', contract.id).gte('submitted_at', new Date(currentYear, currentMonth, 1).toISOString()).lt('submitted_at', new Date(currentYear, currentMonth + 1, 1).toISOString())
-            if (!readingsData || readingsData.length === 0) waitingForReadings = true
+            if (!(readCountBy[contract.id] > 0)) waitingForReadings = true
           }
           const needUtilitiesReminder = !payment.confirmed_by_landlord && readingsMode !== 'self' && daysUntilDue >= 0 && daysUntilDue <= reminder && utilitiesAmount === 0
           let status: 'paid' | 'overdue' | 'pending' = 'pending'
@@ -129,7 +164,7 @@ export function LandlordDashboard() {
             else if (daysLeft <= reminder) { statusDetail = `${daysLeft} дн. до следующей оплаты`; statusColor = '#a80' }
             else { statusDetail = `${daysLeft} дн. до следующей оплаты`; statusColor = '#080' }
           }
-          objectsWithStatus.push({ ...obj, status, statusDetail, statusColor, amount: baseAmount + penaltyAmount + utilitiesAmount, baseAmount, penaltyAmount, utilitiesAmount, paymentId, contract, payment, daysOverdue: isOverdue ? Math.round((todayMid.getTime() - dueMid.getTime()) / 86400000) : undefined, waitingForReadings, needUtilitiesReminder, readingsMode, frozenTotal, frozenRows: fRows || [], deferredRequests: dReq || [], hasConfirmedCashMeeting: !!cashMeeting })
+          objectsWithStatus.push({ ...obj, status, statusDetail, statusColor, amount: baseAmount + penaltyAmount + utilitiesAmount, baseAmount, penaltyAmount, utilitiesAmount, paymentId, contract, payment, daysOverdue: isOverdue ? Math.round((todayMid.getTime() - dueMid.getTime()) / 86400000) : undefined, waitingForReadings, needUtilitiesReminder, readingsMode, frozenTotal, frozenRows: fRows, deferredRequests: dReqBy[contract.id] || [], hasConfirmedCashMeeting: !!cashMeeting })
         }
         setHistory(allHistory)
         const sortedObjects = objectsWithStatus.sort((a, b) => {
