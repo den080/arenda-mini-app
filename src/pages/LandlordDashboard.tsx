@@ -407,7 +407,7 @@ export function LandlordDashboard() {
                 style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 52, border: 'none', background: 'transparent', cursor: 'pointer', padding: '8px 0', textAlign: 'left', boxSizing: 'border-box' }}
               >
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f' }}>{o.address}</div>
+                  <div style={{ fontSize: 17, fontWeight: 700, color: '#1d1d1f' }}>{o.address}</div>
                   <div style={{ fontSize: 13, color: o.statusColor || '#8e8e93', marginTop: 2 }}>
                     {o.statusDetail}{o.amount > 0 ? ` · ${o.amount.toFixed(0)} ₽` : ''}
                   </div>
