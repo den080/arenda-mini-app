@@ -195,7 +195,7 @@ export function ObjectAdd() {
   }
 
   return (
-    <div style={T.card}>
+    <div>
       {!showForm ? (
         <div style={{ ...T.row, borderBottom: 'none' }}>
           <span style={{ fontSize: 15 }}>Новый объект</span>
