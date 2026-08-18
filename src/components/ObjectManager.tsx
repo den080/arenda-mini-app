@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useTelegramUser } from '../hooks/useTelegramUser'
+import { useTeam } from '../hooks/useTeam'
 import { T } from '../theme'
 import { ConfirmDelete, showToast } from './ui'
 
@@ -109,6 +110,7 @@ const methodOptions = (
 
 export function ObjectAdd() {
   const { user } = useTelegramUser()
+  const { teamId } = useTeam()
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
 
@@ -148,7 +150,7 @@ export function ObjectAdd() {
       } else if (name) {
         await supabase.from('users').update({ full_name: name }).eq('id', counter.id)
       }
-      const { data: obj, error: objErr } = await supabase.from('objects').insert({ landlord_id: user.id, address, notes: notes || null }).select().single()
+      const { data: obj, error: objErr } = await supabase.from('objects').insert({ landlord_id: user.id, address, notes: notes || null, team_id: teamId }).select().single()
       if (objErr) { showToast('Ошибка: ' + objErr.message); return }
       const firstCard = details.find(d => d.type === 'card')
       const startISO = startDate || new Date().toISOString().slice(0, 10)
