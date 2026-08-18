@@ -437,18 +437,21 @@ export function LandlordDashboard() {
           {showUtilities && (
             <div style={T.card}>
               <div style={T.h2}>Ресурсы по квитанции</div>
-              <div style={{ ...T.row, borderBottom: 'none' }}>
+              <div style={T.row}>
+                <span style={iosMuted}>Сумма по квитанции</span>
                 <input
                   type="number"
                   value={utilInputs[current.id] ?? String(current.utilitiesAmount || '')}
                   onChange={(e) => setUtilInputs({ ...utilInputs, [current.id]: e.target.value })}
-                  placeholder="Сумма, ₽"
-                  style={{ flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'transparent', textAlign: 'right', fontSize: 15, color: '#1d1d1f', padding: 0 }}
+                  placeholder="0"
+                  style={{ width: 110, border: 'none', outline: 'none', background: 'rgba(120,120,128,0.08)', borderRadius: 8, padding: '8px 10px', fontSize: 15, textAlign: 'right', color: '#1d1d1f', boxSizing: 'border-box' }}
                   inputMode="numeric"
                 />
+              </div>
+              <div style={{ ...T.row, justifyContent: 'center' }}>
                 <button style={iosBlue} onClick={() => saveUtilitiesNext(utilInputs[current.id] ?? String(current.utilitiesAmount || 0))}>Включить в платёж</button>
               </div>
-              <div style={T.tiny}>Введённая сумма записывается как есть (заменяет предыдущую), добавляется к платежу отдельно, не растёт при просрочке и не входит в штрафы. Если следующего счёта ещё нет — он создаётся вместе с ресурсами.</div>
+              <div style={{ ...T.tiny, margin: '0 0 10px' }}>Введённая сумма записывается как есть (заменяет предыдущую), добавляется к платежу отдельно, не растёт при просрочке и не входит в штрафы.</div>
             </div>
           )}
 
@@ -493,10 +496,10 @@ export function LandlordDashboard() {
                 const sum = Number(h.base_amount || 0) + Number(h.penalty_amount || 0) + Number(h.utilities_amount || 0)
                 return (
                   <div key={h.id} style={T.row}>
-                    <span>{parseDate(h.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}{firstP ? ' · первый месяц' : ''}</span>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ flex: 1, minWidth: 0 }}>{parseDate(h.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}{firstP ? ' · первый месяц' : ''}</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                       <span style={{ fontSize: 13, color: late ? '#ff3b30' : '#8e8e93' }}>{h.confirmed_by_landlord ? (late ? 'просрочка' : 'вовремя') : 'не подтверждён'}</span>
-                      <b>{sum.toFixed(0)} ₽</b>
+                      <b style={{ whiteSpace: 'nowrap' }}>{sum.toFixed(0)} ₽</b>
                     </span>
                   </div>
                 )
