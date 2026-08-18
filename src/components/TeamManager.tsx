@@ -25,7 +25,7 @@ export function TeamManager() {
       <div>
         <div style={head}>Доступ</div>
         <div style={T.card}>
-          <div style={T.h2}>Доступ к пулу</div>
+          <div style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f', margin: '12px 0 2px' }}>Совместный доступ</div>
           <div style={{ ...T.row, borderBottom: 'none' }}>
             <span style={{ fontSize: 15 }}>Вы подключены как</span>
             <b>{ROLE_LABEL[role] || role}</b>
@@ -79,7 +79,7 @@ export function TeamManager() {
     <div>
       <div style={head}>Доступ</div>
       <div style={T.card}>
-       <div style={T.h2}>Совместный доступ</div>
+        <div style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f', margin: '12px 0 2px' }}>Совместный доступ</div>
         {members.length === 0 && <div style={{ ...T.small, margin: '8px 0' }}>Пока только вы.</div>}
         {members.map((m: any, i: number) => (
           <div key={m.id}>
