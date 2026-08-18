@@ -14,7 +14,7 @@ const head: React.CSSProperties = { fontSize: 13, color: '#8e8e93', margin: '14p
 
 export function TeamManager() {
   const { user } = useTelegramUser()
-  const { teamId, role, members, teamName, refresh } = useTeam()
+  const { teamId, role, members, refresh } = useTeam()
   const [phone, setPhone] = useState('')
   const [newRole, setNewRole] = useState<'manager' | 'viewer'>('manager')
   const [del, setDel] = useState<string | null>(null)
