@@ -3,7 +3,7 @@ import { supabase } from './lib/supabase'
 import { useTelegramUser } from './hooks/useTelegramUser'
 import LandlordDashboard from './pages/LandlordDashboard'
 import TenantDashboard from './pages/TenantDashboard'
-import { Toaster, showToast } from './components/ui'
+import { Toaster } from './components/ui'
 import { C } from './theme'
 
 const GLOBAL_CSS = `
@@ -13,7 +13,7 @@ const GLOBAL_CSS = `
 `
 
 // ========== ЗАГЛУШКА ==========
-// LOCKDOWN = true  → пускает только пользователей из whitelist
+// LOCKDOWN = true  → пускает только whitelist и участников команды
 // LOCKDOWN = false → приложение открыто всем пользователям Telegram
 const LOCKDOWN = true
 
@@ -71,12 +71,7 @@ export default function App() {
 
   function tryLogin() {
     const v = value.trim()
-    if (!v) return
-    if (LOCKDOWN && !isAllowed(v)) {
-      showToast('Доступ к приложению сейчас закрыт.')
-      return
-    }
-    loginWithId(v)
+    if (v) loginWithId(v)
   }
 
   if (loading) return <div style={st.wrap}>Загрузка...</div>
@@ -103,7 +98,7 @@ export default function App() {
         <button style={st.button} onClick={tryLogin}>Войти</button>
         {LOCKDOWN && (
           <p style={{ ...st.p, marginTop: 12, fontSize: 13 }}>
-            Сейчас приложение работает в закрытом режиме. Вход возможен только для разрешённых пользователей.
+            Сейчас приложение работает в закрытом режиме. Вход — для разрешённых пользователей и команды пула.
           </p>
         )}
       </div>
