@@ -79,7 +79,7 @@ export function TeamManager() {
     <div>
       <div style={head}>Доступ</div>
       <div style={T.card}>
-        <div style={T.h2}>Кто имеет доступ</div>
+       <div style={T.h2}>Совместный доступ</div>
         {members.length === 0 && <div style={{ ...T.small, margin: '8px 0' }}>Пока только вы.</div>}
         {members.map((m: any, i: number) => (
           <div key={m.id}>
