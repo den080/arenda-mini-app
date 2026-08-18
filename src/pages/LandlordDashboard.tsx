@@ -349,7 +349,7 @@ export function LandlordDashboard() {
       case 'payment_confirmed': return '🟢 Арендодатель подтвердил оплату'
       case 'meter_submitted': return '💦 Переданы новые показания'
       case 'cash_proposed': return '💵 Предложено время встречи наличными'
-      case 'cash_confirmed': return '🤝 Время встречи наличными подтверждено'
+      case 'cash_confirmed': return '🤝 Встреча по оплате согласована'
       case 'deferred_proposed': return '🙏 Арендатор попросил отсрочку штрафа'
       case 'deferred_confirmed': return '🧊 Замороженный штраф обновлён'
       default: return type
@@ -395,6 +395,8 @@ export function LandlordDashboard() {
             ))}
           </div>
         )}
+
+        <div style={secHead}>Объекты</div>
         <div style={T.card}>
           {objects.length === 0 && <div style={{ ...T.small, margin: '8px 0' }}>Пока нет объектов — добавьте первый.</div>}
           {objects.map((o, i) => (
@@ -417,9 +419,10 @@ export function LandlordDashboard() {
               </button>
             </div>
           ))}
+          <div style={{ height: 1, background: 'rgba(60,60,67,0.12)' }} />
+          <ObjectAdd />
         </div>
 
-        <ObjectAdd />
         <TeamManager />
       </div>
     )
