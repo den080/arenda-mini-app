@@ -73,7 +73,7 @@ export function TenantDashboard() {
       case 'payment_confirmed': return '🟢 Арендодатель подтвердил оплату'
       case 'meter_submitted': return '💦 Переданы новые показания'
       case 'cash_proposed': return '💵 Предложено время встречи наличными'
-      case 'cash_confirmed': return '🤝 Время встречи наличными подтверждено'
+      case 'cash_confirmed': return '🤝 Встреча по оплате согласована'
       case 'deferred_proposed': return '🙏 Заявка на отсрочку штрафа отправлена'
       case 'deferred_confirmed': return '🧊 Замороженный штраф обновлён'
       default: return type
@@ -115,7 +115,7 @@ export function TenantDashboard() {
                   style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 52, border: 'none', background: 'transparent', cursor: 'pointer', padding: '8px 0', textAlign: 'left', boxSizing: 'border-box' }}
                 >
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f' }}>{c._address}</div>
+                    <div style={{ fontSize: 17, fontWeight: 700, color: '#1d1d1f' }}>{c._address}</div>
                     <div style={{ fontSize: 13, color: '#8e8e93', marginTop: 2 }}>{Number(c.rent_amount).toFixed(0)} ₽/мес</div>
                   </div>
                   <span style={{ color: '#c7c7cc', fontSize: 18 }}>›</span>
