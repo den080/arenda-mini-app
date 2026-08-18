@@ -303,7 +303,7 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
                     <div style={S.label}>{fmtDate(w.meeting_date)}</div>
                     <div style={S.sub}>{w.time_from}–{w.time_to}</div>
                   </div>
-                  <button style={S.red} onClick={() => removeWindow(w.id)}>удалить</button>
+                 <button style={{ ...S.red, marginRight: 16 }} onClick={() => removeWindow(w.id)}>удалить</button>
                 </div>
               </div>
             ))}
