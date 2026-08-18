@@ -22,6 +22,13 @@ function getAutoId(): string | undefined {
   return undefined
 }
 
+async function isTeamUser(userId: string): Promise<boolean> {
+  const { data: m } = await supabase.from('team_members').select('id').eq('user_id', userId).limit(1)
+  if (m && m.length) return true
+  const { data: t } = await supabase.from('teams').select('id').eq('owner_id', userId).limit(1)
+  return !!(t && t.length)
+}
+
 export function useTelegramUser() {
   const [user, setUser] = useState<User | null>(cachedUser)
   const [loading, setLoading] = useState<boolean>(!cachedUser)
@@ -32,21 +39,6 @@ export function useTelegramUser() {
     setLoading(true)
     setError(null)
     setAccessDenied(false)
-
-    if (LOCKDOWN && !isAllowed(input)) {
-      // номер не в whitelist — но вдруг это Telegram ID уже известного пользователя
-      const { data } = await supabase.from('users').select('*').eq('telegram_id', input).limit(1)
-      const found = data && data[0]
-      if (!found || !isAllowed(found.phone || '')) {
-        setError('Доступ к приложению сейчас закрыт.')
-        setLoading(false)
-        return
-      }
-      cachedUser = found as User
-      setUser(cachedUser)
-      setLoading(false)
-      return
-    }
 
     const isPhone = /\d/.test(input) && input.length >= 10
     const searchValue = isPhone ? normPhone(input) : input
@@ -66,9 +58,14 @@ export function useTelegramUser() {
         .limit(1)
       const found = data && data[0]
       if (dbError) setError('Ошибка базы: ' + dbError.message)
-      else if (!found) setError('Пользователь с таким ID или телефоном не найден.')
+      else if (!found) setError(LOCKDOWN ? 'Доступ к приложению сейчас закрыт.' : 'Пользователь с таким ID или телефоном не найден.')
       else {
-        // привязываем текущий Telegram ID, чтобы дальше входил автоматически
+        const allowed = !LOCKDOWN
+          || isAllowed(input)
+          || isAllowed(String(found.telegram_id || ''))
+          || isAllowed(found.phone || '')
+          || (await isTeamUser(found.id))
+        if (!allowed) { setAccessDenied(true); setLoading(false); return }
         const autoId = getAutoId()
         if (autoId && String(found.telegram_id || '') !== autoId) {
           await supabase.from('users').update({ telegram_id: autoId }).eq('id', found.id)
@@ -99,29 +96,26 @@ export function useTelegramUser() {
     if (cachedUser) return
     const autoId = getAutoId()
     ;(async () => {
-      // 1) Telegram ID прямо в whitelist (тестеры)
       if (autoId && isAllowed(autoId)) {
         loginWithId(autoId)
         return
       }
-      // 2) ищем пользователя по Telegram ID
       if (autoId) {
         const { data } = await supabase.from('users').select('*').eq('telegram_id', autoId).limit(1)
         const found = data && data[0]
         if (found) {
-          if (!LOCKDOWN || isAllowed(found.phone || '')) {
+          const allowed = !LOCKDOWN || isAllowed(found.phone || '') || (await isTeamUser(found.id))
+          if (allowed) {
             cachedUser = found as User
             setUser(cachedUser)
             setLoading(false)
             return
           }
-          // пользователь есть, но не в whitelist
           setAccessDenied(true)
           setLoading(false)
           return
         }
       }
-      // 3) сохранённый тестовый вход (вне Telegram или прошлый вход)
       try {
         const saved = localStorage.getItem('rentflow_tg_id') || undefined
         if (saved && (!LOCKDOWN || isAllowed(saved))) {
@@ -129,7 +123,6 @@ export function useTelegramUser() {
           return
         }
       } catch {}
-      // 4) предлагаем войти по телефону из whitelist
       setError('Введите номер телефона, указанный в договоре.')
       setLoading(false)
     })()
