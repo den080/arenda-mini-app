@@ -58,7 +58,7 @@ export function Progress({ value, max }: { value: number; max: number }) {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#8e8e93', marginBottom: 4 }}>
-        <span>Внесено {Number(value || 0).toFixed(0)} из {Number(max || 0).toFixed(0)}</span>
+        <span>Депозит (залог): внесено {Number(value || 0).toFixed(0)} из {Number(max || 0).toFixed(0)}</span>
         <span>{pct}%</span>
       </div>
       <div style={{ height: 6, borderRadius: 3, background: 'rgba(120,120,128,0.16)' }}>
