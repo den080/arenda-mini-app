@@ -44,21 +44,19 @@ export function TenantDashboard() {
 
   async function load() {
     if (!user) return
-    const { data: cs } = await supabase
-      .from('contracts').select('*')
-      .eq('tenant_id', user.id).eq('status', 'active')
-      .order('created_at', { ascending: true })
-    const list: any[] = []
-    for (const c of cs || []) {
-      const { data: obj } = await supabase.from('objects').select('address').eq('id', c.object_id).maybeSingle()
-      list.push({ ...c, _address: obj?.address || 'Объект' })
+    const [csRes, notifRes] = await Promise.all([
+      supabase.from('contracts').select('*').eq('tenant_id', user.id).eq('status', 'active').order('created_at', { ascending: true }),
+      supabase.from('notifications_log').select('*').eq('user_id', user.id).order('sent_at', { ascending: false }).limit(5),
+    ])
+    const cs = csRes.data || []
+    const objIds = cs.map((c: any) => c.object_id)
+    const objBy: Record<string, any> = {}
+    if (objIds.length) {
+      const { data: objs } = await supabase.from('objects').select('id, address').in('id', objIds)
+      for (const o of objs || []) objBy[o.id] = o
     }
-    setContracts(list)
-    const { data: notifData } = await supabase
-      .from('notifications_log').select('*')
-      .eq('user_id', user.id)
-      .order('sent_at', { ascending: false }).limit(5)
-    setNotifications(notifData || [])
+    setContracts(cs.map((c: any) => ({ ...c, _address: objBy[c.object_id]?.address || 'Объект' })))
+    setNotifications(notifRes.data || [])
     setLoading(false)
   }
 
@@ -143,9 +141,11 @@ export function TenantDashboard() {
     </div>
   )
 }
+const rentalCache: Record<string, any> = {}
+
 function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; setTab: (t: string) => void }) {
   const { user } = useTelegramUser()
-  const [data, setData] = useState<any>(null)
+  const [data, setData] = useState<any>(rentalCache[contract.id] || null)
   const [vals, setVals] = useState<Record<string, string>>({})
   const [historyOpen, setHistoryOpen] = useState<Record<string, boolean>>({})
   const [advOpen, setAdvOpen] = useState(false)
@@ -153,34 +153,47 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
 
   async function load() {
     if (!user) return
-    const { data: obj } = await supabase.from('objects').select('*').eq('id', contract.object_id).maybeSingle()
-    const { data: landlord } = await supabase.from('users').select('*').eq('id', obj?.landlord_id).maybeSingle()
-    await ensureNextPayment(contract.id)
-    const { data: payments } = await supabase.from('payments').select('*').eq('contract_id', contract.id).order('period', { ascending: false })
-    const { data: metersRaw } = await supabase.from('object_meters').select('*').eq('object_id', contract.object_id).eq('is_active', true)
-    const { data: meterTypes } = await supabase.from('meter_types').select('*')
+    await ensureNextPayment(contract.id).catch(() => {})
+    const [objRes, paysRes, metersRawRes, meterTypesRes, penaltyRes, frozenRes, deferredRes] = await Promise.all([
+      supabase.from('objects').select('*').eq('id', contract.object_id).maybeSingle(),
+      supabase.from('payments').select('*').eq('contract_id', contract.id).order('period', { ascending: false }),
+      supabase.from('object_meters').select('*').eq('object_id', contract.object_id).eq('is_active', true),
+      supabase.from('meter_types').select('*'),
+      supabase.from('penalty_rules').select('*').eq('contract_id', contract.id),
+      supabase.from('frozen_penalties').select('*').eq('contract_id', contract.id).order('period', { ascending: true }),
+      supabase.from('deferred_requests').select('*').eq('contract_id', contract.id).order('created_at', { ascending: false }).limit(1),
+    ])
+    const obj = objRes.data
+    const { data: landlord } = obj?.landlord_id
+      ? await supabase.from('users').select('*').eq('id', obj.landlord_id).maybeSingle()
+      : { data: null }
+    const meterTypes = meterTypesRes.data || []
     const g = (c: string) => c === 'water_cold' ? 0 : c === 'water_hot' ? 1 : c.startsWith('electricity') ? 2 : c === 'heat' ? 3 : c === 'gas' ? 4 : 5
-    const meters = (metersRaw || []).slice().sort((a: any, b: any) => {
-      const ca = (meterTypes || []).find((x: any) => x.id === a.meter_type_id)?.code || ''
-      const cb = (meterTypes || []).find((x: any) => x.id === b.meter_type_id)?.code || ''
+    const meters = (metersRawRes.data || []).slice().sort((a: any, b: any) => {
+      const ca = meterTypes.find((x: any) => x.id === a.meter_type_id)?.code || ''
+      const cb = meterTypes.find((x: any) => x.id === b.meter_type_id)?.code || ''
       return g(ca) - g(cb) || String(a.label || '').localeCompare(String(b.label || ''))
     })
-    const { data: penaltyRules } = await supabase.from('penalty_rules').select('*').eq('contract_id', contract.id)
-    const { data: frozenRows } = await supabase.from('frozen_penalties').select('*').eq('contract_id', contract.id).order('period', { ascending: true })
-    const { data: deferredReqs } = await supabase.from('deferred_requests').select('*').eq('contract_id', contract.id).order('created_at', { ascending: false }).limit(1)
     const ids = meters.map((m: any) => m.id)
     const readingsByMeter: Record<string, any[]> = {}
     if (ids.length) {
-      const { data: rd } = await supabase
-        .from('meter_readings').select('*')
-        .in('object_meter_id', ids)
-        .order('submitted_at', { ascending: false })
+      const { data: rd } = await supabase.from('meter_readings').select('*').in('object_meter_id', ids).order('submitted_at', { ascending: false })
       for (const r of rd || []) {
         if (!readingsByMeter[r.object_meter_id]) readingsByMeter[r.object_meter_id] = []
         readingsByMeter[r.object_meter_id].push(r)
       }
     }
-    setData({ obj, landlord, payments: payments || [], meters, meterTypes: meterTypes || [], penaltyRules: penaltyRules || [], frozenRows: frozenRows || [], deferredReqs: deferredReqs || [], readingsByMeter })
+    const d = {
+      obj, landlord,
+      payments: paysRes.data || [],
+      meters, meterTypes,
+      penaltyRules: penaltyRes.data || [],
+      frozenRows: frozenRes.data || [],
+      deferredReqs: deferredRes.data || [],
+      readingsByMeter,
+    }
+    rentalCache[contract.id] = d
+    setData(d)
   }
 
   useEffect(() => {
