@@ -309,6 +309,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
   const iosMuted: React.CSSProperties = { color: '#8e8e93', fontSize: 14 }
   const secHead: React.CSSProperties = { fontSize: 13, color: '#8e8e93', margin: '14px 16px 6px', textTransform: 'uppercase', letterSpacing: 0.3 }
   const rightInput: React.CSSProperties = { width: 110, border: 'none', outline: 'none', background: 'rgba(120,120,128,0.08)', borderRadius: 8, padding: '8px 10px', fontSize: 15, textAlign: 'right', color: '#1d1d1f', boxSizing: 'border-box' }
+  const actionRow: React.CSSProperties = { display: 'flex', justifyContent: 'center', padding: '8px 0 10px' }
   const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProperties
 
   const latests = (meters || []).map((m: any) => ((readingsByMeter || {})[m.id] || [])[0]).filter(Boolean)
@@ -381,30 +382,22 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
             </div>
             <div style={{ padding: '0 0 8px' }}><span style={statusChip}>{statusText}</span></div>
             {isOverdue && <div style={T.noteRed}>+{penaltyRate} руб за каждый день просрочки</div>}
-
             {firstMonth && !payment?.confirmed_by_landlord && (
               <div style={T.note}>Первый месяц оплачивается при подписании договора — подтверждение выставляет арендодатель.</div>
             )}
-
-            {effectiveMethod === 'card' && details.length > 0 && !payment?.confirmed_by_landlord && !firstMonth && (
-              payment.card_claimed ? (
-                <div style={T.note}>Безналичная оплата отмечена: ожидает подтверждения арендодателем</div>
-              ) : (
-                <button onClick={claimPaid} style={T.btn}>Я оплатил</button>
-              )
-            )}
-
             {payment && !payment.confirmed_by_landlord && Number(payment.penalty_amount) > 0 && (
               deferralPending ? (
                 <div style={T.note}>Отсрочка штрафа: заявка на рассмотрении</div>
               ) : (
-                <button onClick={requestDeferral} style={T.btnWarn}>Попросить отсрочку штрафа</button>
+                <div style={actionRow}><button onClick={requestDeferral} style={iosBlue}>Попросить отсрочку штрафа</button></div>
               )
             )}
+          </div>
 
-            {contract.payment_method === 'both' && (
-              <div style={{ marginTop: 6 }}>
-                <div style={secHead}>Как вы будете платить</div>
+          {contract.payment_method === 'both' && (
+            <div>
+              <div style={secHead}>Способ оплаты</div>
+              <div style={T.card}>
                 {[
                   { v: 'card', l: 'Безналичный расчёт' },
                   { v: 'cash', l: 'Наличные' },
@@ -421,15 +414,17 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
                   </div>
                 ))}
               </div>
-            )}
+            </div>
+          )}
 
-            {effectiveMethod === 'card' && (
-              <div style={{ marginTop: 6 }}>
-                <div style={secHead}>Способы оплаты</div>
+          {effectiveMethod === 'card' && (
+            <div>
+              <div style={secHead}>Способы оплаты</div>
+              <div style={T.card}>
                 {details.length === 0 ? (
                   <div style={{ ...T.small, margin: '8px 0' }}>Арендодатель ещё не добавил реквизиты для безналичной оплаты.</div>
                 ) : (
-                  details.map((d: PayDetail, i: number) => (
+                  details.map((d: PayDetail, i) => (
                     <div key={i} style={T.item}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
                         <div style={{ minWidth: 0 }}>
@@ -441,21 +436,28 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
                     </div>
                   ))
                 )}
+                {details.length > 0 && !payment?.confirmed_by_landlord && !firstMonth && (
+                  payment.card_claimed ? (
+                    <div style={T.note}>Безналичная оплата отмечена: ожидает подтверждения арендодателем</div>
+                  ) : (
+                    <div style={actionRow}><button onClick={claimPaid} style={iosBlue}>Я оплатил</button></div>
+                  )
+                )}
               </div>
-            )}
+            </div>
+          )}
 
-            {effectiveMethod === 'cash' && (
-              <div style={{ marginTop: 6 }}>
-                <div style={secHead}>Оплата наличными</div>
-                <CashNegotiation
-                  contractId={contract.id}
-                  myRole="tenant"
-                  tenantId={contract.tenant_id}
-                  landlordId={obj?.landlord_id}
-                />
-              </div>
-            )}
-          </div>
+          {effectiveMethod === 'cash' && (
+            <div>
+              <div style={secHead}>Оплата наличными</div>
+              <CashNegotiation
+                contractId={contract.id}
+                myRole="tenant"
+                tenantId={contract.tenant_id}
+                landlordId={obj?.landlord_id}
+              />
+            </div>
+          )}
 
           <div style={T.card}>
             <div style={T.row}>
