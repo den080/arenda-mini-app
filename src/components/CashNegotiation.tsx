@@ -250,7 +250,7 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
         </div>
         <div style={S.sep} />
         <div style={S.actionRow}>
-          <button style={S.blue} disabled={busy} onClick={() => propose(w, resched && confirmed ? confirmed.id : undefined)}>{resched ? 'Перенести встречу' : 'Предложить время'}</button>
+        <button style={S.blue} disabled={busy} onClick={() => propose(w, resched && confirmed ? confirmed.id : undefined)}>{resched ? 'Перенести встречу' : 'Выбрать время встречи'}</button>
         </div>
       </div>
     )
