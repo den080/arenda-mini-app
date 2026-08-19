@@ -67,6 +67,8 @@ export function LandlordDashboard() {
   const [fz, setFz] = useState<{ id: string; zero: boolean } | null>(null)
   const [fzAmount, setFzAmount] = useState('')
   const [fzNote, setFzNote] = useState('')
+  const [payConfirm, setPayConfirm] = useState<null | { kind: 'card' | 'cash' | 'cash-close' | 'full' }>(null)
+  const [payConfirmOk, setPayConfirmOk] = useState(false)
 
   useEffect(() => {
     if (!user) return
@@ -375,6 +377,10 @@ export function LandlordDashboard() {
   const tenantChoseCash = contract && (contract.payment_method === 'cash' || (contract.payment_method === 'both' && (contract as any).tenant_pay_method === 'cash'))
   const objHistory = history.filter(h => h.objId === current?.id).slice(0, 10)
 
+  const pcPay = current?.payment
+  const pcMonth = pcPay ? new Date(pcPay.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : ''
+  const pcSum = pcPay ? Number(pcPay.base_amount || 0) + Number(pcPay.penalty_amount || 0) + Number(pcPay.utilities_amount || 0) : 0
+
   const payBadge = !!((current?.payment && !current.payment.confirmed_by_landlord) || firstMonthPending)
   const metersBadge = !!current?.waitingForReadings
 
@@ -452,7 +458,7 @@ export function LandlordDashboard() {
                 {current.payment?.confirmed_card
                   ? <span style={iosOk}>получена</span>
                   : current.payment?.card_claimed
-                    ? <button style={iosBlue} onClick={() => confirmChannel(current.paymentId!, 'card')}>Подтвердить</button>
+                    ? <button style={iosBlue} onClick={() => { setPayConfirmOk(false); setPayConfirm({ kind: 'card' }) }}>Подтвердить</button>
                     : <span style={iosMuted}>не заявлена</span>}
               </div>
               <div style={{ ...T.row, borderBottom: 'none' }}>
@@ -464,14 +470,14 @@ export function LandlordDashboard() {
                     : current.hasConfirmedCashMeeting
                       ? (
                         <span style={{ display: 'flex', gap: 14 }}>
-                          <button style={iosRed} onClick={() => confirmChannel(current.paymentId!, 'cash', true)}>завершить</button>
-                          <button style={iosBlue} onClick={() => confirmChannel(current.paymentId!, 'cash')}>Подтвердить</button>
+                          <button style={iosRed} onClick={() => { setPayConfirmOk(false); setPayConfirm({ kind: 'cash-close' }) }}>завершить</button>
+                          <button style={iosBlue} onClick={() => { setPayConfirmOk(false); setPayConfirm({ kind: 'cash' }) }}>Подтвердить</button>
                         </span>
                       )
                       : <span style={iosMuted}>не заявлена</span>}
               </div>
               {!current.payment?.card_claimed && !current.hasConfirmedCashMeeting && (
-                <button style={T.btn} onClick={() => confirmChannel(current.paymentId!, 'card')}>Подтвердить получение оплаты</button>
+                <button style={T.btn} onClick={() => { setPayConfirmOk(false); setPayConfirm({ kind: 'full' }) }}>Подтвердить получение оплаты</button>
               )}
             </div>
           )}
@@ -645,6 +651,34 @@ export function LandlordDashboard() {
       )}
 
       <BottomNav tabs={OBJ_TABS} tab={tab} setTab={setTab} badges={{ pay: payBadge, meters: metersBadge }} />
+
+      <Modal open={!!payConfirm} title="Подтверждение оплаты" onClose={() => setPayConfirm(null)}>
+        <div style={{ fontSize: 14, color: '#555', marginBottom: 12 }}>
+          Счёт за {pcMonth} на {pcSum.toFixed(0)} ₽.{' '}
+          {payConfirm?.kind === 'cash-close'
+            ? 'Наличный расчёт будет завершён без отметки о получении.'
+            : 'Платёж будет отмечен полученным (в т. ч. досрочно), создастся следующий счёт. Действие необратимо.'}
+        </div>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 14, marginBottom: 14, color: '#1d1d1f' }}>
+          <input type="checkbox" checked={payConfirmOk} onChange={(e) => setPayConfirmOk(e.target.checked)} />
+          Деньги фактически получены
+        </label>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            disabled={!payConfirmOk}
+            style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer', opacity: payConfirmOk ? 1 : 0.4 }}
+            onClick={() => {
+              const k = payConfirm!.kind
+              setPayConfirm(null)
+              if (!current?.paymentId) return
+              if (k === 'cash-close') confirmChannel(current.paymentId, 'cash', true)
+              else if (k === 'cash') confirmChannel(current.paymentId, 'cash')
+              else confirmChannel(current.paymentId, 'card')
+            }}
+          >Подтвердить</button>
+          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 15, cursor: 'pointer' }} onClick={() => setPayConfirm(null)}>Отмена</button>
+        </div>
+      </Modal>
 
       <PromptNumber
         open={depModal === 'add'}
