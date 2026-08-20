@@ -46,7 +46,7 @@ export function TenantDashboard() {
   async function load() {
     if (!user) return
     const [csRes, notifRes] = await Promise.all([
-      supabase.from('contracts').select('*').eq('tenant_id', user.id).eq('status', 'active').order('created_at', { ascending: true }),
+      supabase.from('contracts').select('*').eq('tenant_id', user.id).in('status', ['active', 'terminated']).order('created_at', { ascending: true }),
       supabase.from('notifications_log').select('*').eq('user_id', user.id).order('sent_at', { ascending: false }).limit(5),
     ])
     const cs = csRes.data || []
@@ -80,6 +80,7 @@ export function TenantDashboard() {
       case 'bill_uploaded': return '📄 Квитанция загружена'
       case 'bill_paid': return '🧾 Подтверждение оплаты приложено'
       case 'bill_confirmed': return '✅ Арендодатель подтвердил оплату по квитанции'
+      case 'contract_terminated': return '🏁 Договор завершён'
       default: return type
     }
   }
@@ -119,7 +120,7 @@ export function TenantDashboard() {
                 >
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 17, fontWeight: 700, color: '#1d1d1f' }}>{c._address}</div>
-                    <div style={{ fontSize: 13, color: '#8e8e93', marginTop: 4 }}>{Number(c.rent_amount).toFixed(0)} ₽/мес</div>
+                    <div style={{ fontSize: 13, color: c.status === 'terminated' ? '#ff3b30' : '#8e8e93', marginTop: 4 }}>{Number(c.rent_amount).toFixed(0)} ₽/мес{c.status === 'terminated' ? ' · договор завершён' : ''}</div>
                   </div>
                   <span style={{ color: '#c7c7cc', fontSize: 18 }}>›</span>
                 </button>
@@ -317,6 +318,40 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
   const rightInput: React.CSSProperties = { width: 110, border: 'none', outline: 'none', background: 'rgba(120,120,128,0.08)', borderRadius: 8, padding: '8px 10px', fontSize: 15, textAlign: 'right', color: '#1d1d1f', boxSizing: 'border-box' }
   const actionRow: React.CSSProperties = { display: 'flex', justifyContent: 'center', padding: '8px 0 10px' }
   const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProperties
+
+  if (contract.status === 'terminated') {
+    const s = (contract as any).settlement || {}
+    return (
+      <div>
+        <div style={T.card}>
+          <div style={T.h2}>Договор завершён</div>
+          <div style={T.row}><span style={iosMuted}>Дата съезда</span><b>{contract.terminated_at ? new Date(contract.terminated_at).toLocaleDateString('ru-RU') : '—'}</b></div>
+          {contract.termination_note && <div style={T.row}><span style={iosMuted}>Примечание</span><b>{contract.termination_note}</b></div>}
+          {s.deposit_paid != null && <div style={T.row}><span style={iosMuted}>Депозит внесён</span><b>{Number(s.deposit_paid).toFixed(0)} ₽</b></div>}
+          {s.frozen_total != null && Number(s.frozen_total) > 0 && <div style={T.row}><span style={iosMuted}>Удержано по штрафам</span><b>{Number(s.frozen_total).toFixed(0)} ₽</b></div>}
+          {s.open_debt != null && Number(s.open_debt) > 0 && <div style={T.row}><span style={iosMuted}>Долг по счетам</span><b>{Number(s.open_debt).toFixed(0)} ₽</b></div>}
+          <div style={{ ...T.row, borderBottom: 'none' }}>
+            <span style={iosMuted}>Итог</span>
+            <b style={{ color: Number(s.result || 0) >= 0 ? '#1e7e34' : '#ff3b30' }}>
+              {Number(s.result || 0) >= 0 ? `К возврату арендатору ${Number(s.result).toFixed(0)} ₽` : `Долг арендатора ${Math.abs(Number(s.result || 0)).toFixed(0)} ₽`}
+            </b>
+          </div>
+        </div>
+        <div style={T.card}>
+          <div style={T.h2}>История платежей</div>
+          {(payments || []).slice(0, 24).map((p: any) => (
+            <div key={p.id} style={T.row}>
+              <span style={{ flex: 1, minWidth: 0 }}>{new Date(p.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                <span style={{ fontSize: 13, color: p.confirmed_by_landlord ? '#1e7e34' : '#b25000' }}>{p.confirmed_by_landlord ? 'оплачен' : 'ожидает'}</span>
+                <b style={{ whiteSpace: 'nowrap' }}>{(Number(p.base_amount) + Number(p.penalty_amount || 0) + Number(p.utilities_amount || 0)).toFixed(0)} ₽</b>
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
 
   const latests = (meters || []).map((m: any) => ((readingsByMeter || {})[m.id] || [])[0]).filter(Boolean)
   const overallReading = latests.length === 0
