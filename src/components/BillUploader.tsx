@@ -7,6 +7,27 @@ import { showToast } from './ui'
 const iosBlue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: 4, flexShrink: 0 }
 const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProperties
 
+function openDoc(url: string) {
+  const tg = (window as any).Telegram?.WebApp
+  if (tg && typeof tg.openLink === 'function') tg.openLink(url)
+  else window.open(url, '_blank')
+}
+
+export function billChip(status: string, overdue: boolean): React.CSSProperties {
+  const base: React.CSSProperties = { fontSize: 12, fontWeight: 600, padding: '3px 10px', borderRadius: 999, flexShrink: 0, whiteSpace: 'nowrap', alignSelf: 'flex-start' }
+  if (status === 'confirmed') return { ...base, background: 'rgba(52,199,89,0.15)', color: '#1e7e34' }
+  if (status === 'paid') return { ...base, background: 'rgba(0,113,227,0.12)', color: '#0071e3' }
+  if (overdue) return { ...base, background: 'rgba(255,59,48,0.15)', color: '#c00' }
+  return { ...base, background: 'rgba(255,149,0,0.15)', color: '#b25000' }
+}
+
+export function billChipText(status: string, overdue: boolean): string {
+  if (status === 'confirmed') return 'подтверждено'
+  if (status === 'paid') return 'оплачено'
+  if (overdue) return 'просрочено'
+  return 'к оплате'
+}
+
 function compress(file: File): Promise<Blob> {
   return new Promise((resolve, reject) => {
     const fr = new FileReader()
@@ -40,7 +61,9 @@ async function upload(blob: Blob, prefix: string, ext: string, contentType: stri
 export function Media({ url, maxH }: { url: string; maxH: number }) {
   if (url.includes('.pdf')) {
     return (
-      <a href={url} target="_blank" rel="noopener" style={{ display: 'inline-block', marginTop: 8, color: '#0071e3', fontSize: 15, fontWeight: 600, textDecoration: 'none' }}>📄 Открыть документ (PDF)</a>
+      <button onClick={() => openDoc(url)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 8, border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: 0 }}>
+        📄 Открыть документ (PDF)
+      </button>
     )
   }
   return <img src={url} alt="" style={{ width: '100%', maxHeight: maxH, objectFit: 'cover', borderRadius: 10, marginTop: 8 }} />
@@ -111,7 +134,7 @@ export function BillUploader({ contractId, landlordId }: { contractId: string; l
             message: '🧾 Квитанция оплачена — подтверждение приложено',
             sent_at: new Date().toISOString(),
           })
-          showToast('✅ Подтверждение загружено')
+          showToast('✅ Подтверждение отправлено арендодателю')
         }
         load()
         window.dispatchEvent(new Event('rentflow-refresh'))
@@ -140,18 +163,14 @@ export function BillUploader({ contractId, landlordId }: { contractId: string; l
           <div key={b.id}>
             {i > 0 && <div style={hair} />}
             <div style={{ padding: '10px 0' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 15, fontWeight: 600 }}>Квитанция за {new Date(b.period + '-01').toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}</div>
                   <div style={{ fontSize: 13, color: '#8e8e93', marginTop: 2 }}>
                     загружена {new Date(b.uploaded_at).toLocaleDateString('ru-RU')} · оплатить до {new Date(b.due_date).toLocaleDateString('ru-RU')}
                   </div>
                 </div>
-                <span style={{
-                  fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 999, flexShrink: 0,
-                  background: b.status === 'confirmed' ? 'rgba(52,199,89,0.15)' : b.status === 'paid' ? 'rgba(0,113,227,0.12)' : overdue ? 'rgba(255,59,48,0.15)' : 'rgba(120,120,128,0.12)',
-                  color: b.status === 'confirmed' ? '#1e7e34' : b.status === 'paid' ? '#0071e3' : overdue ? '#c00' : '#1d1d1f',
-                }}>{b.status === 'confirmed' ? 'подтверждено' : b.status === 'paid' ? 'оплачено' : overdue ? 'просрочено' : 'к оплате'}</span>
+                <span style={billChip(b.status, overdue)}>{billChipText(b.status, overdue)}</span>
               </div>
               {b.bill_url && <Media url={b.bill_url} maxH={160} />}
               {b.payment_url && (
@@ -159,6 +178,9 @@ export function BillUploader({ contractId, landlordId }: { contractId: string; l
                   <div style={{ fontSize: 13, color: '#8e8e93' }}>Подтверждение оплаты:</div>
                   <Media url={b.payment_url} maxH={140} />
                 </div>
+              )}
+              {b.status === 'paid' && (
+                <div style={{ fontSize: 13, color: '#1e7e34', marginTop: 6 }}>✅ Оплата отправлена, ждёт подтверждения арендодателем</div>
               )}
               <div style={{ display: 'flex', gap: 16, marginTop: 8 }}>
                 {b.status === 'pending' && <button style={iosBlue} onClick={() => pickAndUpload('payment', b.id)}>Приложить оплату</button>}
@@ -168,7 +190,7 @@ export function BillUploader({ contractId, landlordId }: { contractId: string; l
         )
       })}
       <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 6px' }}>
-        <button style={iosBlue} disabled={busy} onClick={() => pickAndUpload('bill')}>Загрузить квитанцию</button>
+        <button style={iosBlue} disabled={busy} onClick={() => pickAndUpload('bill')}>{busy ? 'Загрузка…' : 'Загрузить квитанцию'}</button>
       </div>
     </div>
   )
