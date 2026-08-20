@@ -170,10 +170,13 @@ export function ObjectAdd() {
         status: 'active',
       }).select().single()
       if (conErr) { showToast('Ошибка: ' + conErr.message); return }
-      await supabase.from('penalty_rules').insert([
+      const rules: any[] = [
         { contract_id: contract.id, violation_type: 'payment_overdue', rate: Number(penPay) || 500, rate_unit: 'per_day_rub', starts_after_days: 0 },
-        { contract_id: contract.id, violation_type: 'readings_overdue', rate: Number(penRead) || 100, rate_unit: 'per_day_rub', starts_after_days: 0 },
-      ])
+      ]
+      if (readingsMode === 'manual') {
+        rules.push({ contract_id: contract.id, violation_type: 'readings_overdue', rate: Number(penRead) || 100, rate_unit: 'per_day_rub', starts_after_days: 0 })
+      }
+      await supabase.from('penalty_rules').insert(rules)
       const startD = new Date(startISO + 'T00:00:00')
       const periodD = new Date(startD.getFullYear(), startD.getMonth(), 1)
       const payDay = Number(paymentDay) || 1
@@ -348,12 +351,16 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
       if (!locked) {
         const rules: Array<['payment_overdue' | 'readings_overdue', number]> = [
           ['payment_overdue', Number(ePenPay) || 500],
-          ['readings_overdue', Number(ePenRead) || 100],
         ]
+        if (eReadingsMode === 'manual') rules.push(['readings_overdue', Number(ePenRead) || 100])
         for (const [vt, rate] of rules) {
           const { data: ex } = await supabase.from('penalty_rules').select('id').eq('contract_id', editContractId).eq('violation_type', vt).limit(1)
           if (ex && ex.length) await supabase.from('penalty_rules').update({ rate }).eq('id', ex[0].id)
           else await supabase.from('penalty_rules').insert({ contract_id: editContractId, violation_type: vt, rate, rate_unit: 'per_day_rub', starts_after_days: 0 })
+        }
+        if (eReadingsMode !== 'manual') {
+          const { data: ex } = await supabase.from('penalty_rules').select('id').eq('contract_id', editContractId).eq('violation_type', 'readings_overdue').limit(1)
+          if (ex && ex.length) await supabase.from('penalty_rules').update({ rate: 0 }).eq('id', ex[0].id)
         }
       }
       if (editCounterId) {
@@ -375,6 +382,7 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
       await supabase.from('deferred_requests').delete().in('contract_id', ids)
       await supabase.from('deferred_debts').delete().in('contract_id', ids)
       await supabase.from('frozen_penalties').delete().in('contract_id', ids)
+      await supabase.from('utility_bills').delete().in('contract_id', ids)
       await supabase.from('contracts').delete().in('id', ids)
     }
     await supabase.from('object_meters').delete().eq('object_id', objectId)
