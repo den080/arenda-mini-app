@@ -8,6 +8,7 @@ import ReadingsReview from '../components/ReadingsReview'
 import Chat from '../components/Chat'
 import { ObjectAdd, ObjectEdit } from '../components/ObjectManager'
 import TeamManager from '../components/TeamManager'
+import ContactsEditor from '../components/ContactsEditor'
 import { ensureNextPayment } from '../lib/nextPayment'
 import { BottomNav, Modal, PromptNumber, Progress, showToast } from '../components/ui'
 import { T } from '../theme'
@@ -591,6 +592,9 @@ export function LandlordDashboard() {
               </div>
             )}
           </div>
+
+          <div style={secHead}>Экстренные контакты</div>
+          <ContactsEditor objId={current.id} />
 
           <div style={T.card}>
             <div style={T.h2}>Способ оплаты</div>
