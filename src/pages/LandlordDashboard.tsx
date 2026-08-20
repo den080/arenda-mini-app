@@ -346,6 +346,7 @@ export function LandlordDashboard() {
     }
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
+
   const getNotificationText = (type: string) => {
     switch (type) {
       case 'payment_claimed': return '✅ Арендатор сообщил об оплате'
@@ -404,29 +405,29 @@ export function LandlordDashboard() {
         )}
 
         <div style={secHead}>Объекты</div>
-        <div style={T.card}>
-          {objects.length === 0 && <div style={{ ...T.small, margin: '8px 0' }}>Пока нет объектов — добавьте первый.</div>}
-          {objects.map((o, i) => (
-            <div key={o.id}>
-              {i > 0 && <div style={{ height: 1, background: 'rgba(60,60,67,0.12)' }} />}
-              <button
-                onClick={() => { setOpenId(o.id); setTab('pay') }}
-                style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 64, border: 'none', background: 'transparent', cursor: 'pointer', padding: '14px 0', textAlign: 'left', boxSizing: 'border-box' }}
-              >
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 17, fontWeight: 700, color: '#1d1d1f' }}>{o.address}</div>
-                  <div style={{ fontSize: 13, color: o.statusColor || '#8e8e93', marginTop: 4 }}>
-                    {o.statusDetail}{o.amount > 0 ? ` · ${o.amount.toFixed(0)} ₽` : ''}
-                  </div>
+        {objects.length === 0 && (
+          <div style={T.card}><div style={{ ...T.small, margin: '8px 0' }}>Пока нет объектов — добавьте первый.</div></div>
+        )}
+        {objects.map((o) => (
+          <div key={o.id} style={T.card}>
+            <button
+              onClick={() => { setOpenId(o.id); setTab('pay') }}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 56, border: 'none', background: 'transparent', cursor: 'pointer', padding: '4px 0', textAlign: 'left', boxSizing: 'border-box' }}
+            >
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 17, fontWeight: 700, color: '#1d1d1f' }}>{o.address}</div>
+                <div style={{ fontSize: 13, color: o.statusColor || '#8e8e93', marginTop: 4 }}>
+                  {o.statusDetail}{o.amount > 0 ? ` · ${o.amount.toFixed(0)} ₽` : ''}
                 </div>
-                {Number((o.contract as any)?.deposit_amount || 0) > 0 && (
-                  <span style={{ fontSize: 12, color: '#8e8e93', flexShrink: 0 }}>депозит {Number((o.contract as any).deposit_paid || 0).toFixed(0)}/{Number((o.contract as any).deposit_amount).toFixed(0)}</span>
-                )}
-                <span style={{ color: '#c7c7cc', fontSize: 18 }}>›</span>
-              </button>
-            </div>
-          ))}
-          <div style={{ height: 1, background: 'rgba(60,60,67,0.12)' }} />
+              </div>
+              {Number((o.contract as any)?.deposit_amount || 0) > 0 && (
+                <span style={{ fontSize: 12, color: '#8e8e93', flexShrink: 0 }}>депозит {Number((o.contract as any).deposit_paid || 0).toFixed(0)}/{Number((o.contract as any).deposit_amount).toFixed(0)}</span>
+              )}
+              <span style={{ color: '#c7c7cc', fontSize: 18 }}>›</span>
+            </button>
+          </div>
+        ))}
+        <div style={T.card}>
           <ObjectAdd />
         </div>
 
