@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useTelegramUser } from '../hooks/useTelegramUser'
 import CashNegotiation from '../components/CashNegotiation'
+import BillUploader from '../components/BillUploader'
 import { ensureNextPayment } from '../lib/nextPayment'
 import Chat from '../components/Chat'
 import { BottomNav, PromptNumber, Progress, showToast } from '../components/ui'
@@ -76,6 +77,9 @@ export function TenantDashboard() {
       case 'cash_confirmed': return '🤝 Встреча по оплате согласована'
       case 'deferred_proposed': return '🙏 Заявка на отсрочку штрафа отправлена'
       case 'deferred_confirmed': return '🧊 Замороженный штраф обновлён'
+      case 'bill_uploaded': return '📄 Квитанция загружена'
+      case 'bill_paid': return '🧾 Подтверждение оплаты приложено'
+      case 'bill_confirmed': return '✅ Арендодатель подтвердил оплату по квитанции'
       default: return type
     }
   }
@@ -524,7 +528,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
                       </div>
                     )}
                     {open && hist.slice(0, 10).map((r: any) => (
-                    <div key={r.id} style={T.tiny}>{r.value} · подано {new Date(r.submitted_at).toLocaleDateString('ru-RU')} · {r.status === 'confirmed' ? 'подтверждены' : r.status === 'incomplete' ? 'не полностью' : 'ожидают'}{(r as any).entered_by ? ' · внёс арендодатель' : ''}</div>
+                      <div key={r.id} style={T.tiny}>{r.value} · подано {new Date(r.submitted_at).toLocaleDateString('ru-RU')} · {r.status === 'confirmed' ? 'подтверждены' : r.status === 'incomplete' ? 'не полностью' : 'ожидают'}{(r as any).entered_by ? ' · внёс арендодатель' : ''}</div>
                     ))}
                   </div>
                 )
@@ -542,10 +546,13 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
             </div>
           )}
           {readingsMode === 'self' && (
-            <div style={T.card}>
-              <div style={T.h2}>Показания счётчиков</div>
-              <div style={{ ...T.small, margin: '8px 0' }}>Вы оплачиваете полную квитанцию самостоятельно — показания подавать не нужно.</div>
-            </div>
+            <>
+              <div style={T.card}>
+                <div style={T.h2}>Показания счётчиков</div>
+                <div style={{ ...T.small, margin: '8px 0' }}>Вы оплачиваете полную квитанцию самостоятельно — показания подавать не нужно.</div>
+              </div>
+              <BillUploader contractId={contract.id} landlordId={obj?.landlord_id} />
+            </>
           )}
         </>
       )}
@@ -570,7 +577,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
           <div style={T.card}>
             <div style={T.h2}>Штрафы</div>
             <div style={T.row}><span style={iosMuted}>Просрочка оплаты</span><b>+{penaltyRate} ₽/день</b></div>
-            {readingsMode === 'manual' && readingsRule && (
+            {readingsMode === 'manual' && readingsRule && Number(readingsRule.rate) > 0 && (
               <div style={{ ...T.row, borderBottom: 'none' }}><span style={iosMuted}>Просрочка показаний</span><b>+{Number(readingsRule.rate)} ₽/день</b></div>
             )}
           </div>
