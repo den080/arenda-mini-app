@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { T } from '../theme'
 import { showToast } from './ui'
+import { Media } from './BillUploader'
 
 const iosBlue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: 4, flexShrink: 0 }
 const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProperties
@@ -62,11 +63,17 @@ export function BillReview({ contractId, tenantId }: { contractId: string; tenan
                   color: b.status === 'confirmed' ? '#1e7e34' : b.status === 'paid' ? '#0071e3' : overdue ? '#c00' : '#1d1d1f',
                 }}>{b.status === 'confirmed' ? 'подтверждено' : b.status === 'paid' ? 'оплачено' : overdue ? 'просрочено' : 'к оплате'}</span>
               </div>
-              {b.bill_url && <img src={b.bill_url} alt="" onClick={() => setView(b.bill_url)} style={{ width: '100%', maxHeight: 160, objectFit: 'cover', borderRadius: 10, marginTop: 8, cursor: 'pointer' }} />}
+              {b.bill_url && (
+                b.bill_url.includes('.pdf')
+                  ? <Media url={b.bill_url} maxH={160} />
+                  : <img src={b.bill_url} alt="" onClick={() => setView(b.bill_url)} style={{ width: '100%', maxHeight: 160, objectFit: 'cover', borderRadius: 10, marginTop: 8, cursor: 'pointer' }} />
+              )}
               {b.payment_url && (
                 <div style={{ marginTop: 8 }}>
                   <div style={{ fontSize: 13, color: '#8e8e93' }}>Подтверждение оплаты:</div>
-                  <img src={b.payment_url} alt="" onClick={() => setView(b.payment_url)} style={{ width: '100%', maxHeight: 140, objectFit: 'cover', borderRadius: 10, marginTop: 4, cursor: 'pointer' }} />
+                  {b.payment_url.includes('.pdf')
+                    ? <Media url={b.payment_url} maxH={140} />
+                    : <img src={b.payment_url} alt="" onClick={() => setView(b.payment_url)} style={{ width: '100%', maxHeight: 140, objectFit: 'cover', borderRadius: 10, marginTop: 4, cursor: 'pointer' }} />}
                 </div>
               )}
               <div style={{ display: 'flex', gap: 16, marginTop: 8 }}>
