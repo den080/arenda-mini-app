@@ -1,129 +1,124 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { useTelegramUser } from '../hooks/useTelegramUser'
+import { T } from '../theme'
 import { showToast } from './ui'
 
-const S: Record<string, React.CSSProperties> = {
-  card: { background: '#fff', borderRadius: 12, margin: '0 0 10px', padding: '0 16px' },
-  row: { display: 'flex', alignItems: 'center', gap: 10, minHeight: 44, padding: '6px 0', boxSizing: 'border-box' },
-  rowBtn: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, minHeight: 40, padding: '4px 0', boxSizing: 'border-box', width: '100%', border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left' },
-  sep: { height: 1, background: 'rgba(60,60,67,0.12)' },
-  title: { fontSize: 15, fontWeight: 600, color: '#1d1d1f' },
-  sub: { fontSize: 13, color: '#8e8e93', marginTop: 2 },
-  blue: { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: 4, flexShrink: 0 },
-  red: { border: 'none', background: 'transparent', color: '#ff3b30', fontSize: 15, fontWeight: 500, cursor: 'pointer', padding: 4, flexShrink: 0 },
-  check: { color: '#0071e3', fontSize: 17, fontWeight: 600, flexShrink: 0 },
-  gray: { color: '#8e8e93', fontSize: 14, flexShrink: 0 },
-  hist: { fontSize: 13, color: '#8e8e93', padding: '6px 0' },
-  foot: { fontSize: 12, color: '#8e8e93', margin: '4px 16px 12px' },
-}
-
-function groupOf(code: string): number {
-  if (code === 'water_cold') return 0
-  if (code === 'water_hot') return 1
-  if (code.startsWith('electricity')) return 2
-  if (code === 'heat') return 3
-  if (code === 'gas') return 4
-  return 5
-}
+const iosBlue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: 4, flexShrink: 0 }
+const iosRed: React.CSSProperties = { border: 'none', background: 'transparent', color: '#ff3b30', fontSize: 15, cursor: 'pointer', padding: 4, flexShrink: 0 }
+const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProperties
+const rightInput: React.CSSProperties = { width: 110, border: 'none', outline: 'none', background: 'rgba(120,120,128,0.08)', borderRadius: 8, padding: '8px 10px', fontSize: 15, textAlign: 'right', color: '#1d1d1f', boxSizing: 'border-box' }
 
 export function ReadingsReview({ contractId, tenantId }: { contractId: string; tenantId: string }) {
+  const { user } = useTelegramUser()
   const [meters, setMeters] = useState<any[]>([])
   const [types, setTypes] = useState<any[]>([])
-  const [reads, setReads] = useState<Record<string, any[]>>({})
-  const [open, setOpen] = useState<Record<string, boolean>>({})
-
-  async function load() {
-    const { data: con } = await supabase.from('contracts').select('object_id').eq('id', contractId).maybeSingle()
-    if (!con) return
-    const { data: m } = await supabase.from('object_meters').select('*').eq('object_id', con.object_id).eq('is_active', true)
-    const { data: t } = await supabase.from('meter_types').select('*')
-    const ids = (m || []).map((x: any) => x.id)
-    let rd: any[] = []
-    if (ids.length) {
-      const { data } = await supabase.from('meter_readings').select('*').in('object_meter_id', ids).order('submitted_at', { ascending: false })
-      rd = data || []
-    }
-    const byMeter: Record<string, any[]> = {}
-    for (const r of rd) { (byMeter[r.object_meter_id] = byMeter[r.object_meter_id] || []).push(r) }
-    const sorted = (m || []).slice().sort((a: any, b: any) => {
-      const ca = (t || []).find((x: any) => x.id === a.meter_type_id)?.code || ''
-      const cb = (t || []).find((x: any) => x.id === b.meter_type_id)?.code || ''
-      return groupOf(ca) - groupOf(cb) || String(a.label || '').localeCompare(String(b.label || ''))
-    })
-    setMeters(sorted)
-    setTypes(t || [])
-    setReads(byMeter)
-  }
-
-  useEffect(() => {
-    load()
-    const on = () => load()
-    window.addEventListener('rentflow-refresh', on)
-    return () => window.removeEventListener('rentflow-refresh', on)
-  }, [contractId])
+  const [reads, setReads] = useState<Record<string, any>>({})
+  const [vals, setVals] = useState<Record<string, string>>({})
+  const [ready, setReady] = useState(false)
 
   const now = new Date()
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
-  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+  const period = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
 
-  async function setStatus(readingId: string, status: string) {
-    const { error } = await supabase.from('meter_readings').update({ status, reviewed_at: new Date().toISOString() }).eq('id', readingId)
+  async function load() {
+    const { data: contract } = await supabase.from('contracts').select('object_id').eq('id', contractId).maybeSingle()
+    if (!contract) { setReady(true); return }
+    const [m, t, r] = await Promise.all([
+      supabase.from('object_meters').select('*').eq('object_id', contract.object_id).eq('is_active', true),
+      supabase.from('meter_types').select('*'),
+      supabase.from('meter_readings').select('*').eq('contract_id', contractId).eq('period', period).order('submitted_at', { ascending: false }),
+    ])
+    const list = m || []
+    const g = (c: string) => c === 'water_cold' ? 0 : c === 'water_hot' ? 1 : c.startsWith('electricity') ? 2 : c === 'heat' ? 3 : c === 'gas' ? 4 : 5
+    list.sort((a: any, b: any) => {
+      const ca = (t || []).find((x: any) => x.id === a.meter_type_id)?.code || ''
+      const cb = (t || []).find((x: any) => x.id === b.meter_type_id)?.code || ''
+      return g(ca) - g(cb) || String(a.label || '').localeCompare(String(b.label || ''))
+    })
+    setMeters(list)
+    setTypes(t || [])
+    const map: Record<string, any> = {}
+    for (const rd of r || []) if (!map[rd.object_meter_id]) map[rd.object_meter_id] = rd
+    setReads(map)
+    setReady(true)
+  }
+
+  useEffect(() => { load() }, [contractId])
+
+  async function setStatus(readingId: string, status: 'confirmed' | 'incomplete') {
+    const { error } = await supabase.from('meter_readings').update({ status }).eq('id', readingId)
     if (error) { showToast('Ошибка: ' + error.message); return }
     await supabase.from('notifications_log').insert({
       user_id: tenantId, type: 'meter_submitted', related_id: contractId,
-      message: status === 'confirmed' ? '🟢 Показания подтверждены арендодателем' : '🔴 Показания отмечены неполными — передайте их ещё раз',
+      message: status === 'confirmed' ? '🟢 Показания подтверждены арендодателем' : '⚠️ Арендодатель отметил показания неполными — передайте ещё раз',
       sent_at: new Date().toISOString(),
     })
-    showToast(status === 'confirmed' ? '✅ Подтверждено' : 'Отмечено: не полностью')
+    showToast(status === 'confirmed' ? '✅ Подтверждено' : 'Отмечено неполными')
     window.dispatchEvent(new Event('rentflow-refresh'))
+    load()
   }
 
-  const fmt = (d: any) => new Date(d).toLocaleDateString('ru-RU')
+  async function enterValue(meterId: string) {
+    const v = Number(String(vals[meterId] || '').replace(',', '.'))
+    if (isNaN(v) || v <= 0) { showToast('Введите значение показания'); return }
+    const { error } = await supabase.from('meter_readings').insert({
+      object_meter_id: meterId, contract_id: contractId, value: v, period,
+      submitted_at: new Date().toISOString(), status: 'confirmed', entered_by: user!.id,
+    })
+    if (error) { showToast('Ошибка: ' + error.message); return }
+    await supabase.from('notifications_log').insert({
+      user_id: tenantId, type: 'meter_submitted', related_id: contractId,
+      message: '🧾 Арендодатель внёс показания по фото',
+      sent_at: new Date().toISOString(),
+    })
+    showToast('✅ Показание внесено')
+    setVals(prev => ({ ...prev, [meterId]: '' }))
+    window.dispatchEvent(new Event('rentflow-refresh'))
+    load()
+  }
 
-  if (meters.length === 0) return <div style={S.foot}>На объекте нет счётчиков с ручной подачей.</div>
+  if (!ready) return null
+  if (meters.length === 0) return <div style={T.card}><div style={{ ...T.small, margin: '8px 0' }}>На объекте нет счётчиков с ручной подачей.</div></div>
 
   return (
-    <div>
-      {meters.map(m => {
-        const t = types.find((x: any) => x.id === m.meter_type_id)
-        const hist = reads[m.id] || []
-        const cur = hist.find(r => { const d = new Date(r.submitted_at); return d >= monthStart && d < monthEnd })
-        const isOpen = !!open[m.id]
+    <div style={T.card}>
+      <div style={{ ...T.tiny, margin: '0 0 10px' }}>Если арендатор прислал фото счётчиков в чат — впишите значения здесь сами: учёт и расчёты не прервутся.</div>
+      {meters.map((m, i) => {
+        const t = types.find(x => x.id === m.meter_type_id)
+        const rd = reads[m.id]
         return (
-          <div key={m.id} style={S.card}>
-            <div style={S.row}>
-              <div style={{ minWidth: 0 }}>
-                <div style={S.title}>{t?.label || 'Счётчик'}{m.label ? ` · № ${m.label}` : ''}</div>
-                <div style={S.sub}>{cur ? `за этот месяц: ${cur.value} · подано ${fmt(cur.submitted_at)}` : 'нет данных в этом месяце'}</div>
-              </div>
-              <span style={{ flex: 1 }} />
-              {cur && cur.status === 'confirmed' && <span style={S.check}>✓</span>}
-              {cur && cur.status === 'incomplete' && <span style={{ ...S.gray, color: '#ff3b30' }}>не полностью</span>}
-              {cur && cur.status === 'proposed' && (
-                <>
-                  <button style={S.red} onClick={() => setStatus(cur.id, 'incomplete')}>Не полностью</button>
-                  <button style={S.blue} onClick={() => setStatus(cur.id, 'confirmed')}>Подтвердить</button>
-                </>
+          <div key={m.id}>
+            {i > 0 && <div style={hair} />}
+            <div style={{ padding: '10px 0' }}>
+              <div style={{ fontSize: 15, fontWeight: 600 }}>{t?.label || 'Счётчик'}{m.label ? ` · № ${m.label}` : ''}</div>
+              {rd ? (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                  <span style={{ fontSize: 15 }}>Значение: <b>{rd.value}</b>{rd.entered_by ? ' · внёс арендодатель' : ' · арендатор'}</span>
+                  {rd.status === 'confirmed' ? (
+                    <span style={{ fontSize: 13, color: '#1e7e34', fontWeight: 600 }}>подтверждены</span>
+                  ) : (
+                    <span style={{ display: 'flex', gap: 12 }}>
+                      <button style={iosRed} onClick={() => setStatus(rd.id, 'incomplete')}>не полностью</button>
+                      <button style={iosBlue} onClick={() => setStatus(rd.id, 'confirmed')}>Подтвердить</button>
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 }}>
+                  <input
+                    value={vals[m.id] || ''}
+                    onChange={(e) => setVals(prev => ({ ...prev, [m.id]: e.target.value }))}
+                    placeholder="Значение с фото"
+                    style={{ ...rightInput, width: 150 }}
+                    inputMode="decimal"
+                  />
+                  <button style={iosBlue} onClick={() => enterValue(m.id)}>Внести</button>
+                </div>
               )}
             </div>
-            {hist.length > 0 && (
-              <>
-                <div style={S.sep} />
-                <button style={S.rowBtn} onClick={() => setOpen({ ...open, [m.id]: !isOpen })}>
-                  <span style={{ fontSize: 14, color: '#0071e3' }}>История · последнее: {hist[0].value}</span>
-                  <span style={{ color: '#8e8e93', fontSize: 13 }}>{isOpen ? '▲' : '▼'}</span>
-                </button>
-                {isOpen && hist.slice(0, 10).map((r: any) => (
-                  <div key={r.id} style={{ ...S.hist, borderTop: '1px solid rgba(60,60,67,0.08)' }}>
-                    {r.value} · подано {fmt(r.submitted_at)} · {r.status === 'confirmed' ? 'подтверждены' : r.status === 'incomplete' ? 'не полностью' : 'ждут'}
-                  </div>
-                ))}
-              </>
-            )}
           </div>
         )
       })}
-      <div style={S.foot}>Показания отправлены арендатором и ждут вашего подтверждения по каждому счётчику.</div>
     </div>
   )
 }
