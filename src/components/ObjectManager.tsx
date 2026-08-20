@@ -100,7 +100,7 @@ export function SubscriptionBlock() {
       const { data: t } = await supabase.from('teams').select('owner_id').eq('id', teamId).maybeSingle()
       if (t) subOwnerId = t.owner_id
     }
-    const { data: s } = await supabase.from('subscriptions').select('*').eq('owner_id', subOwnerId).order('until_date', { ascending: false }).limit(1)
+    const { data: s } = await supabase.from('subscriptions').select('*').eq('owner_id', subOwnerId).order('until_date', { ascending: false }).maybeSingle()
     const today = iso(new Date())
     setSub(s && s.until_date >= today ? s : null)
     if (isOwner) {
@@ -140,7 +140,7 @@ export function SubscriptionBlock() {
   async function activate(userId: string, fbId: string) {
     const today = new Date()
     const todayS = iso(today)
-    const { data: ex } = await supabase.from('subscriptions').select('*').eq('owner_id', userId).order('until_date', { ascending: false }).limit(1)
+    const { data: ex } = await supabase.from('subscriptions').select('*').eq('owner_id', userId).order('until_date', { ascending: false }).maybeSingle()
     const base = ex && ex.until_date >= todayS ? new Date(ex.until_date + 'T12:00:00') : today
     const until = new Date(base.getTime() + 30 * 86400000)
     if (ex) {
@@ -291,13 +291,13 @@ export function ObjectAdd() {
 
   async function checkLimit(): Promise<boolean> {
     if (!user) return false
-    const { data: s } = await supabase.from('subscriptions').select('until_date').eq('owner_id', user.id).order('until_date', { ascending: false }).limit(1)
+    const { data: s } = await supabase.from('subscriptions').select('until_date').eq('owner_id', user.id).order('until_date', { ascending: false }).maybeSingle()
     const hasPro = s && s.until_date >= iso(new Date())
     if (hasPro) return true
     if (teamId) {
       const { data: t } = await supabase.from('teams').select('owner_id').eq('id', teamId).maybeSingle()
       if (t) {
-        const { data: s2 } = await supabase.from('subscriptions').select('until_date').eq('owner_id', t.owner_id).order('until_date', { ascending: false }).limit(1)
+        const { data: s2 } = await supabase.from('subscriptions').select('until_date').eq('owner_id', t.owner_id).order('until_date', { ascending: false }).maybeSingle()
         if (s2 && s2.until_date >= iso(new Date())) return true
       }
     }
