@@ -30,11 +30,20 @@ function compress(file: File): Promise<Blob> {
   })
 }
 
-async function upload(blob: Blob, prefix: string): Promise<string | null> {
-  const id = `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`
-  const { error } = await supabase.storage.from('bills').upload(id, blob, { contentType: 'image/jpeg' })
+async function upload(blob: Blob, prefix: string, ext: string, contentType: string): Promise<string | null> {
+  const id = `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+  const { error } = await supabase.storage.from('bills').upload(id, blob, { contentType })
   if (error) return null
   return supabase.storage.from('bills').getPublicUrl(id).data.publicUrl
+}
+
+export function Media({ url, maxH }: { url: string; maxH: number }) {
+  if (url.includes('.pdf')) {
+    return (
+      <a href={url} target="_blank" rel="noopener" style={{ display: 'inline-block', marginTop: 8, color: '#0071e3', fontSize: 15, fontWeight: 600, textDecoration: 'none' }}>📄 Открыть документ (PDF)</a>
+    )
+  }
+  return <img src={url} alt="" style={{ width: '100%', maxHeight: maxH, objectFit: 'cover', borderRadius: 10, marginTop: 8 }} />
 }
 
 export function BillUploader({ contractId, landlordId }: { contractId: string; landlordId: string }) {
@@ -57,15 +66,23 @@ export function BillUploader({ contractId, landlordId }: { contractId: string; l
     if (busy) return
     const input = document.createElement('input')
     input.type = 'file'
-    input.accept = 'image/*'
+    input.accept = 'image/*,application/pdf'
     input.onchange = async () => {
       const f = input.files && input.files[0]
       if (!f) return
-      if (!f.type.startsWith('image/')) { showToast('Нужно изображение'); return }
+      const isPdf = f.type === 'application/pdf'
+      if (!f.type.startsWith('image/') && !isPdf) { showToast('Нужно изображение или PDF'); return }
       setBusy(true)
       try {
-        const blob = await compress(f)
-        const url = await upload(blob, kind)
+        let blob: Blob = f
+        let ext = 'pdf'
+        let ct = 'application/pdf'
+        if (!isPdf) {
+          blob = await compress(f)
+          ext = 'jpg'
+          ct = 'image/jpeg'
+        }
+        const url = await upload(blob, kind, ext, ct)
         if (!url) { showToast('Ошибка загрузки'); return }
         if (kind === 'bill') {
           const now = new Date()
@@ -115,7 +132,7 @@ export function BillUploader({ contractId, landlordId }: { contractId: string; l
   return (
     <div style={T.card}>
       <div style={T.h2}>Квитанции</div>
-      <div style={{ ...T.tiny, margin: '0 0 10px' }}>Загружайте фото квитанции от УК сразу, как получили. Срок оплаты — 5 дней с момента загрузки.</div>
+      <div style={{ ...T.tiny, margin: '0 0 10px' }}>Загружайте фото или PDF квитанции от УК сразу, как получили. Срок оплаты — 5 дней с момента загрузки.</div>
       {bills.length === 0 && <div style={{ ...T.small, margin: '8px 0' }}>Квитанций пока нет.</div>}
       {bills.map((b, i) => {
         const overdue = b.status === 'pending' && new Date(b.due_date) < todayMid
@@ -136,11 +153,11 @@ export function BillUploader({ contractId, landlordId }: { contractId: string; l
                   color: b.status === 'confirmed' ? '#1e7e34' : b.status === 'paid' ? '#0071e3' : overdue ? '#c00' : '#1d1d1f',
                 }}>{b.status === 'confirmed' ? 'подтверждено' : b.status === 'paid' ? 'оплачено' : overdue ? 'просрочено' : 'к оплате'}</span>
               </div>
-              {b.bill_url && <img src={b.bill_url} alt="" style={{ width: '100%', maxHeight: 160, objectFit: 'cover', borderRadius: 10, marginTop: 8 }} />}
+              {b.bill_url && <Media url={b.bill_url} maxH={160} />}
               {b.payment_url && (
                 <div style={{ marginTop: 8 }}>
                   <div style={{ fontSize: 13, color: '#8e8e93' }}>Подтверждение оплаты:</div>
-                  <img src={b.payment_url} alt="" style={{ width: '100%', maxHeight: 140, objectFit: 'cover', borderRadius: 10, marginTop: 4 }} />
+                  <Media url={b.payment_url} maxH={140} />
                 </div>
               )}
               <div style={{ display: 'flex', gap: 16, marginTop: 8 }}>
