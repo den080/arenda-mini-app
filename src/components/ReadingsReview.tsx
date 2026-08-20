@@ -82,6 +82,22 @@ export function ReadingsReview({ contractId, tenantId }: { contractId: string; t
   if (!ready) return null
   if (meters.length === 0) return <div style={T.card}><div style={{ ...T.small, margin: '8px 0' }}>На объекте нет счётчиков с ручной подачей.</div></div>
 
+  const inputRow = (m: any, hint?: string) => (
+    <>
+      {hint && <div style={{ fontSize: 13, color: '#8e8e93', marginTop: 2 }}>{hint}</div>}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 }}>
+        <input
+          value={vals[m.id] || ''}
+          onChange={(e) => setVals(prev => ({ ...prev, [m.id]: e.target.value }))}
+          placeholder="Значение с фото"
+          style={{ ...rightInput, width: 150 }}
+          inputMode="decimal"
+        />
+        <button style={iosBlue} onClick={() => enterValue(m.id)}>Внести</button>
+      </div>
+    </>
+  )
+
   return (
     <div style={T.card}>
       <div style={{ ...T.tiny, margin: '0 0 10px' }}>Если арендатор прислал фото счётчиков в чат — впишите значения здесь сами: учёт и расчёты не прервутся.</div>
@@ -93,7 +109,9 @@ export function ReadingsReview({ contractId, tenantId }: { contractId: string; t
             {i > 0 && <div style={hair} />}
             <div style={{ padding: '10px 0' }}>
               <div style={{ fontSize: 15, fontWeight: 600 }}>{t?.label || 'Счётчик'}{m.label ? ` · № ${m.label}` : ''}</div>
-              {rd ? (
+              {!rd && inputRow(m)}
+              {rd && rd.status === 'incomplete' && inputRow(m, `последние от арендатора: ${rd.value} — отмечены неполными`)}
+              {rd && rd.status !== 'incomplete' && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginTop: 4 }}>
                   <span style={{ fontSize: 15 }}>Значение: <b>{rd.value}</b>{rd.entered_by ? ' · внёс арендодатель' : ' · арендатор'}</span>
                   {rd.status === 'confirmed' ? (
@@ -104,17 +122,6 @@ export function ReadingsReview({ contractId, tenantId }: { contractId: string; t
                       <button style={iosBlue} onClick={() => setStatus(rd.id, 'confirmed')}>Подтвердить</button>
                     </span>
                   )}
-                </div>
-              ) : (
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 }}>
-                  <input
-                    value={vals[m.id] || ''}
-                    onChange={(e) => setVals(prev => ({ ...prev, [m.id]: e.target.value }))}
-                    placeholder="Значение с фото"
-                    style={{ ...rightInput, width: 150 }}
-                    inputMode="decimal"
-                  />
-                  <button style={iosBlue} onClick={() => enterValue(m.id)}>Внести</button>
                 </div>
               )}
             </div>
