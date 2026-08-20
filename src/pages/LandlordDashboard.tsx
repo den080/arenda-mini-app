@@ -78,6 +78,7 @@ export function LandlordDashboard() {
   const [receiptFor, setReceiptFor] = useState<any | null>(null)
   const [archived, setArchived] = useState<any[]>([])
   const [archiveId, setArchiveId] = useState<string | null>(null)
+  const [archiveListOpen, setArchiveListOpen] = useState(false)
   const [archivePays, setArchivePays] = useState<any[]>([])
   const [archiveFrozen, setArchiveFrozen] = useState<any[]>([])
 
@@ -461,6 +462,7 @@ export function LandlordDashboard() {
     }
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
+
   const getNotificationText = (type: string) => {
     switch (type) {
       case 'payment_claimed': return '✅ Арендатор сообщил об оплате'
@@ -521,7 +523,7 @@ export function LandlordDashboard() {
     return (
       <div style={{ ...T.page, paddingBottom: 40 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 0 8px' }}>
-          <button style={iosBlue} onClick={() => setArchiveId(null)}>← Мои объекты</button>
+          <button style={iosBlue} onClick={() => setArchiveId(null)}>← Архив договоров</button>
         </div>
         <h1 style={T.h1}>{arch.object?.address || 'Объект'}</h1>
 
@@ -583,6 +585,36 @@ export function LandlordDashboard() {
     )
   }
 
+  if (archiveListOpen) {
+    return (
+      <div style={{ ...T.page, paddingBottom: 40 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 0 8px' }}>
+          <button style={iosBlue} onClick={() => setArchiveListOpen(false)}>← Мои объекты</button>
+        </div>
+        <h1 style={T.h1}>Архив договоров</h1>
+        {archived.length === 0 && (
+          <div style={T.card}><div style={{ ...T.small, margin: '8px 0' }}>Завершённых договоров пока нет.</div></div>
+        )}
+        {archived.map((a) => (
+          <div key={a.id} style={T.card}>
+            <button
+              onClick={() => setArchiveId(a.id)}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 56, border: 'none', background: 'transparent', cursor: 'pointer', padding: '4px 0', textAlign: 'left', boxSizing: 'border-box' }}
+            >
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 17, fontWeight: 700, color: '#1d1d1f' }}>{a.object?.address || 'Объект'}</div>
+                <div style={{ fontSize: 13, color: '#8e8e93', marginTop: 4 }}>
+                  {a.tenant?.full_name || '—'} · завершён {a.terminated_at ? new Date(a.terminated_at).toLocaleDateString('ru-RU') : '—'}
+                </div>
+              </div>
+              <span style={{ color: '#c7c7cc', fontSize: 18 }}>›</span>
+            </button>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
   if (!current) {
     return (
       <div style={{ ...T.page, paddingBottom: 40 }}>
@@ -628,28 +660,18 @@ export function LandlordDashboard() {
         <TeamManager />
 
         {archived.length > 0 && (
-          <>
-            <div style={secHead}>Архив договоров</div>
-            <div style={T.card}>
-              {archived.map((a, i) => (
-                <div key={a.id}>
-                  {i > 0 && <div style={hair} />}
-                  <button
-                    onClick={() => setArchiveId(a.id)}
-                    style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 56, border: 'none', background: 'transparent', cursor: 'pointer', padding: '10px 0', textAlign: 'left', boxSizing: 'border-box' }}
-                  >
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 17, fontWeight: 700, color: '#1d1d1f' }}>{a.object?.address || 'Объект'}</div>
-                      <div style={{ fontSize: 13, color: '#8e8e93', marginTop: 4 }}>
-                        {a.tenant?.full_name || '—'} · завершён {a.terminated_at ? new Date(a.terminated_at).toLocaleDateString('ru-RU') : '—'}
-                      </div>
-                    </div>
-                    <span style={{ color: '#c7c7cc', fontSize: 18 }}>›</span>
-                  </button>
-                </div>
-              ))}
-            </div>
-          </>
+          <div style={T.card}>
+            <button
+              onClick={() => setArchiveListOpen(true)}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 56, border: 'none', background: 'transparent', cursor: 'pointer', padding: '4px 0', textAlign: 'left', boxSizing: 'border-box' }}
+            >
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 17, fontWeight: 700, color: '#1d1d1f' }}>Архив договоров</div>
+                <div style={{ fontSize: 13, color: '#8e8e93', marginTop: 4 }}>завершённых: {archived.length}</div>
+              </div>
+              <span style={{ color: '#c7c7cc', fontSize: 18 }}>›</span>
+            </button>
+          </div>
         )}
       </div>
     )
