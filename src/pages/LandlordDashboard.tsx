@@ -13,7 +13,7 @@ import { ObjectAdd, ObjectEdit } from '../components/ObjectManager'
 import TeamManager from '../components/TeamManager'
 import ContactsEditor from '../components/ContactsEditor'
 import { ensureNextPayment } from '../lib/nextPayment'
-import { BottomNav, Modal, PromptNumber, Progress, showToast } from '../components/ui'
+import { BottomNav, Modal, PromptNumber, Progress, ConfirmDelete, showToast } from '../components/ui'
 import { T } from '../theme'
 import type { Object as PropertyObject, Contract, NotificationLog, User } from '../types/database'
 
@@ -74,6 +74,8 @@ export function LandlordDashboard() {
   const [payConfirm, setPayConfirm] = useState<null | { kind: 'card' | 'cash' | 'cash-close' | 'full' }>(null)
   const [payConfirmOk, setPayConfirmOk] = useState(false)
   const [receiptOpen, setReceiptOpen] = useState(false)
+  const [undoId, setUndoId] = useState<string | null>(null)
+  const [receiptFor, setReceiptFor] = useState<any | null>(null)
   const [archived, setArchived] = useState<any[]>([])
   const [archiveId, setArchiveId] = useState<string | null>(null)
   const [archivePays, setArchivePays] = useState<any[]>([])
@@ -222,6 +224,49 @@ export function LandlordDashboard() {
     const interval = setInterval(() => fetchData(), 30000)
     return () => { window.removeEventListener('rentflow-refresh', onRefresh); clearInterval(interval) }
   }, [user, teamId])
+
+  function canUndo(h: any): boolean {
+    return !!h.confirmed_by_landlord && !!h.confirmed_at && (Date.now() - new Date(h.confirmed_at).getTime()) < 24 * 3600 * 1000
+  }
+
+  async function undoConfirm(paymentId: string) {
+    const { data: pay } = await supabase.from('payments').select('*').eq('id', paymentId).maybeSingle()
+    if (!pay) { setUndoId(null); return }
+    const { error } = await supabase.from('payments').update({
+      confirmed_by_landlord: false, confirmed_at: null, confirmed_card: false, confirmed_cash: false, cash_closed: false,
+    }).eq('id', paymentId)
+    if (error) { showToast('Ошибка: ' + error.message); setUndoId(null); return }
+    const { data: nexts } = await supabase.from('payments').select('*').eq('contract_id', pay.contract_id).eq('confirmed_by_landlord', false).order('period', { ascending: true })
+    for (const n of nexts || []) {
+      if (String(n.period) > String(pay.period) && Number(n.paid_amount || 0) === 0 && !n.card_claimed) {
+        await supabase.from('payments').delete().eq('id', n.id)
+        break
+      }
+    }
+    const { data: con } = await supabase.from('contracts').select('tenant_id').eq('id', pay.contract_id).maybeSingle()
+    if (con) await supabase.from('notifications_log').insert({ user_id: con.tenant_id, type: 'payment_undo', related_id: pay.id, message: '↩️ Подтверждение оплаты отменено арендодателем (ошибка ввода)', sent_at: new Date().toISOString() })
+    showToast('✅ Подтверждение отменено, счёт снова открыт')
+    setUndoId(null)
+    window.dispatchEvent(new Event('rentflow-refresh'))
+  }
+
+  function receiptText(h: any): string {
+    const month = parseDate(h.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })
+    const sum = Number(h.base_amount || 0) + Number(h.penalty_amount || 0) + Number(h.utilities_amount || 0)
+    const tenantName = (contract as any)?.tenant?.full_name || 'арендатора'
+    const landlordName = user?.full_name || 'арендодателя'
+    const dateStr = new Date(h.confirmed_at || Date.now()).toLocaleDateString('ru-RU')
+    return `РАСПИСКА\n${dateStr}\nЯ, ${landlordName}, получил от ${tenantName} сумму ${sum.toFixed(0)} ₽ в счёт оплаты аренды за ${month} по объекту: ${current?.address || h.address}. Оплата произведена наличными. Претензий по оплате не имею.`
+  }
+
+  async function copyReceipt(h: any) {
+    try {
+      await navigator.clipboard.writeText(receiptText(h))
+      showToast('✅ Расписка скопирована — отправьте её арендатору в чат')
+    } catch {
+      showToast('Не удалось скопировать')
+    }
+  }
 
   async function saveUtilities(paymentId: string, value: string) {
     const { error } = await supabase.from('payments').update({ utilities_amount: Number(value) || 0 }).eq('id', paymentId)
@@ -421,6 +466,7 @@ export function LandlordDashboard() {
       case 'payment_claimed': return '✅ Арендатор сообщил об оплате'
       case 'payment_confirmed': return '🟢 Арендодатель подтвердил оплату'
       case 'payment_partial': return '💰 Частичная оплата учтена'
+      case 'payment_undo': return '↩️ Подтверждение оплаты отменено'
       case 'meter_submitted': return '💦 Переданы новые показания'
       case 'cash_proposed': return '💵 Предложено время встречи наличными'
       case 'cash_confirmed': return '🤝 Встреча по оплате согласована'
@@ -737,6 +783,12 @@ export function LandlordDashboard() {
                     <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                       <span style={{ fontSize: 13, color: late ? '#ff3b30' : '#8e8e93' }}>{h.confirmed_by_landlord ? (late ? 'просрочка' : 'вовремя') : 'не подтверждён'}</span>
                       <b style={{ whiteSpace: 'nowrap' }}>{sum.toFixed(0)} ₽</b>
+                      {h.confirmed_by_landlord && (
+                        <span style={{ display: 'flex', gap: 10 }}>
+                          <button style={iosBlue} onClick={() => setReceiptFor(h)}>расписка</button>
+                          {canUndo(h) && <button style={iosRed} onClick={() => setUndoId(h.id)}>отменить</button>}
+                        </span>
+                      )}
                     </span>
                   </div>
                 )
@@ -887,6 +939,23 @@ export function LandlordDashboard() {
           <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 15, cursor: 'pointer' }} onClick={() => setPayConfirm(null)}>Отмена</button>
         </div>
       </Modal>
+
+      <Modal open={!!receiptFor} title="Расписка" onClose={() => setReceiptFor(null)}>
+        <div style={{ whiteSpace: 'pre-wrap', fontSize: 14, lineHeight: 1.5, background: 'rgba(120,120,128,0.08)', borderRadius: 10, padding: 12, marginBottom: 12 }}>
+          {receiptFor ? receiptText(receiptFor) : ''}
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }} onClick={() => copyReceipt(receiptFor)}>Скопировать</button>
+          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 15, cursor: 'pointer' }} onClick={() => setReceiptFor(null)}>Закрыть</button>
+        </div>
+      </Modal>
+
+      <ConfirmDelete
+        open={!!undoId}
+        text="Подтверждение оплаты будет отменено, счёт снова станет открытым. Арендатор получит уведомление."
+        onClose={() => setUndoId(null)}
+        onConfirm={() => { if (undoId) undoConfirm(undoId) }}
+      />
 
       <PromptNumber
         open={receiptOpen}
