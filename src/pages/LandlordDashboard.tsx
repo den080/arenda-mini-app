@@ -7,6 +7,7 @@ import MetersEditor from '../components/MetersEditor'
 import ReadingsReview from '../components/ReadingsReview'
 import BillReview from '../components/BillReview'
 import TerminationWizard from '../components/TerminationWizard'
+import AmendmentWizard from '../components/AmendmentWizard'
 import Chat from '../components/Chat'
 import { ObjectAdd, ObjectEdit } from '../components/ObjectManager'
 import TeamManager from '../components/TeamManager'
@@ -88,6 +89,12 @@ export function LandlordDashboard() {
       setArchiveFrozen(f.data || [])
     })()
   }, [archiveId])
+
+  useEffect(() => {
+    const go = () => setOpenId(null)
+    window.addEventListener('rentflow-archive-done', go)
+    return () => window.removeEventListener('rentflow-archive-done', go)
+  }, [])
 
   useEffect(() => {
     if (!user) return
@@ -383,6 +390,7 @@ export function LandlordDashboard() {
       case 'bill_paid': return '🧾 Арендатор приложил подтверждение оплаты'
       case 'bill_confirmed': return '✅ Квитанция подтверждена'
       case 'contract_terminated': return '🏁 Договор завершён'
+      case 'amendment': return '📝 Допсоглашение по аренде'
       default: return type
     }
   }
@@ -459,7 +467,7 @@ export function LandlordDashboard() {
               <div key={h.id} style={T.row}>
                 <span style={{ flex: 1, minWidth: 0 }}>{parseDate(h.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}{firstP ? ' · первый месяц' : ''}</span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                  <span style={{ fontSize: 13, color: late ? '#ff3b30' : h.confirmed_by_landlord ? '#8e8e93' : '#b25000' }}>{h.confirmed_by_landlord ? (late ? 'просрочка' : 'вовремя') : 'не подтверждён'}</span>
+                  <span style={{ fontSize: 13, color: late ? '#ff3b30' : '#8e8e93' }}>{h.confirmed_by_landlord ? (late ? 'просрочка' : 'вовремя') : 'не подтверждён'}</span>
                   <b style={{ whiteSpace: 'nowrap' }}>{sum.toFixed(0)} ₽</b>
                 </span>
               </div>
@@ -710,6 +718,9 @@ export function LandlordDashboard() {
               <div style={T.row}><span style={iosMuted}>Срок</span><b>{parseDate((contract as any).start_date).toLocaleDateString('ru-RU')} — {parseDate((contract as any).end_date).toLocaleDateString('ru-RU')}</b></div>
             )}
             <div style={T.row}><span style={iosMuted}>Аренда</span><b>{Number(contract.rent_amount).toFixed(0)} ₽/мес</b></div>
+            {(contract as any).amendment_at && (
+              <div style={T.row}><span style={iosMuted}>Допсоглашение</span><b>{Number(contract.rent_amount).toFixed(0)} ₽ с {(contract as any).amendment_from ? new Date((contract as any).amendment_from).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : new Date((contract as any).amendment_at).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}</b></div>
+            )}
             <div style={T.row}><span style={iosMuted}>Оплата</span><b>до {contract.payment_day} числа</b></div>
             {deposit > 0 && (
               <div style={{ padding: '8px 0 4px' }}>
@@ -774,6 +785,9 @@ export function LandlordDashboard() {
 
           {contract.status === 'active' && (
             <>
+              <div style={secHead}>Допсоглашение</div>
+              <AmendmentWizard contractId={contract.id} tenantId={contract.tenant_id} />
+
               <div style={secHead}>Завершение договора</div>
               <TerminationWizard contractId={contract.id} />
             </>
