@@ -411,11 +411,11 @@ export function LandlordDashboard() {
               {i > 0 && <div style={{ height: 1, background: 'rgba(60,60,67,0.12)' }} />}
               <button
                 onClick={() => { setOpenId(o.id); setTab('pay') }}
-                style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 52, border: 'none', background: 'transparent', cursor: 'pointer', padding: '8px 0', textAlign: 'left', boxSizing: 'border-box' }}
+                style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 64, border: 'none', background: 'transparent', cursor: 'pointer', padding: '14px 0', textAlign: 'left', boxSizing: 'border-box' }}
               >
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 17, fontWeight: 700, color: '#1d1d1f' }}>{o.address}</div>
-                  <div style={{ fontSize: 13, color: o.statusColor || '#8e8e93', marginTop: 2 }}>
+                  <div style={{ fontSize: 13, color: o.statusColor || '#8e8e93', marginTop: 4 }}>
                     {o.statusDetail}{o.amount > 0 ? ` · ${o.amount.toFixed(0)} ₽` : ''}
                   </div>
                 </div>
