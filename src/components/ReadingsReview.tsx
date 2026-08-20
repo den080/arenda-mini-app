@@ -23,22 +23,24 @@ export function ReadingsReview({ contractId, tenantId }: { contractId: string; t
   async function load() {
     const { data: contract } = await supabase.from('contracts').select('object_id').eq('id', contractId).maybeSingle()
     if (!contract) { setReady(true); return }
-    const [m, t, r] = await Promise.all([
+    const [mRes, tRes, rRes] = await Promise.all([
       supabase.from('object_meters').select('*').eq('object_id', contract.object_id).eq('is_active', true),
       supabase.from('meter_types').select('*'),
       supabase.from('meter_readings').select('*').eq('contract_id', contractId).eq('period', period).order('submitted_at', { ascending: false }),
     ])
-    const list = m || []
+    const list = (mRes.data || []) as any[]
+    const typesList = (tRes.data || []) as any[]
+    const readings = (rRes.data || []) as any[]
     const g = (c: string) => c === 'water_cold' ? 0 : c === 'water_hot' ? 1 : c.startsWith('electricity') ? 2 : c === 'heat' ? 3 : c === 'gas' ? 4 : 5
-    list.sort((a: any, b: any) => {
-      const ca = (t || []).find((x: any) => x.id === a.meter_type_id)?.code || ''
-      const cb = (t || []).find((x: any) => x.id === b.meter_type_id)?.code || ''
+    list.sort((a, b) => {
+      const ca = typesList.find((x: any) => x.id === a.meter_type_id)?.code || ''
+      const cb = typesList.find((x: any) => x.id === b.meter_type_id)?.code || ''
       return g(ca) - g(cb) || String(a.label || '').localeCompare(String(b.label || ''))
     })
     setMeters(list)
-    setTypes(t || [])
+    setTypes(typesList)
     const map: Record<string, any> = {}
-    for (const rd of r || []) if (!map[rd.object_meter_id]) map[rd.object_meter_id] = rd
+    for (const rd of readings) if (!map[rd.object_meter_id]) map[rd.object_meter_id] = rd
     setReads(map)
     setReady(true)
   }
