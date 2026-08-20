@@ -68,7 +68,6 @@ export function AdminDashboard() {
   const activeContracts = contracts.filter(c => c.status === 'active')
   const tenants = users.filter(u => u.role === 'tenant')
   const landlords = users.filter(u => u.role !== 'tenant')
-  const newFb = feedback.filter(f => f.status === 'new')
 
   async function setFbStatus(id: string, status: string) {
     await supabase.from('feedback').update({ status }).eq('id', id)
