@@ -8,6 +8,10 @@ import { ConfirmDelete, Modal, showToast } from './ui'
 
 const BANKS = ['Сбербанк', 'Т-Банк (Тинькофф)', 'ВТБ', 'Альфа-Банк', 'Газпромбанк', 'Россельхозбанк', 'Райффайзен Банк', 'Росбанк', 'Открытие', 'Совкомбанк', 'МТС Банк', 'Промсвязьбанк', 'Почта Банк', 'Дом.РФ', 'ЮниКредит Банк']
 
+const OWNER_PHONE = '+79057674225'
+const PRO_PRICE = 299
+const SBP_PHONE = '+7 905 767-42-25'
+
 interface PayDetail { type: 'card' | 'sbp'; bank: string; number: string }
 
 const S: Record<string, React.CSSProperties> = {
@@ -53,6 +57,147 @@ function iso(d: Date): string {
 function pdate(s: string): Date {
   const [y, m, d] = String(s).slice(0, 10).split('-').map(Number)
   return new Date(y, (m || 1) - 1, d || 1)
+}
+
+function compress(file: File): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader()
+    fr.onload = () => {
+      const img = new Image()
+      img.onload = () => {
+        const max = 1280
+        let w = img.width, h = img.height
+        const k = Math.min(1, max / Math.max(w, h))
+        w = Math.round(w * k); h = Math.round(h * k)
+        const c = document.createElement('canvas')
+        c.width = w; c.height = h
+        c.getContext('2d')!.drawImage(img, 0, 0, w, h)
+        c.toBlob(b => b ? resolve(b) : reject(new Error('compress')), 'image/jpeg', 0.82)
+      }
+      img.onerror = reject
+      img.src = String(fr.result)
+    }
+    fr.onerror = reject
+    fr.readAsDataURL(file)
+  })
+}
+
+export function SubscriptionBlock() {
+  const { user } = useTelegramUser()
+  const { teamId } = useTeam()
+  const [sub, setSub] = useState<any | null>(null)
+  const [payOpen, setPayOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [requests, setRequests] = useState<any[]>([])
+  const [view, setView] = useState<string | null>(null)
+
+  const isOwner = !!user && normalizePhone(user.phone || '') === normalizePhone(OWNER_PHONE)
+
+  async function load() {
+    if (!user) return
+    let subOwnerId = user.id
+    if (teamId) {
+      const { data: t } = await supabase.from('teams').select('owner_id').eq('id', teamId).maybeSingle()
+      if (t) subOwnerId = t.owner_id
+    }
+    const { data: s } = await supabase.from('subscriptions').select('*').eq('owner_id', subOwnerId).order('until_date', { ascending: false }).limit(1)
+    const today = iso(new Date())
+    setSub(s && s.until_date >= today ? s : null)
+    if (isOwner) {
+      const { data: r } = await supabase.from('feedback').select('*').eq('status', 'new').ilike('message', 'ПОДПИСКА%').order('created_at', { ascending: true })
+      setRequests(r || [])
+    }
+  }
+
+  useEffect(() => { load() }, [user, teamId])
+
+  async function sendCheck(file: File) {
+    if (busy || !user) return
+    setBusy(true)
+    try {
+      const blob = await compress(file)
+      const id = `sub-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`
+      const { error: upErr } = await supabase.storage.from('feedback').upload(id, blob, { contentType: 'image/jpeg' })
+      if (upErr) { showToast('Ошибка загрузки: ' + upErr.message); return }
+      const url = supabase.storage.from('feedback').getPublicUrl(id).data.publicUrl
+      const { error } = await supabase.from('feedback').insert({
+        user_id: user.id,
+        sender_name: user.full_name || 'Арендодатель',
+        sender_phone: user.phone || '',
+        message: `ПОДПИСКА: Pro ${PRO_PRICE} ₽/мес`,
+        image_url: url,
+      })
+      if (error) { showToast('Ошибка: ' + error.message); return }
+      showToast('✅ Чек отправлен. Активация — в течение часа')
+      setPayOpen(false)
+    } catch (e) {
+      showToast('Ошибка: ' + String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function activate(userId: string, fbId: string) {
+    const today = new Date()
+    const todayS = iso(today)
+    const { data: ex } = await supabase.from('subscriptions').select('*').eq('owner_id', userId).order('until_date', { ascending: false }).limit(1)
+    const base = ex && ex.until_date >= todayS ? new Date(ex.until_date + 'T12:00:00') : today
+    const until = new Date(base.getTime() + 30 * 86400000)
+    if (ex) {
+      await supabase.from('subscriptions').update({ until_date: iso(until), updated_at: new Date().toISOString() }).eq('id', ex.id)
+    } else {
+      await supabase.from('subscriptions').insert({ owner_id: userId, plan: 'pro', until_date: iso(until) })
+    }
+    await supabase.from('feedback').update({ status: 'done' }).eq('id', fbId)
+    showToast('✅ Подписка активирована на 30 дней')
+    load()
+    window.dispatchEvent(new Event('rentflow-refresh'))
+  }
+
+  return (
+    <div style={{ ...T.row, borderBottom: 'none', justifyContent: 'space-between', alignItems: 'center' }}>
+      <span style={{ fontSize: 13, color: '#8e8e93' }}>
+        {sub ? `Тариф Pro · до ${new Date(sub.until_date + 'T12:00:00').toLocaleDateString('ru-RU')}` : 'Тариф Free · 1 объект'}
+      </span>
+      <button style={S.blue} onClick={() => setPayOpen(true)}>{sub ? 'Продлить' : 'Оформить Pro'}</button>
+
+      <Modal open={payOpen} title={sub ? 'Продление Pro' : 'Тариф Pro'} onClose={() => setPayOpen(false)}>
+        <div style={{ fontSize: 14, color: '#555', marginBottom: 10 }}>
+          Pro — {PRO_PRICE} ₽/мес: объекты без лимита, совместный доступ, приоритетная поддержка. Free — 1 объект.
+        </div>
+        <div style={{ fontSize: 14, marginBottom: 12 }}>
+          Оплата по СБП: <b>{SBP_PHONE}</b> (Роман). В комментарии укажите ваш телефон из приложения. После перевода приложите чек ниже.
+        </div>
+        <label style={{ display: 'block', textAlign: 'center', padding: 12, borderRadius: 10, background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>
+          {busy ? 'Отправка…' : 'Я оплатил — приложить чек'}
+          <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) sendCheck(f); e.target.value = '' }} />
+        </label>
+
+        {isOwner && (
+          <div style={{ marginTop: 16, borderTop: '1px solid rgba(60,60,67,0.12)', paddingTop: 10 }}>
+            <div style={{ fontSize: 13, color: '#8e8e93', marginBottom: 6 }}>Заявки на активацию ({requests.length})</div>
+            {requests.length === 0 && <div style={{ fontSize: 13, color: '#8e8e93' }}>Новых заявок нет.</div>}
+            {requests.map(r => (
+              <div key={r.id} style={{ padding: '8px 0', borderBottom: '1px solid rgba(60,60,67,0.12)' }}>
+                <div style={{ fontSize: 14, fontWeight: 600 }}>{r.sender_name} · {r.sender_phone}</div>
+                <div style={{ fontSize: 12, color: '#8e8e93' }}>{new Date(r.created_at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</div>
+                {r.image_url && <button style={S.blue} onClick={() => setView(r.image_url)}>смотреть чек</button>}
+                <div style={{ marginTop: 4 }}>
+                  <button style={S.blue} onClick={() => activate(r.user_id, r.id)}>Активировать 30 дней</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Modal>
+
+      {view && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)', zIndex: 400, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={() => setView(null)}>
+          <img src={view} alt="" style={{ maxWidth: '100%', maxHeight: '90%', borderRadius: 8 }} />
+        </div>
+      )}
+    </div>
+  )
 }
 
 function DetailsEditor({ list, onChange }: { list: PayDetail[]; onChange: (v: PayDetail[]) => void }) {
@@ -123,6 +268,7 @@ export function ObjectAdd() {
   const { teamId } = useTeam()
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [paywall, setPaywall] = useState(false)
 
   const [address, setAddress] = useState('')
   const [notes, setNotes] = useState('')
@@ -143,12 +289,30 @@ export function ObjectAdd() {
   const [details, setDetails] = useState<PayDetail[]>([])
   const [addDetailsErr, setAddDetailsErr] = useState<string | null>(null)
 
+  async function checkLimit(): Promise<boolean> {
+    if (!user) return false
+    const { data: s } = await supabase.from('subscriptions').select('until_date').eq('owner_id', user.id).order('until_date', { ascending: false }).limit(1)
+    const hasPro = s && s.until_date >= iso(new Date())
+    if (hasPro) return true
+    if (teamId) {
+      const { data: t } = await supabase.from('teams').select('owner_id').eq('id', teamId).maybeSingle()
+      if (t) {
+        const { data: s2 } = await supabase.from('subscriptions').select('until_date').eq('owner_id', t.owner_id).order('until_date', { ascending: false }).limit(1)
+        if (s2 && s2.until_date >= iso(new Date())) return true
+      }
+    }
+    const { count } = await supabase.from('objects').select('id', { count: 'exact', head: true }).eq(teamId ? 'team_id' : 'landlord_id', (teamId || user.id) as string)
+    return (count || 0) < 1
+  }
+
   async function save() {
     if (saving) return
     if (!user || !address) { showToast('Укажите адрес объекта'); return }
     if (!validPhone(phone)) { showToast('Проверьте номер телефона арендатора'); return }
     if (method !== 'cash' && details.length === 0) { setAddDetailsErr('Добавьте хотя бы один способ безналичной оплаты'); return }
     setAddDetailsErr(null)
+    const allowed = await checkLimit()
+    if (!allowed) { setPaywall(true); return }
     setSaving(true)
     try {
       const normalizedPhone = phone ? normalizePhone(phone) : null
@@ -234,10 +398,13 @@ export function ObjectAdd() {
   return (
     <div>
       {!showForm ? (
-        <div style={{ ...T.row, borderBottom: 'none' }}>
-          <span style={{ fontSize: 15 }}>Новый объект</span>
-          <button style={S.blue} onClick={() => setShowForm(true)}>Добавить объект</button>
-        </div>
+        <>
+          <SubscriptionBlock />
+          <div style={{ ...T.row, borderBottom: 'none' }}>
+            <span style={{ fontSize: 15 }}>Новый объект</span>
+            <button style={S.blue} onClick={() => setShowForm(true)}>Добавить объект</button>
+          </div>
+        </>
       ) : (
         <div>
           <div style={{ ...T.row, borderBottom: 'none', justifyContent: 'space-between' }}>
@@ -296,6 +463,16 @@ export function ObjectAdd() {
           <button style={T.btn} onClick={save}>{saving ? 'Сохранение…' : 'Сохранить'}</button>
         </div>
       )}
+
+      <Modal open={paywall} title="Лимит тарифа Free" onClose={() => setPaywall(false)}>
+        <div style={{ fontSize: 14, color: '#555', marginBottom: 12 }}>
+          На бесплатном тарифе доступен 1 объект. Тариф Pro ({PRO_PRICE} ₽/мес) снимает лимит и открывает командный доступ.
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }} onClick={() => { setPaywall(false); setShowForm(false); window.dispatchEvent(new Event('rentflow-open-pro')) }}>Оформить Pro</button>
+          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 15, cursor: 'pointer' }} onClick={() => setPaywall(false)}>Позже</button>
+        </div>
+      </Modal>
     </div>
   )
 }
