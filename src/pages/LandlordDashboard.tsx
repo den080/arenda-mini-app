@@ -72,6 +72,22 @@ export function LandlordDashboard() {
   const [fzNote, setFzNote] = useState('')
   const [payConfirm, setPayConfirm] = useState<null | { kind: 'card' | 'cash' | 'cash-close' | 'full' }>(null)
   const [payConfirmOk, setPayConfirmOk] = useState(false)
+  const [archived, setArchived] = useState<any[]>([])
+  const [archiveId, setArchiveId] = useState<string | null>(null)
+  const [archivePays, setArchivePays] = useState<any[]>([])
+  const [archiveFrozen, setArchiveFrozen] = useState<any[]>([])
+
+  useEffect(() => {
+    if (!archiveId) return
+    ;(async () => {
+      const [p, f] = await Promise.all([
+        supabase.from('payments').select('*').eq('contract_id', archiveId).order('period', { ascending: false }),
+        supabase.from('frozen_penalties').select('*').eq('contract_id', archiveId).order('period', { ascending: true }),
+      ])
+      setArchivePays(p.data || [])
+      setArchiveFrozen(f.data || [])
+    })()
+  }, [archiveId])
 
   useEffect(() => {
     if (!user) return
@@ -97,6 +113,12 @@ export function LandlordDashboard() {
         const contractByObj: Record<string, any> = {}
         for (const c of contractsData || []) contractByObj[c.object_id] = c
         const contractIds = (contractsData || []).map((c: any) => c.id)
+
+        const { data: archData } = await supabase
+          .from('contracts').select('*, object:objects(id, address), tenant:users(full_name, phone)')
+          .in('object_id', objIds).eq('status', 'terminated')
+          .order('terminated_at', { ascending: false })
+        setArchived(archData || [])
 
         if (contractIds.length) {
           await Promise.all(contractIds.map((id: string) => ensureNextPayment(id).catch(() => {})))
@@ -391,8 +413,78 @@ export function LandlordDashboard() {
   const payBadge = !!((current?.payment && !current.payment.confirmed_by_landlord) || firstMonthPending)
   const metersBadge = !!current?.waitingForReadings
 
+  const arch = archived.find(a => a.id === archiveId) || null
+  const archSd = arch?.start_date ? parseDate(arch.start_date) : null
+  const archSettlement = (arch as any)?.settlement || {}
+
   if (userLoading || loading) return <div style={T.page}>Загрузка…</div>
   if (error) return <div style={T.page}><div style={T.card}>{error}</div></div>
+
+  if (arch) {
+    return (
+      <div style={{ ...T.page, paddingBottom: 40 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 0 8px' }}>
+          <button style={iosBlue} onClick={() => setArchiveId(null)}>← Мои объекты</button>
+        </div>
+        <h1 style={T.h1}>{arch.object?.address || 'Объект'}</h1>
+
+        <div style={T.card}>
+          <div style={T.h2}>Договор завершён · архив</div>
+          <div style={T.row}><span style={iosMuted}>Арендатор</span><b>{arch.tenant?.full_name || '—'}</b></div>
+          {arch.tenant?.phone && <div style={T.row}><span style={iosMuted}>Телефон</span><b>{arch.tenant.phone}</b></div>}
+          <div style={T.row}><span style={iosMuted}>Срок</span><b>{arch.start_date ? parseDate(arch.start_date).toLocaleDateString('ru-RU') : '—'} — {arch.terminated_at ? new Date(arch.terminated_at).toLocaleDateString('ru-RU') : '—'}</b></div>
+          <div style={T.row}><span style={iosMuted}>Аренда</span><b>{Number(arch.rent_amount || 0).toFixed(0)} ₽/мес</b></div>
+          {arch.termination_note && <div style={T.row}><span style={iosMuted}>Примечание</span><b>{arch.termination_note}</b></div>}
+          {archSettlement.deposit_paid != null && <div style={T.row}><span style={iosMuted}>Депозит внесён</span><b>{Number(archSettlement.deposit_paid).toFixed(0)} ₽</b></div>}
+          {archSettlement.frozen_total != null && Number(archSettlement.frozen_total) > 0 && <div style={T.row}><span style={iosMuted}>Удержано по штрафам</span><b>{Number(archSettlement.frozen_total).toFixed(0)} ₽</b></div>}
+          {archSettlement.open_debt != null && Number(archSettlement.open_debt) > 0 && <div style={T.row}><span style={iosMuted}>Долг по счетам</span><b>{Number(archSettlement.open_debt).toFixed(0)} ₽</b></div>}
+          <div style={{ ...T.row, borderBottom: 'none' }}>
+            <span style={iosMuted}>Итог при съезде</span>
+            <b style={{ color: Number(archSettlement.result || 0) >= 0 ? '#1e7e34' : '#ff3b30' }}>
+              {Number(archSettlement.result || 0) >= 0 ? `возвращено ${Number(archSettlement.result).toFixed(0)} ₽` : `долг ${Math.abs(Number(archSettlement.result || 0)).toFixed(0)} ₽`}
+            </b>
+          </div>
+        </div>
+
+        <div style={T.card}>
+          <div style={T.h2}>История платежей</div>
+          {archivePays.length === 0 && <div style={{ ...T.small, margin: '8px 0' }}>Платежей нет.</div>}
+          {archivePays.map((h: any) => {
+            const firstP = isFirstPeriod(h.period, archSd)
+            const dueDay = parseDate(h.due_date)
+            const confDay = h.confirmed_at ? parseDate(String(h.confirmed_at).slice(0, 10)) : null
+            const late = !firstP && h.confirmed_by_landlord && confDay !== null && confDay.getTime() > dueDay.getTime() && !(archSd && dueDay < archSd)
+            const sum = Number(h.base_amount || 0) + Number(h.penalty_amount || 0) + Number(h.utilities_amount || 0)
+            return (
+              <div key={h.id} style={T.row}>
+                <span style={{ flex: 1, minWidth: 0 }}>{parseDate(h.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}{firstP ? ' · первый месяц' : ''}</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                  <span style={{ fontSize: 13, color: late ? '#ff3b30' : h.confirmed_by_landlord ? '#8e8e93' : '#b25000' }}>{h.confirmed_by_landlord ? (late ? 'просрочка' : 'вовремя') : 'не подтверждён'}</span>
+                  <b style={{ whiteSpace: 'nowrap' }}>{sum.toFixed(0)} ₽</b>
+                </span>
+              </div>
+            )
+          })}
+        </div>
+
+        {archiveFrozen.length > 0 && (
+          <div style={T.card}>
+            <div style={T.h2}>Замороженные штрафы</div>
+            {archiveFrozen.map((f: any) => (
+              <div key={f.id} style={T.item}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 15 }}>
+                  <span>{f.period ? parseDate(f.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : 'без месяца'}</span>
+                  <b>{Number(f.amount).toFixed(0)} ₽</b>
+                </div>
+                {f.adjusted_note && <div style={T.tiny}>{f.adjusted_note}</div>}
+              </div>
+            ))}
+            <div style={T.tiny}>Записи хранятся постоянно — это ваша защита при спорах и в суде.</div>
+          </div>
+        )}
+      </div>
+    )
+  }
 
   if (!current) {
     return (
@@ -437,6 +529,28 @@ export function LandlordDashboard() {
         </div>
 
         <TeamManager />
+
+        {archived.length > 0 && (
+          <>
+            <div style={secHead}>Архив договоров</div>
+            {archived.map((a) => (
+              <div key={a.id} style={T.card}>
+                <button
+                  onClick={() => setArchiveId(a.id)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 56, border: 'none', background: 'transparent', cursor: 'pointer', padding: '4px 0', textAlign: 'left', boxSizing: 'border-box' }}
+                >
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 17, fontWeight: 700, color: '#1d1d1f' }}>{a.object?.address || 'Объект'}</div>
+                    <div style={{ fontSize: 13, color: '#8e8e93', marginTop: 4 }}>
+                      {a.tenant?.full_name || '—'} · завершён {a.terminated_at ? new Date(a.terminated_at).toLocaleDateString('ru-RU') : '—'}
+                    </div>
+                  </div>
+                  <span style={{ color: '#c7c7cc', fontSize: 18 }}>›</span>
+                </button>
+              </div>
+            ))}
+          </>
+        )}
       </div>
     )
   }
