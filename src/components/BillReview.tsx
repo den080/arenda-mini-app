@@ -4,7 +4,6 @@ import { T } from '../theme'
 import { showToast } from './ui'
 
 const iosBlue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: 4, flexShrink: 0 }
-const iosRed: React.CSSProperties = { border: 'none', background: 'transparent', color: '#ff3b30', fontSize: 15, cursor: 'pointer', padding: 4, flexShrink: 0 }
 const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProperties
 
 export function BillReview({ contractId, tenantId }: { contractId: string; tenantId: string }) {
