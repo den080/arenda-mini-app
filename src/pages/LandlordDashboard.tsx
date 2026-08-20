@@ -79,6 +79,7 @@ export function LandlordDashboard() {
   const [archived, setArchived] = useState<any[]>([])
   const [archiveId, setArchiveId] = useState<string | null>(null)
   const [archiveListOpen, setArchiveListOpen] = useState(false)
+  const [archDelOpen, setArchDelOpen] = useState(false)
   const [archivePays, setArchivePays] = useState<any[]>([])
   const [archiveFrozen, setArchiveFrozen] = useState<any[]>([])
 
@@ -248,6 +249,25 @@ export function LandlordDashboard() {
     if (con) await supabase.from('notifications_log').insert({ user_id: con.tenant_id, type: 'payment_undo', related_id: pay.id, message: '↩️ Подтверждение оплаты отменено арендодателем (ошибка ввода)', sent_at: new Date().toISOString() })
     showToast('✅ Подтверждение отменено, счёт снова открыт')
     setUndoId(null)
+    window.dispatchEvent(new Event('rentflow-refresh'))
+  }
+
+  async function deleteArchivedContract() {
+    if (!arch) return
+    const id = arch.id
+    await supabase.from('meter_readings').delete().eq('contract_id', id)
+    await supabase.from('payments').delete().eq('contract_id', id)
+    await supabase.from('penalty_rules').delete().eq('contract_id', id)
+    await supabase.from('cash_meetings').delete().eq('contract_id', id)
+    await supabase.from('deferred_requests').delete().eq('contract_id', id)
+    await supabase.from('deferred_debts').delete().eq('contract_id', id)
+    await supabase.from('frozen_penalties').delete().eq('contract_id', id)
+    await supabase.from('utility_bills').delete().eq('contract_id', id)
+    const { error } = await supabase.from('contracts').delete().eq('id', id)
+    if (error) { showToast('Ошибка: ' + error.message); return }
+    showToast('✅ Договор удалён из архива')
+    setArchDelOpen(false)
+    setArchiveId(null)
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
 
@@ -581,6 +601,17 @@ export function LandlordDashboard() {
             <div style={T.tiny}>Записи хранятся постоянно — это ваша защита при спорах и в суде.</div>
           </div>
         )}
+
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0' }}>
+          <button style={iosRed} onClick={() => setArchDelOpen(true)}>Удалить из архива</button>
+        </div>
+
+        <ConfirmDelete
+          open={archDelOpen}
+          text="Договор и вся его история (платежи, штрафы, расчёт при съезде) будут удалены безвозвратно."
+          onClose={() => setArchDelOpen(false)}
+          onConfirm={deleteArchivedContract}
+        />
       </div>
     )
   }
