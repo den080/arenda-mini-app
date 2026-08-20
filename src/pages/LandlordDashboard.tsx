@@ -552,7 +552,9 @@ export function LandlordDashboard() {
             ) : (
               objHistory.map((h: any) => {
                 const firstP = isFirstPeriod(h.period, sd)
-                const late = !firstP && h.confirmed_by_landlord && h.confirmed_at && new Date(h.confirmed_at) > parseDate(h.due_date) && !(sd && parseDate(h.due_date) < sd)
+                const dueDay = parseDate(h.due_date)
+                const confDay = h.confirmed_at ? parseDate(String(h.confirmed_at).slice(0, 10)) : null
+                const late = !firstP && h.confirmed_by_landlord && confDay !== null && confDay.getTime() > dueDay.getTime() && !(sd && dueDay < sd)
                 const sum = Number(h.base_amount || 0) + Number(h.penalty_amount || 0) + Number(h.utilities_amount || 0)
                 return (
                   <div key={h.id} style={T.row}>
