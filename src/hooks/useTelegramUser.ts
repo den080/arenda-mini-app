@@ -71,6 +71,8 @@ export function useTelegramUser() {
           await supabase.from('users').update({ telegram_id: autoId }).eq('id', found.id)
           found.telegram_id = autoId
         }
+        supabase.from('users').update({ last_seen: new Date().toISOString() }).eq('id', found.id).then(() => {})
+        found.last_seen = new Date().toISOString()
         cachedUser = found as User
         setUser(cachedUser)
       }
@@ -106,6 +108,8 @@ export function useTelegramUser() {
         if (found) {
           const allowed = !LOCKDOWN || isAllowed(found.phone || '') || (await isTeamUser(found.id))
           if (allowed) {
+            supabase.from('users').update({ last_seen: new Date().toISOString() }).eq('id', found.id).then(() => {})
+            found.last_seen = new Date().toISOString()
             cachedUser = found as User
             setUser(cachedUser)
             setLoading(false)
