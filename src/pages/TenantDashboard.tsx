@@ -72,6 +72,7 @@ export function TenantDashboard() {
     switch (type) {
       case 'payment_claimed': return '✅ Арендатор сообщил об оплате'
       case 'payment_confirmed': return '🟢 Арендодатель подтвердил оплату'
+      case 'payment_partial': return '💰 Частичная оплата учтена'
       case 'meter_submitted': return '💦 Переданы новые показания'
       case 'cash_proposed': return '💵 Предложено время встречи наличными'
       case 'cash_confirmed': return '🤝 Встреча по оплате согласована'
@@ -308,6 +309,9 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
   const todayMid = new Date(today.getFullYear(), today.getMonth(), today.getDate())
   const utilities = Number(payment?.utilities_amount || 0)
   const total = payment ? Number(payment.base_amount) + Number(payment.penalty_amount || 0) + utilities : Number(contract.rent_amount)
+  const paidPart = Number(payment?.paid_amount || 0)
+  const balance = Number(contract.balance || 0)
+  const toPay = Math.max(0, total - paidPart - balance)
   const monthLabel = payment ? new Date(payment.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : ''
   const deposit = Number(contract.deposit_amount || 0)
   const depositPaid = Number(contract.deposit_paid || 0)
@@ -418,6 +422,15 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
               <div style={T.row}><span style={iosMuted}>Ресурсы по квитанции</span><b>{utilities.toFixed(2)} ₽</b></div>
             )}
             <div style={T.row}><span style={iosMuted}>Итого</span><span style={T.total}>{total.toFixed(2)} ₽</span></div>
+            {!payment?.confirmed_by_landlord && paidPart > 0 && (
+              <div style={T.row}><span style={iosMuted}>Оплачено</span><b style={{ color: '#1e7e34' }}>−{paidPart.toFixed(2)} ₽</b></div>
+            )}
+            {!payment?.confirmed_by_landlord && balance > 0 && (
+              <div style={T.row}><span style={iosMuted}>Баланс (переплата)</span><b style={{ color: '#1e7e34' }}>−{balance.toFixed(2)} ₽</b></div>
+            )}
+            {!payment?.confirmed_by_landlord && (paidPart > 0 || balance > 0) && (
+              <div style={T.row}><span style={iosMuted}>К оплате</span><span style={T.total}>{toPay.toFixed(2)} ₽</span></div>
+            )}
             <div style={{ ...T.row, borderBottom: 'none' }}>
               <span style={iosMuted}>{firstMonth ? 'Оплата при подписании договора' : 'Оплатить до'}</span>
               <b>{firstMonth ? '' : parseDate(payment.due_date).toLocaleDateString('ru-RU')}</b>
@@ -605,6 +618,9 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
             <div style={T.row}><span style={iosMuted}>Аренда</span><b>{Number(contract.rent_amount).toFixed(0)} ₽/мес</b></div>
             {(contract as any).amendment_at && (
               <div style={T.row}><span style={iosMuted}>Допсоглашение</span><b>{Number(contract.rent_amount).toFixed(0)} ₽ с {(contract as any).amendment_from ? new Date((contract as any).amendment_from).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : new Date((contract as any).amendment_at).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}</b></div>
+            )}
+            {balance > 0 && (
+              <div style={T.row}><span style={iosMuted}>Баланс (переплата)</span><b>{balance.toFixed(0)} ₽</b></div>
             )}
             <div style={T.row}><span style={iosMuted}>Оплата</span><b>до {contract.payment_day} числа</b></div>
             {deposit > 0 && (
