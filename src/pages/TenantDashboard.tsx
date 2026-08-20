@@ -112,11 +112,11 @@ export function TenantDashboard() {
                 {i > 0 && <div style={{ height: 1, background: 'rgba(60,60,67,0.12)' }} />}
                 <button
                   onClick={() => { setOpenId(c.id); setTab('pay') }}
-                  style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 52, border: 'none', background: 'transparent', cursor: 'pointer', padding: '8px 0', textAlign: 'left', boxSizing: 'border-box' }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 64, border: 'none', background: 'transparent', cursor: 'pointer', padding: '14px 0', textAlign: 'left', boxSizing: 'border-box' }}
                 >
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 17, fontWeight: 700, color: '#1d1d1f' }}>{c._address}</div>
-                    <div style={{ fontSize: 13, color: '#8e8e93', marginTop: 2 }}>{Number(c.rent_amount).toFixed(0)} ₽/мес</div>
+                    <div style={{ fontSize: 13, color: '#8e8e93', marginTop: 4 }}>{Number(c.rent_amount).toFixed(0)} ₽/мес</div>
                   </div>
                   <span style={{ color: '#c7c7cc', fontSize: 18 }}>›</span>
                 </button>
