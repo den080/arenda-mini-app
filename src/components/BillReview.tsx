@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { T } from '../theme'
 import { showToast } from './ui'
-import { Media } from './BillUploader'
+import { Media, billChip, billChipText } from './BillUploader'
 
 const iosBlue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: 4, flexShrink: 0 }
 const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProperties
@@ -50,18 +50,14 @@ export function BillReview({ contractId, tenantId }: { contractId: string; tenan
           <div key={b.id}>
             {i > 0 && <div style={hair} />}
             <div style={{ padding: '10px 0' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 15, fontWeight: 600 }}>Квитанция за {new Date(b.period + '-01').toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}</div>
                   <div style={{ fontSize: 13, color: '#8e8e93', marginTop: 2 }}>
                     загружена {new Date(b.uploaded_at).toLocaleDateString('ru-RU')} · срок {new Date(b.due_date).toLocaleDateString('ru-RU')}
                   </div>
                 </div>
-                <span style={{
-                  fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 999, flexShrink: 0,
-                  background: b.status === 'confirmed' ? 'rgba(52,199,89,0.15)' : b.status === 'paid' ? 'rgba(0,113,227,0.12)' : overdue ? 'rgba(255,59,48,0.15)' : 'rgba(120,120,128,0.12)',
-                  color: b.status === 'confirmed' ? '#1e7e34' : b.status === 'paid' ? '#0071e3' : overdue ? '#c00' : '#1d1d1f',
-                }}>{b.status === 'confirmed' ? 'подтверждено' : b.status === 'paid' ? 'оплачено' : overdue ? 'просрочено' : 'к оплате'}</span>
+                <span style={billChip(b.status, overdue)}>{billChipText(b.status, overdue)}</span>
               </div>
               {b.bill_url && (
                 b.bill_url.includes('.pdf')
@@ -76,7 +72,7 @@ export function BillReview({ contractId, tenantId }: { contractId: string; tenan
                     : <img src={b.payment_url} alt="" onClick={() => setView(b.payment_url)} style={{ width: '100%', maxHeight: 140, objectFit: 'cover', borderRadius: 10, marginTop: 4, cursor: 'pointer' }} />}
                 </div>
               )}
-              <div style={{ display: 'flex', gap: 16, marginTop: 8 }}>
+              <div style={{ display: 'flex', gap: 16, marginTop: 8, alignItems: 'center' }}>
                 {b.status === 'paid' && <button style={iosBlue} onClick={() => confirmBill(b.id)}>Подтвердить получение</button>}
                 {b.status === 'confirmed' && <span style={{ color: '#1e7e34', fontSize: 13, fontWeight: 600 }}>Оплата принята</span>}
               </div>
