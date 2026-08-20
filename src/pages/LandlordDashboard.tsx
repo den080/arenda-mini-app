@@ -73,6 +73,7 @@ export function LandlordDashboard() {
   const [fzNote, setFzNote] = useState('')
   const [payConfirm, setPayConfirm] = useState<null | { kind: 'card' | 'cash' | 'cash-close' | 'full' }>(null)
   const [payConfirmOk, setPayConfirmOk] = useState(false)
+  const [receiptOpen, setReceiptOpen] = useState(false)
   const [archived, setArchived] = useState<any[]>([])
   const [archiveId, setArchiveId] = useState<string | null>(null)
   const [archivePays, setArchivePays] = useState<any[]>([])
@@ -185,9 +186,11 @@ export function LandlordDashboard() {
           let statusDetail = ''
           let statusColor = '#a80'
           if (!payment.confirmed_by_landlord) {
+            const paidPart = Number(payment.paid_amount || 0)
             if (firstMonth) { statusDetail = 'Первый месяц — ждёт оплаты'; statusColor = '#a80' }
             else if (isOverdue) { status = 'overdue'; statusDetail = `Просрочка ${Math.round((todayMid.getTime() - dueMid.getTime()) / 86400000)} дн.`; statusColor = '#c00' }
             else if (waitingForReadings) { statusDetail = 'Ждём показания'; statusColor = '#a80' }
+            else if (paidPart > 0) { statusDetail = `Оплачено частично · до оплаты ${daysUntilDue} дн.`; statusColor = '#a80' }
             else if (daysUntilDue === 0) { statusDetail = 'Сегодня последний день оплаты'; statusColor = '#a80' }
             else if (daysUntilDue <= reminder) { statusDetail = `До оплаты ${daysUntilDue} дн.`; statusColor = '#a80' }
             else { statusDetail = `До оплаты ${daysUntilDue} дн.`; statusColor = '#080' }
@@ -253,6 +256,42 @@ export function LandlordDashboard() {
       showToast('✅ Счёт создан вместе с ресурсами')
     }
     if (current) setUtilInputs(prev => ({ ...prev, [current.id]: String(amount) }))
+    window.dispatchEvent(new Event('rentflow-refresh'))
+  }
+
+  async function recordReceipt(amount: number) {
+    if (!contract || !current?.paymentId) return
+    if (isNaN(amount) || amount <= 0) { showToast('Некорректная сумма'); return }
+    const { data: pay } = await supabase.from('payments').select('*').eq('id', current.paymentId).maybeSingle()
+    if (!pay) { showToast('Платёж не найден'); return }
+    const total = Number(pay.base_amount || 0) + Number(pay.penalty_amount || 0) + Number(pay.utilities_amount || 0)
+    let paid = Number(pay.paid_amount || 0) + amount
+    let bal = Number((contract as any).balance || 0)
+    let useBal = 0
+    if (paid < total && bal > 0) { useBal = Math.min(bal, total - paid); paid += useBal }
+    if (paid >= total) {
+      const excess = paid - total
+      const { error } = await supabase.from('payments').update({ paid_amount: total, confirmed_by_landlord: true, confirmed_at: new Date().toISOString() }).eq('id', pay.id)
+      if (error) { showToast('Ошибка: ' + error.message); return }
+      await supabase.from('contracts').update({ balance: bal - useBal + excess }).eq('id', contract.id)
+      await ensureNextPayment(contract.id)
+      await supabase.from('notifications_log').insert({
+        user_id: contract.tenant_id, type: 'payment_confirmed', related_id: pay.id,
+        message: excess > 0 ? `🟢 Оплата получена, переплата ${excess.toFixed(0)} ₽ зачислена в баланс` : '🟢 Арендодатель подтвердил оплату',
+        sent_at: new Date().toISOString(),
+      })
+      showToast(excess > 0 ? `✅ Платёж закрыт, переплата ${excess.toFixed(0)} ₽ в балансе` : '✅ Платёж закрыт')
+    } else {
+      const { error } = await supabase.from('payments').update({ paid_amount: paid }).eq('id', pay.id)
+      if (error) { showToast('Ошибка: ' + error.message); return }
+      if (useBal > 0) await supabase.from('contracts').update({ balance: bal - useBal }).eq('id', contract.id)
+      await supabase.from('notifications_log').insert({
+        user_id: contract.tenant_id, type: 'payment_partial', related_id: pay.id,
+        message: `💰 Получено ${paid.toFixed(0)} из ${total.toFixed(0)} ₽`,
+        sent_at: new Date().toISOString(),
+      })
+      showToast(`✅ Учтено: ${paid.toFixed(0)} из ${total.toFixed(0)} ₽`)
+    }
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
 
@@ -365,7 +404,7 @@ export function LandlordDashboard() {
     const cashFinalClosed = afterCashClosed || afterCashConfirmed
     const cardSatisfied = !cardEngaged || afterCard
     const cashSatisfied = !(!!cashMeeting && !afterCashClosed) || cashFinalClosed
-    if (cardSatisfied && cashSatisfied) { update.confirmed_by_landlord = true; update.confirmed_at = new Date().toISOString() }
+    if (cardSatisfied && cashSatisfied) { update.confirmed_by_landlord = true; update.confirmed_at = new Date().toISOString(); update.paid_amount = Number(pay.base_amount || 0) + Number(pay.penalty_amount || 0) + Number(pay.utilities_amount || 0) }
     const { error: e1 } = await supabase.from('payments').update(update).eq('id', paymentId)
     if (e1) { showToast('Ошибка: ' + e1.message); return }
     showToast('✅ Подтверждено')
@@ -381,6 +420,7 @@ export function LandlordDashboard() {
     switch (type) {
       case 'payment_claimed': return '✅ Арендатор сообщил об оплате'
       case 'payment_confirmed': return '🟢 Арендодатель подтвердил оплату'
+      case 'payment_partial': return '💰 Частичная оплата учтена'
       case 'meter_submitted': return '💦 Переданы новые показания'
       case 'cash_proposed': return '💵 Предложено время встречи наличными'
       case 'cash_confirmed': return '🤝 Встреча по оплате согласована'
@@ -405,6 +445,7 @@ export function LandlordDashboard() {
   const contract = current?.contract
   const deposit = Number((contract as any)?.deposit_amount || 0)
   const depositPaid = Number((contract as any)?.deposit_paid || 0)
+  const contractBalance = Number((contract as any)?.balance || 0)
   const sd = (contract as any)?.start_date ? parseDate((contract as any).start_date) : null
   const firstMonthPending = !!(contract && current?.payment && !current.payment.confirmed_by_landlord && isFirstPeriod(current.payment.period, sd))
   const firstMonthCurrent = !!(contract && current?.payment && isFirstPeriod(current.payment.period, sd))
@@ -417,6 +458,7 @@ export function LandlordDashboard() {
   const pcPay = current?.payment
   const pcMonth = pcPay ? new Date(pcPay.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : ''
   const pcSum = pcPay ? Number(pcPay.base_amount || 0) + Number(pcPay.penalty_amount || 0) + Number(pcPay.utilities_amount || 0) : 0
+  const pcPaid = Number(pcPay?.paid_amount || 0)
 
   const payBadge = !!((current?.payment && !current.payment.confirmed_by_landlord) || firstMonthPending)
   const metersBadge = !!current?.waitingForReadings
@@ -582,6 +624,12 @@ export function LandlordDashboard() {
           {contract && current.paymentId && !current.payment?.confirmed_by_landlord && !firstMonthPending && (
             <div style={T.card}>
               <div style={T.h2}>Подтверждение оплаты</div>
+              {(pcPaid > 0 || contractBalance > 0) && (
+                <div style={T.row}>
+                  <span style={iosMuted}>Получено / баланс</span>
+                  <b>{pcPaid.toFixed(0)} / {contractBalance.toFixed(0)} ₽</b>
+                </div>
+              )}
               <div style={T.row}>
                 <span>Безналичная оплата</span>
                 {current.payment?.confirmed_card
@@ -608,6 +656,9 @@ export function LandlordDashboard() {
               {!current.payment?.card_claimed && !current.hasConfirmedCashMeeting && (
                 <button style={T.btn} onClick={() => { setPayConfirmOk(false); setPayConfirm({ kind: 'full' }) }}>Подтвердить получение оплаты</button>
               )}
+              <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 4px' }}>
+                <button style={iosBlue} onClick={() => setReceiptOpen(true)}>Внести поступление (частями)</button>
+              </div>
             </div>
           )}
 
@@ -720,6 +771,9 @@ export function LandlordDashboard() {
             <div style={T.row}><span style={iosMuted}>Аренда</span><b>{Number(contract.rent_amount).toFixed(0)} ₽/мес</b></div>
             {(contract as any).amendment_at && (
               <div style={T.row}><span style={iosMuted}>Допсоглашение</span><b>{Number(contract.rent_amount).toFixed(0)} ₽ с {(contract as any).amendment_from ? new Date((contract as any).amendment_from).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : new Date((contract as any).amendment_at).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}</b></div>
+            )}
+            {contractBalance > 0 && (
+              <div style={T.row}><span style={iosMuted}>Баланс (переплата)</span><b>{contractBalance.toFixed(0)} ₽</b></div>
             )}
             <div style={T.row}><span style={iosMuted}>Оплата</span><b>до {contract.payment_day} числа</b></div>
             {deposit > 0 && (
@@ -834,6 +888,13 @@ export function LandlordDashboard() {
         </div>
       </Modal>
 
+      <PromptNumber
+        open={receiptOpen}
+        title="Поступление по счёту"
+        label={`Сумма к учёту, ₽. Счёт на ${pcSum.toFixed(0)} ₽, получено ${pcPaid.toFixed(0)} ₽.`}
+        onClose={() => setReceiptOpen(false)}
+        onSubmit={(n) => recordReceipt(n)}
+      />
       <PromptNumber
         open={depModal === 'add'}
         title="Взнос по депозиту"
