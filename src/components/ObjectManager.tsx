@@ -4,7 +4,7 @@ import { useTelegramUser } from '../hooks/useTelegramUser'
 import { useTeam } from '../hooks/useTeam'
 import { ensureNextPayment } from '../lib/nextPayment'
 import { T } from '../theme'
-import { ConfirmDelete, showToast } from './ui'
+import { ConfirmDelete, Modal, showToast } from './ui'
 
 const BANKS = ['Сбербанк', 'Т-Банк (Тинькофф)', 'ВТБ', 'Альфа-Банк', 'Газпромбанк', 'Россельхозбанк', 'Райффайзен Банк', 'Росбанк', 'Открытие', 'Совкомбанк', 'МТС Банк', 'Промсвязьбанк', 'Почта Банк', 'Дом.РФ', 'ЮниКредит Банк']
 
@@ -194,7 +194,6 @@ export function ObjectAdd() {
       const payDayN = Number(paymentDay) || 1
 
       if (oldContract) {
-        // договор уже идёт: прошлые месяцы — оплачены вовремя, первый открытый счёт — ближайший с будущей датой
         const today0 = new Date()
         const tMid = new Date(today0.getFullYear(), today0.getMonth(), today0.getDate())
         const rows: any[] = []
@@ -304,9 +303,10 @@ export function ObjectAdd() {
 export function ObjectEdit({ objectId }: { objectId: string }) {
   const [ready, setReady] = useState(false)
   const [delOpen, setDelOpen] = useState(false)
-  const [locked, setLocked] = useState(false)
-  const [repairArmed, setRepairArmed] = useState(false)
+  const [repairOpen, setRepairOpen] = useState(false)
+  const [repairOk, setRepairOk] = useState(false)
   const [repairing, setRepairing] = useState(false)
+  const [locked, setLocked] = useState(false)
 
   const [editContractId, setEditContractId] = useState<string | null>(null)
   const [editCounterId, setEditCounterId] = useState<string | null>(null)
@@ -368,22 +368,19 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
     })()
   }, [objectId])
 
-  async function repairHistory() {
+  async function doRepair() {
     if (!editContractId || repairing) return
-    if (!repairArmed) { setRepairArmed(true); return }
     setRepairing(true)
     try {
       const today0 = new Date()
       const tMid = new Date(today0.getFullYear(), today0.getMonth(), today0.getDate())
       const { data: pays } = await supabase.from('payments').select('*').eq('contract_id', editContractId).order('period', { ascending: true })
       const list = pays || []
-      // 1) старые открытые счета с прошедшей датой — отмечаем оплаченными вовремя
       for (const p of list) {
         if (!p.confirmed_by_landlord && pdate(p.due_date) < tMid) {
           await supabase.from('payments').update({ confirmed_by_landlord: true, confirmed_at: p.due_date, penalty_amount: 0 }).eq('id', p.id)
         }
       }
-      // 2) дозаполняем недостающие месяцы до текущего как оплаченные
       const { data: pays2 } = await supabase.from('payments').select('*').eq('contract_id', editContractId).order('period', { ascending: true })
       const list2 = pays2 || []
       if (list2.length) {
@@ -399,10 +396,10 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
         }
         if (rows.length) await supabase.from('payments').insert(rows)
       }
-      // 3) создаём текущий открытый счёт
       await ensureNextPayment(editContractId)
       showToast('✅ История выровнена: прошлые месяцы оплачены, создан текущий счёт')
-      setRepairArmed(false)
+      setRepairOpen(false)
+      setRepairOk(false)
       window.dispatchEvent(new Event('rentflow-refresh'))
     } finally {
       setRepairing(false)
@@ -538,13 +535,28 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
 
       <div style={{ borderTop: '1px solid rgba(60,60,67,0.12)', paddingTop: 12, marginTop: 4 }}>
         <div style={{ ...T.tiny, margin: '0 0 8px' }}>Если договор внесён задним числом и в реальности просрочек не было — выровняйте историю: прошлые счета станут «оплачены вовремя», создастся текущий счёт.</div>
-        <button style={repairArmed ? S.red : S.blue} disabled={repairing} onClick={repairHistory}>
-          {repairing ? 'Выравнивание…' : repairArmed ? 'Нажмите ещё раз для подтверждения' : 'Выровнять историю старых платежей'}
-        </button>
-        {repairArmed && !repairing && (
-          <div style={{ ...T.tiny, color: '#ff3b30', marginTop: 6 }}>Все счета с прошедшей датой будут отмечены оплаченными вовремя. Отменить: просто не нажимайте повторно.</div>
-        )}
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0 8px' }}>
+          <button style={S.blue} onClick={() => { setRepairOk(false); setRepairOpen(true) }}>Выровнять историю старых платежей</button>
+        </div>
       </div>
+
+      <Modal open={repairOpen} title="Выровнять историю" onClose={() => setRepairOpen(false)}>
+        <div style={{ fontSize: 14, color: '#555', marginBottom: 12 }}>
+          Все счета с прошедшей датой будут отмечены «оплачены вовремя», недостающие месяцы дозаполнятся, создастся текущий открытый счёт. Используйте, только если в реальности просрочек не было.
+        </div>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 14, marginBottom: 14, color: '#1d1d1f' }}>
+          <input type="checkbox" checked={repairOk} onChange={(e) => setRepairOk(e.target.checked)} />
+          Понимаю и подтверждаю
+        </label>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            disabled={!repairOk || repairing}
+            onClick={doRepair}
+            style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer', opacity: repairOk ? 1 : 0.4 }}
+          >{repairing ? 'Выравнивание…' : 'Выровнять'}</button>
+          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 15, cursor: 'pointer' }} onClick={() => setRepairOpen(false)}>Отмена</button>
+        </div>
+      </Modal>
 
       <ConfirmDelete
         open={delOpen}
