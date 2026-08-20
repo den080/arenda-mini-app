@@ -106,13 +106,12 @@ export function TenantDashboard() {
             <div style={{ fontSize: 14, color: '#8e8e93', lineHeight: 1.45 }}>Попросите арендодателя добавить объект и указать ваш номер телефона в договоре — аренда появится здесь автоматически.</div>
           </div>
         ) : (
-          <div style={T.card}>
-            {contracts.map((c, i) => (
-              <div key={c.id}>
-                {i > 0 && <div style={{ height: 1, background: 'rgba(60,60,67,0.12)' }} />}
+          <>
+            {contracts.map((c) => (
+              <div key={c.id} style={T.card}>
                 <button
                   onClick={() => { setOpenId(c.id); setTab('pay') }}
-                  style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 64, border: 'none', background: 'transparent', cursor: 'pointer', padding: '14px 0', textAlign: 'left', boxSizing: 'border-box' }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 56, border: 'none', background: 'transparent', cursor: 'pointer', padding: '4px 0', textAlign: 'left', boxSizing: 'border-box' }}
                 >
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 17, fontWeight: 700, color: '#1d1d1f' }}>{c._address}</div>
@@ -122,7 +121,7 @@ export function TenantDashboard() {
                 </button>
               </div>
             ))}
-          </div>
+          </>
         )}
       </div>
     )
@@ -141,6 +140,7 @@ export function TenantDashboard() {
     </div>
   )
 }
+
 const rentalCache: Record<string, any> = {}
 
 function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; setTab: (t: string) => void }) {
