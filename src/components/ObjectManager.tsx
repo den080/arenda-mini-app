@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useTelegramUser } from '../hooks/useTelegramUser'
 import { useTeam } from '../hooks/useTeam'
+import { ensureNextPayment } from '../lib/nextPayment'
 import { T } from '../theme'
 import { ConfirmDelete, showToast } from './ui'
 
@@ -43,6 +44,15 @@ function formatPhoneInput(v: string): string {
 function formatCardInput(v: string): string {
   const d = (v || '').replace(/\D/g, '').slice(0, 16)
   return d.replace(/(.{4})/g, '$1 ').trim()
+}
+
+function iso(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function pdate(s: string): Date {
+  const [y, m, d] = String(s).slice(0, 10).split('-').map(Number)
+  return new Date(y, (m || 1) - 1, d || 1)
 }
 
 function DetailsEditor({ list, onChange }: { list: PayDetail[]; onChange: (v: PayDetail[]) => void }) {
@@ -119,6 +129,7 @@ export function ObjectAdd() {
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [startDate, setStartDate] = useState('')
+  const [oldContract, setOldContract] = useState(false)
   const [rent, setRent] = useState('')
   const [deposit, setDeposit] = useState('')
   const [paymentDay, setPaymentDay] = useState('')
@@ -177,20 +188,44 @@ export function ObjectAdd() {
         rules.push({ contract_id: contract.id, violation_type: 'readings_overdue', rate: Number(penRead) || 100, rate_unit: 'per_day_rub', starts_after_days: 0 })
       }
       await supabase.from('penalty_rules').insert(rules)
+
       const startD = new Date(startISO + 'T00:00:00')
-      const periodD = new Date(startD.getFullYear(), startD.getMonth(), 1)
-      const payDay = Number(paymentDay) || 1
-      let due = new Date(periodD.getFullYear(), periodD.getMonth(), payDay)
-      if (due < startD) due = new Date(startD.getFullYear(), startD.getMonth(), startD.getDate())
-      const period = `${periodD.getFullYear()}-${String(periodD.getMonth() + 1).padStart(2, '0')}-01`
-      const dueISO = `${due.getFullYear()}-${String(due.getMonth() + 1).padStart(2, '0')}-${String(due.getDate()).padStart(2, '0')}`
-      await supabase.from('payments').insert({
-        contract_id: contract.id, period, due_date: dueISO,
-        base_amount: Number(rent) || 0, penalty_amount: 0, utilities_amount: 0,
-      })
-      showToast('✅ Объект, договор и первый платёж сохранены')
+      const rentN = Number(rent) || 0
+      const payDayN = Number(paymentDay) || 1
+
+      if (oldContract) {
+        // договор уже идёт: прошлые месяцы — оплачены вовремя, первый открытый счёт — ближайший с будущей датой
+        const today0 = new Date()
+        const tMid = new Date(today0.getFullYear(), today0.getMonth(), today0.getDate())
+        const rows: any[] = []
+        let cur = new Date(startD.getFullYear(), startD.getMonth(), 1)
+        let openDone = false
+        let guard = 0
+        while (guard++ < 240) {
+          const due = new Date(cur.getFullYear(), cur.getMonth(), payDayN)
+          if (due < tMid) {
+            rows.push({ contract_id: contract.id, period: iso(cur), due_date: iso(due), base_amount: rentN, penalty_amount: 0, utilities_amount: 0, confirmed_by_landlord: true, confirmed_at: iso(due) })
+          } else if (!openDone) {
+            rows.push({ contract_id: contract.id, period: iso(cur), due_date: iso(due), base_amount: rentN, penalty_amount: 0, utilities_amount: 0 })
+            openDone = true
+            break
+          } else break
+          cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1)
+        }
+        if (rows.length) await supabase.from('payments').insert(rows)
+      } else {
+        const periodD = new Date(startD.getFullYear(), startD.getMonth(), 1)
+        let due = new Date(periodD.getFullYear(), periodD.getMonth(), payDayN)
+        if (due < startD) due = new Date(startD.getFullYear(), startD.getMonth(), startD.getDate())
+        const period = `${periodD.getFullYear()}-${String(periodD.getMonth() + 1).padStart(2, '0')}-01`
+        await supabase.from('payments').insert({
+          contract_id: contract.id, period, due_date: iso(due),
+          base_amount: rentN, penalty_amount: 0, utilities_amount: 0,
+        })
+      }
+      showToast('✅ Объект, договор и платежи сохранены')
       setShowForm(false)
-      setAddress(''); setNotes(''); setName(''); setPhone(''); setRent(''); setDeposit(''); setStartDate(''); setPaymentDay(''); setMeterDay('15'); setDetails([]); setReadingsMode('manual'); setMethod('both')
+      setAddress(''); setNotes(''); setName(''); setPhone(''); setRent(''); setDeposit(''); setStartDate(''); setPaymentDay(''); setMeterDay('15'); setDetails([]); setReadingsMode('manual'); setMethod('both'); setOldContract(false)
       window.dispatchEvent(new Event('rentflow-refresh'))
     } finally {
       setSaving(false)
@@ -220,6 +255,10 @@ export function ObjectAdd() {
           <input style={S.inp} value={phone} onChange={(e) => setPhone(formatPhoneInput(e.target.value))} placeholder="+7 905 000-00-00" inputMode="tel" />
           <div style={S.lab}>Начало договора</div>
           <input style={S.inp} type="date" value={startDate} onChange={(e) => { const v = e.target.value; setStartDate(v); const d = Number(v.slice(8, 10)); if (d >= 1 && d <= 31) setPaymentDay(String(d)) }} />
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '12px 0 2px', fontSize: 14, color: '#1d1d1f' }}>
+            <input type="checkbox" checked={oldContract} onChange={(e) => setOldContract(e.target.checked)} />
+            Договор уже идёт — отметить прошлые месяцы оплаченными
+          </label>
           <div style={S.lab}>Сумма аренды, руб</div>
           <input style={S.inp} value={rent} onChange={(e) => setRent(e.target.value)} placeholder="85000" inputMode="numeric" />
           <div style={S.lab}>Залоговый депозит, руб</div>
@@ -266,9 +305,13 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
   const [ready, setReady] = useState(false)
   const [delOpen, setDelOpen] = useState(false)
   const [locked, setLocked] = useState(false)
+  const [repairArmed, setRepairArmed] = useState(false)
+  const [repairing, setRepairing] = useState(false)
 
   const [editContractId, setEditContractId] = useState<string | null>(null)
   const [editCounterId, setEditCounterId] = useState<string | null>(null)
+  const [cRent, setCRent] = useState(0)
+  const [cPayDay, setCPayDay] = useState(1)
   const [eAddress, setEAddress] = useState('')
   const [eNotes, setENotes] = useState('')
   const [eName, setEName] = useState('')
@@ -296,6 +339,8 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
       const { data: contract } = await supabase.from('contracts').select('*').eq('object_id', objectId).eq('status', 'active').maybeSingle()
       if (contract) {
         setEditContractId(contract.id)
+        setCRent(Number(contract.rent_amount) || 0)
+        setCPayDay(Number(contract.payment_day) || 1)
         setEStartDate(contract.start_date || '')
         setERent(String(contract.rent_amount ?? ''))
         setEDeposit(String(contract.deposit_amount ?? ''))
@@ -322,6 +367,47 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
       setReady(true)
     })()
   }, [objectId])
+
+  async function repairHistory() {
+    if (!editContractId || repairing) return
+    if (!repairArmed) { setRepairArmed(true); return }
+    setRepairing(true)
+    try {
+      const today0 = new Date()
+      const tMid = new Date(today0.getFullYear(), today0.getMonth(), today0.getDate())
+      const { data: pays } = await supabase.from('payments').select('*').eq('contract_id', editContractId).order('period', { ascending: true })
+      const list = pays || []
+      // 1) старые открытые счета с прошедшей датой — отмечаем оплаченными вовремя
+      for (const p of list) {
+        if (!p.confirmed_by_landlord && pdate(p.due_date) < tMid) {
+          await supabase.from('payments').update({ confirmed_by_landlord: true, confirmed_at: p.due_date, penalty_amount: 0 }).eq('id', p.id)
+        }
+      }
+      // 2) дозаполняем недостающие месяцы до текущего как оплаченные
+      const { data: pays2 } = await supabase.from('payments').select('*').eq('contract_id', editContractId).order('period', { ascending: true })
+      const list2 = pays2 || []
+      if (list2.length) {
+        const last = list2[list2.length - 1]
+        let next = new Date(pdate(last.period).getFullYear(), pdate(last.period).getMonth() + 1, 1)
+        const rows: any[] = []
+        let guard = 0
+        while (guard++ < 240) {
+          const due = new Date(next.getFullYear(), next.getMonth(), cPayDay)
+          if (due >= tMid) break
+          rows.push({ contract_id: editContractId, period: iso(next), due_date: iso(due), base_amount: cRent, penalty_amount: 0, utilities_amount: 0, confirmed_by_landlord: true, confirmed_at: iso(due) })
+          next = new Date(next.getFullYear(), next.getMonth() + 1, 1)
+        }
+        if (rows.length) await supabase.from('payments').insert(rows)
+      }
+      // 3) создаём текущий открытый счёт
+      await ensureNextPayment(editContractId)
+      showToast('✅ История выровнена: прошлые месяцы оплачены, создан текущий счёт')
+      setRepairArmed(false)
+      window.dispatchEvent(new Event('rentflow-refresh'))
+    } finally {
+      setRepairing(false)
+    }
+  }
 
   async function saveEdit() {
     if (!validPhone(ePhone)) { showToast('Проверьте номер телефона арендатора'); return }
@@ -448,6 +534,16 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
       <div style={S.btnRow}>
         <button style={S.blue} onClick={saveEdit}>Сохранить</button>
         <button style={S.red} onClick={() => setDelOpen(true)}>Удалить объект</button>
+      </div>
+
+      <div style={{ borderTop: '1px solid rgba(60,60,67,0.12)', paddingTop: 12, marginTop: 4 }}>
+        <div style={{ ...T.tiny, margin: '0 0 8px' }}>Если договор внесён задним числом и в реальности просрочек не было — выровняйте историю: прошлые счета станут «оплачены вовремя», создастся текущий счёт.</div>
+        <button style={repairArmed ? S.red : S.blue} disabled={repairing} onClick={repairHistory}>
+          {repairing ? 'Выравнивание…' : repairArmed ? 'Нажмите ещё раз для подтверждения' : 'Выровнять историю старых платежей'}
+        </button>
+        {repairArmed && !repairing && (
+          <div style={{ ...T.tiny, color: '#ff3b30', marginTop: 6 }}>Все счета с прошедшей датой будут отмечены оплаченными вовремя. Отменить: просто не нажимайте повторно.</div>
+        )}
       </div>
 
       <ConfirmDelete
