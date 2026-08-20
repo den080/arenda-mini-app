@@ -486,6 +486,7 @@ export function LandlordDashboard() {
   const iosOk: React.CSSProperties = { color: '#1e7e34', fontSize: 14, fontWeight: 600 }
   const iosMuted: React.CSSProperties = { color: '#8e8e93', fontSize: 14 }
   const secHead: React.CSSProperties = { fontSize: 13, color: '#8e8e93', margin: '14px 16px 6px', textTransform: 'uppercase', letterSpacing: 0.3 }
+  const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProperties
 
   const current = objects.find(o => o.id === openId) || null
   const contract = current?.contract
@@ -629,22 +630,25 @@ export function LandlordDashboard() {
         {archived.length > 0 && (
           <>
             <div style={secHead}>Архив договоров</div>
-            {archived.map((a) => (
-              <div key={a.id} style={T.card}>
-                <button
-                  onClick={() => setArchiveId(a.id)}
-                  style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 56, border: 'none', background: 'transparent', cursor: 'pointer', padding: '4px 0', textAlign: 'left', boxSizing: 'border-box' }}
-                >
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 17, fontWeight: 700, color: '#1d1d1f' }}>{a.object?.address || 'Объект'}</div>
-                    <div style={{ fontSize: 13, color: '#8e8e93', marginTop: 4 }}>
-                      {a.tenant?.full_name || '—'} · завершён {a.terminated_at ? new Date(a.terminated_at).toLocaleDateString('ru-RU') : '—'}
+            <div style={T.card}>
+              {archived.map((a, i) => (
+                <div key={a.id}>
+                  {i > 0 && <div style={hair} />}
+                  <button
+                    onClick={() => setArchiveId(a.id)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 56, border: 'none', background: 'transparent', cursor: 'pointer', padding: '10px 0', textAlign: 'left', boxSizing: 'border-box' }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 17, fontWeight: 700, color: '#1d1d1f' }}>{a.object?.address || 'Объект'}</div>
+                      <div style={{ fontSize: 13, color: '#8e8e93', marginTop: 4 }}>
+                        {a.tenant?.full_name || '—'} · завершён {a.terminated_at ? new Date(a.terminated_at).toLocaleDateString('ru-RU') : '—'}
+                      </div>
                     </div>
-                  </div>
-                  <span style={{ color: '#c7c7cc', fontSize: 18 }}>›</span>
-                </button>
-              </div>
-            ))}
+                    <span style={{ color: '#c7c7cc', fontSize: 18 }}>›</span>
+                  </button>
+                </div>
+              ))}
+            </div>
           </>
         )}
       </div>
@@ -850,7 +854,7 @@ export function LandlordDashboard() {
               { v: 'both', l: 'Оба способа' },
             ].map((o, i) => (
               <div key={o.v}>
-                {i > 0 && <div style={{ height: 1, background: 'rgba(60,60,67,0.12)' }} />}
+                {i > 0 && <div style={hair} />}
                 <button
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', minHeight: 44, border: 'none', background: 'transparent', cursor: 'pointer', padding: '4px 0', fontSize: 15, color: '#1d1d1f' }}
                   onClick={() => updatePaymentMethod(contract.id, o.v as any)}
