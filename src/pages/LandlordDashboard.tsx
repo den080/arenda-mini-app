@@ -5,6 +5,7 @@ import { useTeam } from '../hooks/useTeam'
 import CashNegotiation from '../components/CashNegotiation'
 import MetersEditor from '../components/MetersEditor'
 import ReadingsReview from '../components/ReadingsReview'
+import BillReview from '../components/BillReview'
 import Chat from '../components/Chat'
 import { ObjectAdd, ObjectEdit } from '../components/ObjectManager'
 import TeamManager from '../components/TeamManager'
@@ -346,7 +347,6 @@ export function LandlordDashboard() {
     }
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
-
   const getNotificationText = (type: string) => {
     switch (type) {
       case 'payment_claimed': return '✅ Арендатор сообщил об оплате'
@@ -356,6 +356,9 @@ export function LandlordDashboard() {
       case 'cash_confirmed': return '🤝 Встреча по оплате согласована'
       case 'deferred_proposed': return '🙏 Арендатор попросил отсрочку штрафа'
       case 'deferred_confirmed': return '🧊 Замороженный штраф обновлён'
+      case 'bill_uploaded': return '📄 Арендатор загрузил квитанцию'
+      case 'bill_paid': return '🧾 Арендатор приложил подтверждение оплаты'
+      case 'bill_confirmed': return '✅ Квитанция подтверждена'
       default: return type
     }
   }
@@ -502,6 +505,13 @@ export function LandlordDashboard() {
                 <button style={iosBlue} onClick={() => saveUtilitiesNext(utilInputs[current.id] ?? String(current.utilitiesAmount || 0))}>Включить в платёж</button>
               </div>
               <div style={{ ...T.tiny, margin: '0 0 10px' }}>Введённая сумма записывается как есть (заменяет предыдущую), добавляется к платежу отдельно, не растёт при просрочке и не входит в штрафы.</div>
+            </div>
+          )}
+
+          {current.readingsMode === 'self' && contract && (
+            <div>
+              <div style={secHead}>Квитанции</div>
+              <BillReview contractId={contract.id} tenantId={contract.tenant_id} />
             </div>
           )}
 
