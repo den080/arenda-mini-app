@@ -154,7 +154,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
   async function load() {
     if (!user) return
     await ensureNextPayment(contract.id).catch(() => {})
-    const [objRes, paysRes, metersRawRes, meterTypesRes, penaltyRes, frozenRes, deferredRes] = await Promise.all([
+    const [objRes, paysRes, metersRawRes, meterTypesRes, penaltyRes, frozenRes, deferredRes, contactsRes] = await Promise.all([
       supabase.from('objects').select('*').eq('id', contract.object_id).maybeSingle(),
       supabase.from('payments').select('*').eq('contract_id', contract.id).order('period', { ascending: false }),
       supabase.from('object_meters').select('*').eq('object_id', contract.object_id).eq('is_active', true),
@@ -162,6 +162,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
       supabase.from('penalty_rules').select('*').eq('contract_id', contract.id),
       supabase.from('frozen_penalties').select('*').eq('contract_id', contract.id).order('period', { ascending: true }),
       supabase.from('deferred_requests').select('*').eq('contract_id', contract.id).order('created_at', { ascending: false }).limit(1),
+      supabase.from('object_contacts').select('*').eq('object_id', contract.object_id).order('sort', { ascending: true }).order('created_at', { ascending: true }),
     ])
     const obj = objRes.data
     const { data: landlord } = obj?.landlord_id
@@ -191,6 +192,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
       frozenRows: frozenRes.data || [],
       deferredReqs: deferredRes.data || [],
       readingsByMeter,
+      contacts: contactsRes.data || [],
     }
     rentalCache[contract.id] = d
     setData(d)
@@ -291,7 +293,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
 
   if (!data) return <div style={T.card}>Загрузка…</div>
 
-  const { obj, landlord, payments, meters, meterTypes, penaltyRules, frozenRows, deferredReqs, readingsByMeter } = data
+  const { obj, landlord, payments, meters, meterTypes, penaltyRules, frozenRows, deferredReqs, readingsByMeter, contacts } = data
   const readingsMode = contract.readings_mode || 'manual'
   const reminder = contract.reminder_days_before || 3
   const openPayments = (payments || []).filter((p: any) => !p.confirmed_by_landlord)
@@ -572,6 +574,26 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
               <div style={{ ...T.row, borderBottom: 'none' }}><span style={iosMuted}>Просрочка показаний</span><b>+{Number(readingsRule.rate)} ₽/день</b></div>
             )}
           </div>
+          {contacts && contacts.length > 0 && (
+            <div style={T.card}>
+              <div style={T.h2}>Экстренные контакты</div>
+              {contacts.map((c: any, i: number) => (
+                <div key={c.id}>
+                  {i > 0 && <div style={hair} />}
+                  <div style={T.row}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 15 }}>{c.label}</div>
+                      {c.note && <div style={{ fontSize: 13, color: '#8e8e93', marginTop: 2 }}>{c.note}</div>}
+                    </div>
+                    <a
+                      href={`tel:${String(c.phone || '').replace(/[^\d+]/g, '')}`}
+                      style={{ color: '#0071e3', fontSize: 15, fontWeight: 600, textDecoration: 'none', flexShrink: 0 }}
+                    >{c.phone}</a>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
           {frozenTotal > 0 && (
             <div style={T.card}>
               <div style={T.h2}>Замороженные штрафы · {frozenTotal.toFixed(0)} ₽</div>
