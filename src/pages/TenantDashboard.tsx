@@ -524,7 +524,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
                       </div>
                     )}
                     {open && hist.slice(0, 10).map((r: any) => (
-                      <div key={r.id} style={T.tiny}>{r.value} · подано {new Date(r.submitted_at).toLocaleDateString('ru-RU')} · {r.status === 'confirmed' ? 'подтверждены' : r.status === 'incomplete' ? 'не полностью' : 'ожидают'}</div>
+                    <div key={r.id} style={T.tiny}>{r.value} · подано {new Date(r.submitted_at).toLocaleDateString('ru-RU')} · {r.status === 'confirmed' ? 'подтверждены' : r.status === 'incomplete' ? 'не полностью' : 'ожидают'}{(r as any).entered_by ? ' · внёс арендодатель' : ''}</div>
                     ))}
                   </div>
                 )
