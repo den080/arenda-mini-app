@@ -6,6 +6,7 @@ import CashNegotiation from '../components/CashNegotiation'
 import MetersEditor from '../components/MetersEditor'
 import ReadingsReview from '../components/ReadingsReview'
 import BillReview from '../components/BillReview'
+import TerminationWizard from '../components/TerminationWizard'
 import Chat from '../components/Chat'
 import { ObjectAdd, ObjectEdit } from '../components/ObjectManager'
 import TeamManager from '../components/TeamManager'
@@ -359,6 +360,7 @@ export function LandlordDashboard() {
       case 'bill_uploaded': return '📄 Арендатор загрузил квитанцию'
       case 'bill_paid': return '🧾 Арендатор приложил подтверждение оплаты'
       case 'bill_confirmed': return '✅ Квитанция подтверждена'
+      case 'contract_terminated': return '🏁 Договор завершён'
       default: return type
     }
   }
@@ -655,6 +657,13 @@ export function LandlordDashboard() {
             )}
             <div style={T.tiny}>Записи не удаляются до конца договора; каждое изменение сохраняется с примечанием и датой.</div>
           </div>
+
+          {contract.status === 'active' && (
+            <>
+              <div style={secHead}>Завершение договора</div>
+              <TerminationWizard contractId={contract.id} />
+            </>
+          )}
 
           <ObjectEdit objectId={current.id} />
         </>
