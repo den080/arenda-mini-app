@@ -3,7 +3,9 @@ import { supabase } from './lib/supabase'
 import { useTelegramUser } from './hooks/useTelegramUser'
 import LandlordDashboard from './pages/LandlordDashboard'
 import TenantDashboard from './pages/TenantDashboard'
-import { Toaster } from './components/ui'
+import AdminDashboard from './pages/AdminDashboard'
+import FeedbackButton from './components/Feedback'
+import { Toaster, showToast } from './components/ui'
 import { C } from './theme'
 
 const GLOBAL_CSS = `
@@ -13,12 +15,11 @@ const GLOBAL_CSS = `
 `
 
 // ========== ЗАГЛУШКА ==========
-// LOCKDOWN = true  → пускает только whitelist и участников команды
-// LOCKDOWN = false → приложение открыто всем пользователям Telegram
 const LOCKDOWN = true
 
 const ALLOWED_IDS = ['28606967']
 const ALLOWED_PHONES = ['+79057674225', '+77475885016', '+79651947084', '+79999110921', '+79063190766']
+const OWNER_PHONE = '+79057674225'
 // ==============================
 
 function normPhone(v: string): string {
@@ -40,11 +41,17 @@ export default function App() {
   const { user, loading, error, loginWithId, logout, accessDenied } = useTelegramUser()
   const [value, setValue] = useState('')
   const [mode, setMode] = useState<'landlord' | 'tenant' | null>(null)
+  const [adminMode, setAdminMode] = useState(false)
+  const [adminUnlocked, setAdminUnlocked] = useState(() => { try { return sessionStorage.getItem('admin_ok') === '1' } catch { return false } })
+  const [pinOpen, setPinOpen] = useState(false)
+  const [pin, setPin] = useState('')
+  const [pinBusy, setPinBusy] = useState(false)
 
   const isTester = !!user && (
     ALLOWED_IDS.includes(String(user.telegram_id || '')) ||
     ALLOWED_PHONES.includes(normPhone(user.phone || ''))
   )
+  const isOwner = !!user && normPhone(user.phone || '') === normPhone(OWNER_PHONE)
 
   useEffect(() => {
     const tg = (window as any).Telegram?.WebApp
@@ -72,6 +79,32 @@ export default function App() {
   function tryLogin() {
     const v = value.trim()
     if (v) loginWithId(v)
+  }
+
+  function openAdmin() {
+    if (adminUnlocked) { setAdminMode(!adminMode); return }
+    setPin('')
+    setPinOpen(true)
+  }
+
+  async function checkPin() {
+    if (pinBusy) return
+    setPinBusy(true)
+    try {
+      const { data, error } = await supabase.rpc('check_admin_pin', { pin: pin.trim() })
+      if (error) { showToast('Ошибка проверки: ' + error.message); return }
+      if (data === true) {
+        try { sessionStorage.setItem('admin_ok', '1') } catch {}
+        setAdminUnlocked(true)
+        setPinOpen(false)
+        setAdminMode(true)
+        showToast('✅ Добро пожаловать')
+      } else {
+        showToast('Неверный PIN')
+      }
+    } finally {
+      setPinBusy(false)
+    }
   }
 
   if (loading) return <div style={st.wrap}>Загрузка...</div>
@@ -112,8 +145,8 @@ export default function App() {
       <div style={st.topbar}>
         {isTester ? (
           <>
-            <button style={mode === 'tenant' ? st.segActive : st.seg} onClick={() => setMode('tenant')}>Арендатор</button>
-            <button style={mode === 'landlord' ? st.segActive : st.seg} onClick={() => setMode('landlord')}>Арендодатель</button>
+            <button style={mode === 'tenant' ? st.segActive : st.seg} onClick={() => { setMode('tenant'); setAdminMode(false) }}>Арендатор</button>
+            <button style={mode === 'landlord' ? st.segActive : st.seg} onClick={() => { setMode('landlord'); setAdminMode(false) }}>Арендодатель</button>
             <button style={st.seg} onClick={logout}>Выйти</button>
           </>
         ) : (
@@ -122,8 +155,35 @@ export default function App() {
             <button style={st.seg} onClick={logout}>Выйти</button>
           </>
         )}
+        <FeedbackButton />
+        {isOwner && (
+          <button style={adminMode ? st.segActive : st.seg} onClick={openAdmin}>{adminMode ? 'В приложение' : 'Админка'}</button>
+        )}
       </div>
-      {mode === 'landlord' ? <LandlordDashboard /> : <TenantDashboard />}
+
+      {adminMode && isOwner && adminUnlocked
+        ? <AdminDashboard />
+        : mode === 'landlord' ? <LandlordDashboard /> : <TenantDashboard />}
+
+      {pinOpen && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: '#fff', borderRadius: 14, padding: 20, width: '100%', maxWidth: 320 }}>
+            <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 10 }}>Вход в админку</div>
+            <input
+              type="password"
+              inputMode="numeric"
+              value={pin}
+              onChange={(e) => setPin(e.target.value)}
+              placeholder="PIN"
+              style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 18, letterSpacing: 4, boxSizing: 'border-box', outline: 'none', textAlign: 'center' }}
+            />
+            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+              <button disabled={pinBusy} onClick={checkPin} style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>Войти</button>
+              <button onClick={() => setPinOpen(false)} style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 15, cursor: 'pointer' }}>Отмена</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -134,7 +194,7 @@ const st: Record<string, React.CSSProperties> = {
   p: { color: '#555', fontSize: 14 },
   input: { width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box' },
   button: { marginTop: 12, width: '100%', padding: 14, borderRadius: 10, border: 'none', background: '#2196f3', color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer' },
-  topbar: { display: 'flex', gap: 4, padding: 4, background: C.gray, borderRadius: 12, maxWidth: 600, margin: '12px auto 0', boxSizing: 'border-box' },
+  topbar: { display: 'flex', gap: 4, padding: 4, background: C.gray, borderRadius: 12, maxWidth: 600, margin: '12px auto 0', boxSizing: 'border-box', alignItems: 'center' },
   seg: { flex: 1, padding: '9px 4px', borderRadius: 9, border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', background: 'transparent', color: C.text2 },
   segActive: { flex: 1, padding: '9px 4px', borderRadius: 9, border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', background: '#fff', color: C.text, boxShadow: '0 1px 3px rgba(0,0,0,0.12)', textAlign: 'center' },
 }
