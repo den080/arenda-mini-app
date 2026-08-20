@@ -81,6 +81,7 @@ export function TenantDashboard() {
       case 'bill_paid': return '🧾 Подтверждение оплаты приложено'
       case 'bill_confirmed': return '✅ Арендодатель подтвердил оплату по квитанции'
       case 'contract_terminated': return '🏁 Договор завершён'
+      case 'amendment': return '📝 Допсоглашение по аренде'
       default: return type
     }
   }
@@ -602,6 +603,9 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
               <div style={T.row}><span style={iosMuted}>Срок</span><b>{parseDate(contract.start_date).toLocaleDateString('ru-RU')} — {parseDate(contract.end_date).toLocaleDateString('ru-RU')}</b></div>
             )}
             <div style={T.row}><span style={iosMuted}>Аренда</span><b>{Number(contract.rent_amount).toFixed(0)} ₽/мес</b></div>
+            {(contract as any).amendment_at && (
+              <div style={T.row}><span style={iosMuted}>Допсоглашение</span><b>{Number(contract.rent_amount).toFixed(0)} ₽ с {(contract as any).amendment_from ? new Date((contract as any).amendment_from).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : new Date((contract as any).amendment_at).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}</b></div>
+            )}
             <div style={T.row}><span style={iosMuted}>Оплата</span><b>до {contract.payment_day} числа</b></div>
             {deposit > 0 && (
               <div style={{ padding: '8px 0 4px' }}>
