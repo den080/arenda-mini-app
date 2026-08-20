@@ -83,6 +83,8 @@ export function TenantDashboard() {
       case 'bill_confirmed': return '✅ Арендодатель подтвердил оплату по квитанции'
       case 'contract_terminated': return '🏁 Договор завершён'
       case 'amendment': return '📝 Допсоглашение по аренде'
+      case 'payment_undo': return '↩️ Подтверждение оплаты отменено'
+
       default: return type
     }
   }
