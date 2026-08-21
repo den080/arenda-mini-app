@@ -844,17 +844,18 @@ export function LandlordDashboard() {
             {objHistory.length === 0 ? (
               <div style={{ ...T.small, margin: '8px 0' }}>Платежей пока нет</div>
             ) : (
-              objHistory.map((h: any) => {
+                objHistory.map((h: any) => {
                 const firstP = isFirstPeriod(h.period, sd)
                 const dueDay = parseDate(h.due_date)
                 const confDay = h.confirmed_at ? parseDate(String(h.confirmed_at).slice(0, 10)) : null
                 const late = !firstP && h.confirmed_by_landlord && confDay !== null && confDay.getTime() > dueDay.getTime() && !(sd && dueDay < sd)
+                const early = !firstP && h.confirmed_by_landlord && confDay !== null && confDay.getTime() < dueDay.getTime()
                 const sum = Number(h.base_amount || 0) + Number(h.penalty_amount || 0) + Number(h.utilities_amount || 0)
                 return (
                   <div key={h.id} style={T.row}>
                     <span style={{ flex: 1, minWidth: 0 }}>{parseDate(h.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}{firstP ? ' · первый месяц' : ''}</span>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                      <span style={{ fontSize: 13, color: late ? '#ff3b30' : '#8e8e93' }}>{h.confirmed_by_landlord ? (late ? 'просрочка' : 'вовремя') : 'не подтверждён'}</span>
+                                            <span style={{ fontSize: 13, color: late ? '#ff3b30' : '#8e8e93' }}>{h.confirmed_by_landlord ? (late ? `просрочка · опл. ${confDay!.toLocaleDateString('ru-RU')}` : early ? `досрочно · ${confDay!.toLocaleDateString('ru-RU')}` : `вовремя · ${confDay!.toLocaleDateString('ru-RU')}`) : 'не подтверждён'}</span>
                       <b style={{ whiteSpace: 'nowrap' }}>{sum.toFixed(0)} ₽</b>
                       {h.confirmed_by_landlord && (
                         <span style={{ display: 'flex', gap: 10 }}>
