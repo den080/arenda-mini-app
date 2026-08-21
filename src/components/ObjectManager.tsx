@@ -448,12 +448,12 @@ export function ObjectAdd() {
   return (
     <div>
       {!showForm ? (
-        <>
-          <SubscriptionBlock />
+                <>
           <div style={{ ...T.row, borderBottom: 'none' }}>
             <span style={{ fontSize: 15 }}>Новый объект</span>
             <button style={S.blue} onClick={() => setShowForm(true)}>Добавить объект</button>
           </div>
+          <SubscriptionBlock />
         </>
       ) : (
         <div>
