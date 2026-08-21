@@ -15,6 +15,8 @@ import ContactsEditor from '../components/ContactsEditor'
 import { ensureNextPayment } from '../lib/nextPayment'
 import { BottomNav, Modal, PromptNumber, Progress, ConfirmDelete, showToast } from '../components/ui'
 import { T } from '../theme'
+import { setAnalyticsUser, trackOpen, trackScreen } from '../lib/analytics'
+
 import type { Object as PropertyObject, Contract, NotificationLog, User } from '../types/database'
 
 interface ObjectWithStatus extends PropertyObject {
@@ -536,6 +538,14 @@ export function LandlordDashboard() {
   const archSd = arch?.start_date ? parseDate(arch.start_date) : null
   const archSettlement = (arch as any)?.settlement || {}
 
+  useEffect(() => {
+    if (user) { setAnalyticsUser(user); trackOpen('landlord') }
+  }, [user])
+
+  useEffect(() => {
+    const screen = arch ? 'archive_item' : archiveListOpen ? 'archive_list' : current ? `object_${tab}` : 'objects_list'
+    trackScreen(screen)
+  }, [tab, openId, archiveListOpen, archiveId])
   if (userLoading || loading) return <div style={T.page}>Загрузка…</div>
   if (error) return <div style={T.page}><div style={T.card}>{error}</div></div>
 
