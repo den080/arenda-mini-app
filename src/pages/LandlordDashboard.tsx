@@ -867,6 +867,9 @@ export function LandlordDashboard() {
           <MetersEditor objId={current.id} />
         </>
       )}
+      {tab === 'contract' && !contract && (
+        <ObjectEdit objectId={current.id} />
+      )}
 
       {tab === 'contract' && contract && (
         <>
