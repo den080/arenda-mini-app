@@ -727,10 +727,16 @@ export function LandlordDashboard() {
           {contract && current.paymentId && !current.payment?.confirmed_by_landlord && !firstMonthPending && (
             <div style={T.card}>
               <div style={T.h2}>Подтверждение оплаты</div>
-              {(pcPaid > 0 || contractBalance > 0) && (
+              {pcPaid > 0 && (
                 <div style={T.row}>
-                  <span style={iosMuted}>Получено / баланс</span>
-                  <b>{pcPaid.toFixed(0)} / {contractBalance.toFixed(0)} ₽</b>
+                  <span style={iosMuted}>Получено</span>
+                  <b>{pcPaid.toFixed(0)} из {pcSum.toFixed(0)} ₽</b>
+                </div>
+              )}
+              {contractBalance > 0 && (
+                <div style={T.row}>
+                  <span style={iosMuted}>Баланс (переплата)</span>
+                  <b>{contractBalance.toFixed(0)} ₽</b>
                 </div>
               )}
               <div style={T.row}>
@@ -757,10 +763,10 @@ export function LandlordDashboard() {
                       : <span style={iosMuted}>не заявлена</span>}
               </div>
               {!current.payment?.card_claimed && !current.hasConfirmedCashMeeting && (
-                <button style={T.btn} onClick={() => { setPayConfirmOk(false); setPayConfirm({ kind: 'full' }) }}>Подтвердить получение оплаты</button>
+                <button style={T.btn} onClick={() => { setPayConfirmOk(false); setPayConfirm({ kind: 'full' }) }}>{pcPaid > 0 ? `Подтвердить получение остатка (${Math.max(0, pcSum - pcPaid).toFixed(0)} ₽)` : 'Подтвердить получение оплаты'}</button>
               )}
               <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 4px' }}>
-                <button style={iosBlue} onClick={() => setReceiptOpen(true)}>Внести поступление (частями)</button>
+                <button style={iosBlue} onClick={() => setReceiptOpen(true)}>Учесть частичную оплату</button>
               </div>
             </div>
           )}
@@ -867,6 +873,7 @@ export function LandlordDashboard() {
           <MetersEditor objId={current.id} />
         </>
       )}
+
       {tab === 'contract' && !contract && (
         <ObjectEdit objectId={current.id} />
       )}
@@ -1019,7 +1026,7 @@ export function LandlordDashboard() {
 
       <PromptNumber
         open={receiptOpen}
-        title="Поступление по счёту"
+        title="Частичная оплата"
         label={`Сумма к учёту, ₽. Счёт на ${pcSum.toFixed(0)} ₽, получено ${pcPaid.toFixed(0)} ₽.`}
         onClose={() => setReceiptOpen(false)}
         onSubmit={(n) => recordReceipt(n)}
