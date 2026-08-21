@@ -5,6 +5,7 @@ import LandlordDashboard from './pages/LandlordDashboard'
 import TenantDashboard from './pages/TenantDashboard'
 import AdminDashboard from './pages/AdminDashboard'
 import FeedbackButton from './components/Feedback'
+import AuthGate from './components/AuthGate'
 import { Toaster, showToast } from './components/ui'
 import { C } from './theme'
 
@@ -37,7 +38,7 @@ function isAllowed(v: string): boolean {
 
 export { LOCKDOWN, ALLOWED_IDS, ALLOWED_PHONES, isAllowed, normPhone }
 
-export default function App() {
+function AppInner() {
   const { user, loading, error, loginWithId, logout, accessDenied } = useTelegramUser()
   const [value, setValue] = useState('')
   const [mode, setMode] = useState<'landlord' | 'tenant' | null>(null)
@@ -185,6 +186,14 @@ export default function App() {
         </div>
       )}
     </div>
+  )
+}
+
+export default function App() {
+  return (
+    <AuthGate>
+      <AppInner />
+    </AuthGate>
   )
 }
 
