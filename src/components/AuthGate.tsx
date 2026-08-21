@@ -57,7 +57,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     setBusy(true)
    const { error } = await supabase.auth.signInWithOtp({ email: email.trim() })
     setBusy(false)
-    if (error) { showToast('Ошибка: ' + error.message); return }
+        if (error) { showToast('Ошибка: ' + (error.message || JSON.stringify(error))); return }
     setStage('code')
     showToast('Код отправлен на ' + email.trim())
   }
