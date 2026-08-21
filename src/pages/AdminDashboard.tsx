@@ -16,7 +16,7 @@ const TABS = [
 const row: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', gap: 8, padding: '10px 0', borderBottom: '1px solid rgba(60,60,67,0.12)', fontSize: 15, alignItems: 'center' }
 const last: React.CSSProperties = { ...row, borderBottom: 'none' }
 const muted: React.CSSProperties = { color: '#8e8e93', fontSize: 14 }
-const valText: React.CSSProperties = { fontSize: 16, fontWeight: 500, color: '#1d1d1f' }
+
 const valMoney: React.CSSProperties = { fontSize: 16, fontWeight: 600, color: '#1d1d1f', whiteSpace: 'nowrap' }
 const secHead: React.CSSProperties = { fontSize: 13, color: '#8e8e93', margin: '14px 16px 6px', textTransform: 'uppercase', letterSpacing: 0.3 }
 const blue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 14, fontWeight: 600, cursor: 'pointer', padding: 4 }
