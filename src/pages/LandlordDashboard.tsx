@@ -198,8 +198,8 @@ export function LandlordDashboard() {
             else if (waitingForReadings) { statusDetail = 'Ждём показания'; statusColor = '#a80' }
             else if (paidPart > 0) { statusDetail = `Оплачено частично · до оплаты ${daysUntilDue} дн.`; statusColor = '#a80' }
             else if (daysUntilDue === 0) { statusDetail = 'Сегодня последний день оплаты'; statusColor = '#a80' }
-            else if (daysUntilDue <= reminder) { statusDetail = `До оплаты ${daysUntilDue} дн.`; statusColor = '#a80' }
-            else { statusDetail = `До оплаты ${daysUntilDue} дн.`; statusColor = '#080' }
+                        else if (daysUntilDue <= reminder) { statusDetail = `До оплаты ${daysUntilDue} дн. (${dueMid.toLocaleDateString('ru-RU')})`; statusColor = '#a80' }
+                        else { statusDetail = `До оплаты ${daysUntilDue} дн. (${dueMid.toLocaleDateString('ru-RU')})`; statusColor = '#080' }
           } else {
             status = 'paid'
             const periodDate = parseDate(payment.period)
@@ -207,8 +207,8 @@ export function LandlordDashboard() {
             const daysLeft = Math.round((nextDue.getTime() - todayMid.getTime()) / 86400000)
             if (daysLeft < 0) { statusDetail = `Следующий платёж просрочен на ${-daysLeft} дн.`; statusColor = '#c00' }
             else if (daysLeft === 0) { statusDetail = 'Следующая оплата: сегодня последний день'; statusColor = '#a80' }
-            else if (daysLeft <= reminder) { statusDetail = `${daysLeft} дн. до следующей оплаты`; statusColor = '#a80' }
-            else { statusDetail = `${daysLeft} дн. до следующей оплаты`; statusColor = '#080' }
+                        else if (daysLeft <= reminder) { statusDetail = `${daysLeft} дн. до оплаты (${nextDue.toLocaleDateString('ru-RU')})`; statusColor = '#a80' }
+                        else { statusDetail = `${daysLeft} дн. до оплаты (${nextDue.toLocaleDateString('ru-RU')})`; statusColor = '#080' }
           }
           objectsWithStatus.push({ ...obj, status, statusDetail, statusColor, amount: baseAmount + penaltyAmount + utilitiesAmount, baseAmount, penaltyAmount, utilitiesAmount, paymentId, contract, payment, daysOverdue: isOverdue ? Math.round((todayMid.getTime() - dueMid.getTime()) / 86400000) : undefined, waitingForReadings, needUtilitiesReminder, readingsMode, frozenTotal, frozenRows: fRows, deferredRequests: dReqBy[contract.id] || [], hasConfirmedCashMeeting: !!cashMeeting })
         }
