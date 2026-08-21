@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-
 import { T } from '../theme'
 import { showToast } from '../components/ui'
 
@@ -17,6 +16,8 @@ const TABS = [
 const row: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', gap: 8, padding: '10px 0', borderBottom: '1px solid rgba(60,60,67,0.12)', fontSize: 15, alignItems: 'center' }
 const last: React.CSSProperties = { ...row, borderBottom: 'none' }
 const muted: React.CSSProperties = { color: '#8e8e93', fontSize: 14 }
+const valText: React.CSSProperties = { fontSize: 16, fontWeight: 500, color: '#1d1d1f' }
+const valMoney: React.CSSProperties = { fontSize: 16, fontWeight: 600, color: '#1d1d1f', whiteSpace: 'nowrap' }
 const secHead: React.CSSProperties = { fontSize: 13, color: '#8e8e93', margin: '14px 16px 6px', textTransform: 'uppercase', letterSpacing: 0.3 }
 const blue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 14, fontWeight: 600, cursor: 'pointer', padding: 4 }
 const red: React.CSSProperties = { border: 'none', background: 'transparent', color: '#ff3b30', fontSize: 14, cursor: 'pointer', padding: 4 }
@@ -43,8 +44,7 @@ function deviceLabel(meta: any): string {
 }
 
 export function AdminDashboard() {
-    const [tab, setTab] = useState('summary')
-  
+  const [tab, setTab] = useState('summary')
   const [users, setUsers] = useState<any[]>([])
   const [objects, setObjects] = useState<any[]>([])
   const [contracts, setContracts] = useState<any[]>([])
@@ -59,7 +59,6 @@ export function AdminDashboard() {
   async function load() {
     const now = new Date()
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
-    const prevStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString()
     const [u, o, c, p, r, m, f, e, a] = await Promise.all([
       supabase.from('users').select('*').order('created_at', { ascending: false }),
       supabase.from('objects').select('*'),
@@ -81,7 +80,6 @@ export function AdminDashboard() {
     setEvents(e.data || [])
     setAnalytics(a.data || [])
     setLoading(false)
-    void prevStart
   }
 
   useEffect(() => {
@@ -180,35 +178,35 @@ export function AdminDashboard() {
         <>
           <div style={secHead}>Люди</div>
           <div style={T.card}>
-            <div style={row}><span style={muted}>Всего пользователей</span><b>{users.length}</b></div>
-            <div style={row}><span style={muted}>Арендодателей</span><b>{users.filter(u => u.role === 'landlord').length}</b></div>
-            <div style={row}><span style={muted}>Арендаторов</span><b>{users.filter(u => u.role === 'tenant').length}</b></div>
-            <div style={last}><span style={muted}>Активны за 7 дней</span><b>{activeUsers}</b></div>
+            <div style={row}><span style={muted}>Всего пользователей</span><span style={valMoney}>{users.length}</span></div>
+            <div style={row}><span style={muted}>Арендодателей</span><span style={valMoney}>{users.filter(u => u.role === 'landlord').length}</span></div>
+            <div style={row}><span style={muted}>Арендаторов</span><span style={valMoney}>{users.filter(u => u.role === 'tenant').length}</span></div>
+            <div style={last}><span style={muted}>Активны за 7 дней</span><span style={valMoney}>{activeUsers}</span></div>
           </div>
 
           <div style={secHead}>Объекты и договоры</div>
           <div style={T.card}>
-            <div style={row}><span style={muted}>Объектов</span><b>{objects.length}</b></div>
-            <div style={row}><span style={muted}>Без активного договора</span><b>{noContract}</b></div>
-            <div style={row}><span style={muted}>Активных договоров</span><b>{activeContracts.length}</b></div>
-            <div style={last}><span style={muted}>Средняя аренда</span><b>{avgRent.toFixed(0)} ₽/мес</b></div>
+            <div style={row}><span style={muted}>Объектов</span><span style={valMoney}>{objects.length}</span></div>
+            <div style={row}><span style={muted}>Без активного договора</span><span style={valMoney}>{noContract}</span></div>
+            <div style={row}><span style={muted}>Активных договоров</span><span style={valMoney}>{activeContracts.length}</span></div>
+            <div style={last}><span style={muted}>Средняя аренда</span><span style={valMoney}>{avgRent.toFixed(0)} ₽/мес</span></div>
           </div>
 
           <div style={secHead}>Деньги</div>
           <div style={T.card}>
-            <div style={row}><span style={muted}>Собрано за всё время</span><b>{sumAll.toFixed(0)} ₽</b></div>
-            <div style={row}><span style={muted}>Собрано в этом месяце</span><b>{sumThis.toFixed(0)} ₽</b></div>
-            <div style={row}><span style={muted}>Собрано в прошлом месяце</span><b>{sumPrev.toFixed(0)} ₽</b></div>
-            <div style={row}><span style={muted}>Ожидает оплаты</span><b>{openSum.toFixed(0)} ₽ · {open.length} сч.</b></div>
-            <div style={row}><span style={muted}>Просрочено</span><b style={{ color: overdue.length ? '#ff3b30' : '#1d1d1f' }}>{overdue.length} · {overdueSum.toFixed(0)} ₽</b></div>
-            <div style={last}><span style={muted}>Депозиты: внесено / нужно</span><b>{depPaid.toFixed(0)} / {depNeed.toFixed(0)} ₽</b></div>
+            <div style={row}><span style={muted}>Собрано за всё время</span><span style={valMoney}>{sumAll.toFixed(0)} ₽</span></div>
+            <div style={row}><span style={muted}>Собрано в этом месяце</span><span style={valMoney}>{sumThis.toFixed(0)} ₽</span></div>
+            <div style={row}><span style={muted}>Собрано в прошлом месяце</span><span style={valMoney}>{sumPrev.toFixed(0)} ₽</span></div>
+            <div style={row}><span style={muted}>Ожидает оплаты</span><span style={valMoney}>{openSum.toFixed(0)} ₽ · {open.length} сч.</span></div>
+            <div style={row}><span style={muted}>Просрочено</span><span style={{ ...valMoney, color: overdue.length ? '#ff3b30' : '#1d1d1f' }}>{overdue.length} · {overdueSum.toFixed(0)} ₽</span></div>
+            <div style={last}><span style={muted}>Депозиты: внесено / нужно</span><span style={valMoney}>{depPaid.toFixed(0)} / {depNeed.toFixed(0)} ₽</span></div>
           </div>
 
           <div style={secHead}>Активность</div>
           <div style={T.card}>
-            <div style={row}><span style={muted}>Показаний в этом месяце</span><b>{readings.length}</b></div>
-            <div style={row}><span style={muted}>Встреч наличными согласовано</span><b>{meetings.length}</b></div>
-            <div style={last}><span style={muted}>Новых обращений</span><b style={{ color: newFeedback ? '#ff3b30' : '#1d1d1f' }}>{newFeedback}</b></div>
+            <div style={row}><span style={muted}>Показаний в этом месяце</span><span style={valMoney}>{readings.length}</span></div>
+            <div style={row}><span style={muted}>Встреч наличными согласовано</span><span style={valMoney}>{meetings.length}</span></div>
+            <div style={last}><span style={muted}>Новых обращений</span><span style={{ ...valMoney, color: newFeedback ? '#ff3b30' : '#1d1d1f' }}>{newFeedback}</span></div>
           </div>
         </>
       )}
@@ -221,7 +219,7 @@ export function AdminDashboard() {
             {opens.slice(0, 30).map((a, i) => (
               <div key={a.id} style={i === 0 ? last : row}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 15, fontWeight: 600 }}>{a.user_name || '—'} · {a.phone || ''}</div>
+                  <div style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f' }}>{a.user_name || '—'} · {a.phone || ''}</div>
                   <div style={muted}>{fmtDate(a.created_at)} · {deviceLabel(a.meta)} · роль: {a.role || '—'}</div>
                 </div>
               </div>
@@ -234,10 +232,10 @@ export function AdminDashboard() {
             {screenList.map(([name, v], i) => (
               <div key={name} style={i === screenList.length - 1 ? last : row}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 15, fontWeight: 600 }}>{name}</div>
+                  <div style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f' }}>{name}</div>
                   <div style={muted}>посещений: {v.count} · пользователей: {v.users.size}</div>
                 </div>
-                <b>{fmtDur(v.sec)}</b>
+                <span style={valMoney}>{fmtDur(v.sec)}</span>
               </div>
             ))}
           </div>
@@ -247,8 +245,8 @@ export function AdminDashboard() {
             {errList.length === 0 && <div style={{ ...muted, padding: '8px 0' }}>Ошибок не зафиксировано — хороший знак.</div>}
             {errList.map(([name, count], i) => (
               <div key={name} style={i === errList.length - 1 ? last : row}>
-                <div style={{ flex: 1, minWidth: 0, fontSize: 14 }}>{name}</div>
-                <b style={{ color: '#ff3b30' }}>×{count}</b>
+                <div style={{ flex: 1, minWidth: 0, fontSize: 14, color: '#1d1d1f' }}>{name}</div>
+                <span style={{ ...valMoney, color: '#ff3b30' }}>×{count}</span>
               </div>
             ))}
           </div>
@@ -260,7 +258,7 @@ export function AdminDashboard() {
           {users.map((u, i) => (
             <div key={u.id} style={i === users.length - 1 ? last : row}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 15, fontWeight: 600 }}>{u.full_name || '—'}</div>
+                <div style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f' }}>{u.full_name || '—'}</div>
                 <div style={muted}>{u.phone || 'без телефона'} · роль: {u.role || '—'} · с {new Date(u.created_at).toLocaleDateString('ru-RU')}</div>
               </div>
             </div>
@@ -275,7 +273,7 @@ export function AdminDashboard() {
             return (
               <div key={o.id} style={i === objects.length - 1 ? last : row}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 15, fontWeight: 600 }}>{o.address}</div>
+                  <div style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f' }}>{o.address}</div>
                   <div style={muted}>
                     {c ? `договор активен · ${userName(c.tenant_id)} · ${Number(c.rent_amount).toFixed(0)} ₽` : 'нет активного договора'}
                   </div>
@@ -291,10 +289,10 @@ export function AdminDashboard() {
           {payments.slice(0, 50).map((p, i) => (
             <div key={p.id} style={i === Math.min(payments.length, 50) - 1 ? last : row}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 15, fontWeight: 600 }}>{objAddress(p.contract_id)} · {new Date(p.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}</div>
+                <div style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f' }}>{objAddress(p.contract_id)} · {new Date(p.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}</div>
                 <div style={muted}>{p.confirmed_by_landlord ? `оплачен ${p.confirmed_at ? new Date(p.confirmed_at).toLocaleDateString('ru-RU') : ''}` : 'ожидает'} · штраф {Number(p.penalty_amount || 0).toFixed(0)} ₽</div>
               </div>
-              <b>{(Number(p.base_amount || 0) + Number(p.penalty_amount || 0) + Number(p.utilities_amount || 0)).toFixed(0)} ₽</b>
+              <span style={valMoney}>{(Number(p.base_amount || 0) + Number(p.penalty_amount || 0) + Number(p.utilities_amount || 0)).toFixed(0)} ₽</span>
             </div>
           ))}
         </div>
@@ -305,7 +303,7 @@ export function AdminDashboard() {
           {events.map((e, i) => (
             <div key={e.id} style={i === events.length - 1 ? last : row}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14 }}>{(e as any).message || e.type}</div>
+                <div style={{ fontSize: 14, color: '#1d1d1f' }}>{(e as any).message || e.type}</div>
                 <div style={muted}>{fmtDate(e.sent_at)} · {userName(e.user_id)}</div>
               </div>
             </div>
@@ -319,8 +317,8 @@ export function AdminDashboard() {
           {feedbacks.map((f, i) => (
             <div key={f.id} style={i === feedbacks.length - 1 ? last : row}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 15, fontWeight: 600 }}>{f.sender_name} · {f.sender_phone}</div>
-                <div style={{ fontSize: 14, margin: '4px 0' }}>{f.message}</div>
+                <div style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f' }}>{f.sender_name} · {f.sender_phone}</div>
+                <div style={{ fontSize: 14, margin: '4px 0', color: '#1d1d1f' }}>{f.message}</div>
                 {f.image_url && <a href={f.image_url} target="_blank" rel="noopener" style={{ ...blue, padding: 0 }}>открыть вложение</a>}
                 <div style={muted}>{fmtDate(f.created_at)} · {f.status === 'new' ? 'новое' : 'обработано'}</div>
               </div>
