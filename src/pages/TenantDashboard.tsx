@@ -7,6 +7,8 @@ import { ensureNextPayment } from '../lib/nextPayment'
 import Chat from '../components/Chat'
 import { BottomNav, PromptNumber, Progress, showToast } from '../components/ui'
 import { T } from '../theme'
+import { setAnalyticsUser, trackOpen, trackScreen } from '../lib/analytics'
+
 
 interface PayDetail { type: 'card' | 'sbp'; bank: string; number: string }
 interface Notification { id: string; user_id: string; type: string; related_id: string; sent_at: string }
@@ -68,6 +70,13 @@ export function TenantDashboard() {
     return () => clearInterval(interval)
   }, [user])
 
+  useEffect(() => {
+    if (user) { setAnalyticsUser(user); trackOpen('tenant') }
+  }, [user])
+
+  useEffect(() => {
+    trackScreen(openId ? `rental_${tab}` : 'rental_list')
+  }, [tab, openId])
   const getNotificationText = (type: string) => {
     switch (type) {
       case 'payment_claimed': return '✅ Арендатор сообщил об оплате'
