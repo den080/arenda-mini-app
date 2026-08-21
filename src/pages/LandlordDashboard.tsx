@@ -515,8 +515,12 @@ export function LandlordDashboard() {
 
   const iosBlue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: 4, flexShrink: 0 }
   const iosRed: React.CSSProperties = { border: 'none', background: 'transparent', color: '#ff3b30', fontSize: 15, cursor: 'pointer', padding: 4, flexShrink: 0 }
+  const actBlue: React.CSSProperties = { ...iosBlue, fontSize: 14 }
+  const actRed: React.CSSProperties = { ...iosRed, fontSize: 14 }
   const iosOk: React.CSSProperties = { color: '#1e7e34', fontSize: 14, fontWeight: 600 }
   const iosMuted: React.CSSProperties = { color: '#8e8e93', fontSize: 14 }
+  const valText: React.CSSProperties = { fontSize: 16, fontWeight: 500, color: '#1d1d1f' }
+  const valMoney: React.CSSProperties = { fontSize: 16, fontWeight: 600, color: '#1d1d1f', whiteSpace: 'nowrap' }
   const secHead: React.CSSProperties = { fontSize: 13, color: '#8e8e93', margin: '14px 16px 6px', textTransform: 'uppercase', letterSpacing: 0.3 }
   const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProperties
 
@@ -559,19 +563,19 @@ export function LandlordDashboard() {
 
         <div style={T.card}>
           <div style={T.h2}>Договор завершён · архив</div>
-          <div style={T.row}><span style={iosMuted}>Арендатор</span><b>{arch.tenant?.full_name || '—'}</b></div>
-          {arch.tenant?.phone && <div style={T.row}><span style={iosMuted}>Телефон</span><b>{arch.tenant.phone}</b></div>}
-          <div style={T.row}><span style={iosMuted}>Срок</span><b>{arch.start_date ? parseDate(arch.start_date).toLocaleDateString('ru-RU') : '—'} — {arch.terminated_at ? new Date(arch.terminated_at).toLocaleDateString('ru-RU') : '—'}</b></div>
-          <div style={T.row}><span style={iosMuted}>Аренда</span><b>{Number(arch.rent_amount || 0).toFixed(0)} ₽/мес</b></div>
-          {arch.termination_note && <div style={T.row}><span style={iosMuted}>Примечание</span><b>{arch.termination_note}</b></div>}
-          {archSettlement.deposit_paid != null && <div style={T.row}><span style={iosMuted}>Депозит внесён</span><b>{Number(archSettlement.deposit_paid).toFixed(0)} ₽</b></div>}
-          {archSettlement.frozen_total != null && Number(archSettlement.frozen_total) > 0 && <div style={T.row}><span style={iosMuted}>Удержано по штрафам</span><b>{Number(archSettlement.frozen_total).toFixed(0)} ₽</b></div>}
-          {archSettlement.open_debt != null && Number(archSettlement.open_debt) > 0 && <div style={T.row}><span style={iosMuted}>Долг по счетам</span><b>{Number(archSettlement.open_debt).toFixed(0)} ₽</b></div>}
+          <div style={T.row}><span style={iosMuted}>Арендатор</span><span style={valText}>{arch.tenant?.full_name || '—'}</span></div>
+          {arch.tenant?.phone && <div style={T.row}><span style={iosMuted}>Телефон</span><span style={valText}>{arch.tenant.phone}</span></div>}
+          <div style={T.row}><span style={iosMuted}>Срок</span><span style={valText}>{arch.start_date ? parseDate(arch.start_date).toLocaleDateString('ru-RU') : '—'} — {arch.terminated_at ? new Date(arch.terminated_at).toLocaleDateString('ru-RU') : '—'}</span></div>
+          <div style={T.row}><span style={iosMuted}>Аренда</span><span style={valMoney}>{Number(arch.rent_amount || 0).toFixed(0)} ₽/мес</span></div>
+          {arch.termination_note && <div style={T.row}><span style={iosMuted}>Примечание</span><span style={valText}>{arch.termination_note}</span></div>}
+          {archSettlement.deposit_paid != null && <div style={T.row}><span style={iosMuted}>Депозит внесён</span><span style={valMoney}>{Number(archSettlement.deposit_paid).toFixed(0)} ₽</span></div>}
+          {archSettlement.frozen_total != null && Number(archSettlement.frozen_total) > 0 && <div style={T.row}><span style={iosMuted}>Удержано по штрафам</span><span style={valMoney}>{Number(archSettlement.frozen_total).toFixed(0)} ₽</span></div>}
+          {archSettlement.open_debt != null && Number(archSettlement.open_debt) > 0 && <div style={T.row}><span style={iosMuted}>Долг по счетам</span><span style={valMoney}>{Number(archSettlement.open_debt).toFixed(0)} ₽</span></div>}
           <div style={{ ...T.row, borderBottom: 'none' }}>
             <span style={iosMuted}>Итог при съезде</span>
-            <b style={{ color: Number(archSettlement.result || 0) >= 0 ? '#1e7e34' : '#ff3b30' }}>
+            <span style={{ ...valMoney, color: Number(archSettlement.result || 0) >= 0 ? '#1e7e34' : '#ff3b30' }}>
               {Number(archSettlement.result || 0) >= 0 ? `возвращено ${Number(archSettlement.result).toFixed(0)} ₽` : `долг ${Math.abs(Number(archSettlement.result || 0)).toFixed(0)} ₽`}
-            </b>
+            </span>
           </div>
         </div>
 
@@ -585,14 +589,15 @@ export function LandlordDashboard() {
             const late = !firstP && h.confirmed_by_landlord && confDay !== null && confDay.getTime() > dueDay.getTime() && !(archSd && dueDay < archSd)
             const early = !firstP && h.confirmed_by_landlord && confDay !== null && confDay.getTime() < dueDay.getTime()
             const sum = Number(h.base_amount || 0) + Number(h.penalty_amount || 0) + Number(h.utilities_amount || 0)
+            const statusColor = late ? '#ff3b30' : early ? '#1e7e34' : h.confirmed_by_landlord ? '#8e8e93' : '#b25000'
             return (
               <div key={h.id} style={{ padding: '10px 0', borderBottom: '1px solid rgba(60,60,67,0.12)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-                  <span style={{ fontSize: 15, fontWeight: 600 }}>{parseDate(h.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}{firstP ? ' · первый месяц' : ''}</span>
-                  <b style={{ whiteSpace: 'nowrap' }}>{sum.toFixed(0)} ₽</b>
+                  <span style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f' }}>{parseDate(h.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}{firstP ? ' · первый месяц' : ''}</span>
+                  <span style={valMoney}>{sum.toFixed(0)} ₽</span>
                 </div>
                 <div style={{ marginTop: 2 }}>
-                  <span style={{ fontSize: 13, color: late ? '#ff3b30' : '#8e8e93' }}>{h.confirmed_by_landlord ? (late ? `просрочка · опл. ${confDay!.toLocaleDateString('ru-RU')}` : early ? `досрочно · ${confDay!.toLocaleDateString('ru-RU')}` : `вовремя · ${confDay!.toLocaleDateString('ru-RU')}`) : 'не подтверждён'}</span>
+                  <span style={{ fontSize: 13, color: statusColor }}>{h.confirmed_by_landlord ? (late ? `просрочка · опл. ${confDay!.toLocaleDateString('ru-RU')}` : early ? `досрочно · ${confDay!.toLocaleDateString('ru-RU')}` : `вовремя · ${confDay!.toLocaleDateString('ru-RU')}`) : 'не подтверждён'}</span>
                 </div>
               </div>
             )
@@ -605,8 +610,8 @@ export function LandlordDashboard() {
             {archiveFrozen.map((f: any) => (
               <div key={f.id} style={T.item}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 15 }}>
-                  <span>{f.period ? parseDate(f.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : 'без месяца'}</span>
-                  <b>{Number(f.amount).toFixed(0)} ₽</b>
+                  <span style={{ fontWeight: 500, color: '#1d1d1f' }}>{f.period ? parseDate(f.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : 'без месяца'}</span>
+                  <span style={valMoney}>{Number(f.amount).toFixed(0)} ₽</span>
                 </div>
                 {f.adjusted_note && <div style={T.tiny}>{f.adjusted_note}</div>}
               </div>
@@ -743,25 +748,25 @@ export function LandlordDashboard() {
               {pcPaid > 0 && (
                 <div style={T.row}>
                   <span style={iosMuted}>Получено</span>
-                  <b>{pcPaid.toFixed(0)} из {pcSum.toFixed(0)} ₽</b>
+                  <span style={valMoney}>{pcPaid.toFixed(0)} из {pcSum.toFixed(0)} ₽</span>
                 </div>
               )}
               {contractBalance > 0 && (
                 <div style={T.row}>
                   <span style={iosMuted}>Баланс (переплата)</span>
-                  <b>{contractBalance.toFixed(0)} ₽</b>
+                  <span style={valMoney}>{contractBalance.toFixed(0)} ₽</span>
                 </div>
               )}
               <div style={T.row}>
-                <span>Безналичная оплата</span>
+                <span style={valText}>Безналичная оплата</span>
                 {current.payment?.confirmed_card
                   ? <span style={iosOk}>получена</span>
                   : current.payment?.card_claimed
-                    ? <button style={iosBlue} onClick={() => { setPayConfirmOk(false); setPayConfirm({ kind: 'card' }) }}>Подтвердить</button>
+                    ? <button style={actBlue} onClick={() => { setPayConfirmOk(false); setPayConfirm({ kind: 'card' }) }}>Подтвердить</button>
                     : <span style={iosMuted}>не заявлена</span>}
               </div>
               <div style={{ ...T.row, borderBottom: 'none' }}>
-                <span>Оплата наличными</span>
+                <span style={valText}>Оплата наличными</span>
                 {current.payment?.confirmed_cash
                   ? <span style={iosOk}>получена</span>
                   : current.payment?.cash_closed
@@ -769,8 +774,8 @@ export function LandlordDashboard() {
                     : current.hasConfirmedCashMeeting
                       ? (
                         <span style={{ display: 'flex', gap: 14 }}>
-                          <button style={iosRed} onClick={() => { setPayConfirmOk(false); setPayConfirm({ kind: 'cash-close' }) }}>завершить</button>
-                          <button style={iosBlue} onClick={() => { setPayConfirmOk(false); setPayConfirm({ kind: 'cash' }) }}>Подтвердить</button>
+                          <button style={actRed} onClick={() => { setPayConfirmOk(false); setPayConfirm({ kind: 'cash-close' }) }}>завершить</button>
+                          <button style={actBlue} onClick={() => { setPayConfirmOk(false); setPayConfirm({ kind: 'cash' }) }}>Подтвердить</button>
                         </span>
                       )
                       : <span style={iosMuted}>не заявлена</span>}
@@ -779,7 +784,7 @@ export function LandlordDashboard() {
                 <button style={T.btn} onClick={() => { setPayConfirmOk(false); setPayConfirm({ kind: 'full' }) }}>{pcPaid > 0 ? `Подтвердить получение остатка (${Math.max(0, pcSum - pcPaid).toFixed(0)} ₽)` : 'Подтвердить получение оплаты'}</button>
               )}
               <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 4px' }}>
-                <button style={iosBlue} onClick={() => setReceiptOpen(true)}>Учесть частичную оплату</button>
+                <button style={actBlue} onClick={() => setReceiptOpen(true)}>Учесть частичную оплату</button>
               </div>
             </div>
           )}
@@ -794,12 +799,12 @@ export function LandlordDashboard() {
                   value={utilInputs[current.id] ?? String(current.utilitiesAmount || '')}
                   onChange={(e) => setUtilInputs({ ...utilInputs, [current.id]: e.target.value })}
                   placeholder="0"
-                  style={{ width: 110, border: 'none', outline: 'none', background: 'rgba(120,120,128,0.08)', borderRadius: 8, padding: '8px 10px', fontSize: 15, textAlign: 'right', color: '#1d1d1f', boxSizing: 'border-box' }}
+                  style={{ width: 110, border: 'none', outline: 'none', background: 'rgba(120,120,128,0.08)', borderRadius: 8, padding: '8px 10px', fontSize: 16, fontWeight: 600, textAlign: 'right', color: '#1d1d1f', boxSizing: 'border-box' }}
                   inputMode="numeric"
                 />
               </div>
               <div style={{ ...T.row, justifyContent: 'center' }}>
-                <button style={iosBlue} onClick={() => saveUtilitiesNext(utilInputs[current.id] ?? String(current.utilitiesAmount || 0))}>Включить в платёж</button>
+                <button style={actBlue} onClick={() => saveUtilitiesNext(utilInputs[current.id] ?? String(current.utilitiesAmount || 0))}>Включить в платёж</button>
               </div>
               <div style={{ ...T.tiny, margin: '0 0 10px' }}>Введённая сумма записывается как есть (заменяет предыдущую), добавляется к платежу отдельно, не растёт при просрочке и не входит в штрафы.</div>
             </div>
@@ -817,14 +822,14 @@ export function LandlordDashboard() {
               <div style={T.h2}>Штраф текущего платежа</div>
               {(current.deferredRequests || []).map((r: any) => (
                 <div key={r.id} style={T.row}>
-                  <span>Просьба отсрочить {Number(r.amount).toFixed(0)} ₽</span>
-                  <button style={iosBlue} onClick={() => confirmDeferral(r.id, contract.id, r.payment_id, Number(r.amount), contract.tenant_id)}>Подтвердить</button>
+                  <span style={valText}>Просьба отсрочить {Number(r.amount).toFixed(0)} ₽</span>
+                  <button style={actBlue} onClick={() => confirmDeferral(r.id, contract.id, r.payment_id, Number(r.amount), contract.tenant_id)}>Подтвердить</button>
                 </div>
               ))}
               {(current.penaltyAmount || 0) > 0 && !current.payment?.confirmed_by_landlord && (
                 <div style={{ ...T.row, borderBottom: 'none' }}>
-                  <span>Текущий штраф: {(current.penaltyAmount || 0).toFixed(0)} ₽</span>
-                  <button style={iosBlue} onClick={() => freezePenalty(current.paymentId!)}>Заморозить</button>
+                  <span style={valText}>Текущий штраф: {(current.penaltyAmount || 0).toFixed(0)} ₽</span>
+                  <button style={actBlue} onClick={() => freezePenalty(current.paymentId!)}>Заморозить</button>
                 </div>
               )}
             </div>
@@ -854,18 +859,19 @@ export function LandlordDashboard() {
                 const late = !firstP && h.confirmed_by_landlord && confDay !== null && confDay.getTime() > dueDay.getTime() && !(sd && dueDay < sd)
                 const early = !firstP && h.confirmed_by_landlord && confDay !== null && confDay.getTime() < dueDay.getTime()
                 const sum = Number(h.base_amount || 0) + Number(h.penalty_amount || 0) + Number(h.utilities_amount || 0)
+                const statusColor = late ? '#ff3b30' : early ? '#1e7e34' : h.confirmed_by_landlord ? '#8e8e93' : '#b25000'
                 return (
                   <div key={h.id} style={{ padding: '10px 0', borderBottom: '1px solid rgba(60,60,67,0.12)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-                      <span style={{ fontSize: 15, fontWeight: 600 }}>{parseDate(h.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}{firstP ? ' · первый месяц' : ''}</span>
-                      <b style={{ whiteSpace: 'nowrap' }}>{sum.toFixed(0)} ₽</b>
+                      <span style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f' }}>{parseDate(h.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}{firstP ? ' · первый месяц' : ''}</span>
+                      <span style={valMoney}>{sum.toFixed(0)} ₽</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginTop: 2 }}>
-                      <span style={{ fontSize: 13, color: late ? '#ff3b30' : '#8e8e93' }}>{h.confirmed_by_landlord ? (late ? `просрочка · опл. ${confDay!.toLocaleDateString('ru-RU')}` : early ? `досрочно · ${confDay!.toLocaleDateString('ru-RU')}` : `вовремя · ${confDay!.toLocaleDateString('ru-RU')}`) : 'не подтверждён'}</span>
+                      <span style={{ fontSize: 13, color: statusColor }}>{h.confirmed_by_landlord ? (late ? `просрочка · опл. ${confDay!.toLocaleDateString('ru-RU')}` : early ? `досрочно · ${confDay!.toLocaleDateString('ru-RU')}` : `вовремя · ${confDay!.toLocaleDateString('ru-RU')}`) : 'не подтверждён'}</span>
                       {h.confirmed_by_landlord && (
                         <span style={{ display: 'flex', gap: 10, flexShrink: 0 }}>
-                          <button style={iosBlue} onClick={() => setReceiptFor(h)}>расписка</button>
-                          {canUndo(h) && <button style={iosRed} onClick={() => setUndoId(h.id)}>отменить</button>}
+                          <button style={actBlue} onClick={() => setReceiptFor(h)}>расписка</button>
+                          {canUndo(h) && <button style={actRed} onClick={() => setUndoId(h.id)}>отменить</button>}
                         </span>
                       )}
                     </div>
@@ -898,25 +904,25 @@ export function LandlordDashboard() {
         <>
           <div style={T.card}>
             <div style={T.h2}>Договор</div>
-            <div style={T.row}><span style={iosMuted}>Арендатор</span><b>{(contract as any).tenant?.full_name || '—'}</b></div>
-            {(contract as any).tenant?.phone && <div style={T.row}><span style={iosMuted}>Телефон</span><b>{(contract as any).tenant.phone}</b></div>}
+            <div style={T.row}><span style={iosMuted}>Арендатор</span><span style={valText}>{(contract as any).tenant?.full_name || '—'}</span></div>
+            {(contract as any).tenant?.phone && <div style={T.row}><span style={iosMuted}>Телефон</span><span style={valText}>{(contract as any).tenant.phone}</span></div>}
             {(contract as any).start_date && (contract as any).end_date && (
-              <div style={T.row}><span style={iosMuted}>Срок</span><b>{parseDate((contract as any).start_date).toLocaleDateString('ru-RU')} — {parseDate((contract as any).end_date).toLocaleDateString('ru-RU')}</b></div>
+              <div style={T.row}><span style={iosMuted}>Срок</span><span style={valText}>{parseDate((contract as any).start_date).toLocaleDateString('ru-RU')} — {parseDate((contract as any).end_date).toLocaleDateString('ru-RU')}</span></div>
             )}
-            <div style={T.row}><span style={iosMuted}>Аренда</span><b>{Number(contract.rent_amount).toFixed(0)} ₽/мес</b></div>
+            <div style={T.row}><span style={iosMuted}>Аренда</span><span style={valMoney}>{Number(contract.rent_amount).toFixed(0)} ₽/мес</span></div>
             {(contract as any).amendment_at && (
-              <div style={T.row}><span style={iosMuted}>Допсоглашение</span><b>{Number(contract.rent_amount).toFixed(0)} ₽ с {(contract as any).amendment_from ? new Date((contract as any).amendment_from).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : new Date((contract as any).amendment_at).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}</b></div>
+              <div style={T.row}><span style={iosMuted}>Допсоглашение</span><span style={valText}>{Number(contract.rent_amount).toFixed(0)} ₽ с {(contract as any).amendment_from ? new Date((contract as any).amendment_from).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : new Date((contract as any).amendment_at).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}</span></div>
             )}
             {contractBalance > 0 && (
-              <div style={T.row}><span style={iosMuted}>Баланс (переплата)</span><b>{contractBalance.toFixed(0)} ₽</b></div>
+              <div style={T.row}><span style={iosMuted}>Баланс (переплата)</span><span style={valMoney}>{contractBalance.toFixed(0)} ₽</span></div>
             )}
-            <div style={T.row}><span style={iosMuted}>Оплата</span><b>до {contract.payment_day} числа</b></div>
+            <div style={T.row}><span style={iosMuted}>Оплата</span><span style={valText}>до {contract.payment_day} числа</span></div>
             {deposit > 0 && (
               <div style={{ padding: '8px 0 4px' }}>
                 <Progress value={depositPaid} max={deposit} />
                 <div style={{ display: 'flex', gap: 16, marginTop: 8 }}>
-                  <button style={iosBlue} onClick={() => setDepModal('add')}>Внести</button>
-                  <button style={iosBlue} onClick={() => setDepModal('edit')}>Изменить</button>
+                  <button style={actBlue} onClick={() => setDepModal('add')}>Внести</button>
+                  <button style={actBlue} onClick={() => setDepModal('edit')}>Изменить</button>
                 </div>
               </div>
             )}
@@ -935,7 +941,7 @@ export function LandlordDashboard() {
               <div key={o.v}>
                 {i > 0 && <div style={hair} />}
                 <button
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', minHeight: 44, border: 'none', background: 'transparent', cursor: 'pointer', padding: '4px 0', fontSize: 15, color: '#1d1d1f' }}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', minHeight: 44, border: 'none', background: 'transparent', cursor: 'pointer', padding: '4px 0', fontSize: 16, fontWeight: 500, color: '#1d1d1f' }}
                   onClick={() => updatePaymentMethod(contract.id, o.v as any)}
                 >
                   {o.l}
@@ -951,14 +957,14 @@ export function LandlordDashboard() {
             {(current.frozenRows || []).length === 0 && <div style={{ ...T.small, margin: '8px 0' }}>Замороженных штрафов нет</div>}
             {(current.frozenRows || []).map((f: any) => (
               <div key={f.id} style={T.item}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 15 }}>
-                  <span>{f.period ? parseDate(f.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : 'без месяца'}</span>
-                  <b>{Number(f.amount).toFixed(0)} ₽</b>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                  <span style={{ fontSize: 15, fontWeight: 500, color: '#1d1d1f' }}>{f.period ? parseDate(f.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : 'без месяца'}</span>
+                  <span style={valMoney}>{Number(f.amount).toFixed(0)} ₽</span>
                 </div>
                 {f.adjusted_note && <div style={T.tiny}>{f.adjusted_note}</div>}
                 <div style={{ display: 'flex', gap: 16, marginTop: 4 }}>
-                  <button style={iosBlue} onClick={() => openAdjust(f.id, false)}>изменить</button>
-                  <button style={iosRed} onClick={() => openAdjust(f.id, true)}>обнулить</button>
+                  <button style={actBlue} onClick={() => openAdjust(f.id, false)}>изменить</button>
+                  <button style={actRed} onClick={() => openAdjust(f.id, true)}>обнулить</button>
                 </div>
               </div>
             ))}
