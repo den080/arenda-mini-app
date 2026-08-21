@@ -24,7 +24,7 @@ function deviceInfo() {
 
 function send(event: string, screen: string | null, meta: any) {
   try {
-    supabase.from('analytics_events').insert({
+        supabase.from('analytics_events').insert({
       user_id: uid,
       user_name: uname,
       phone: uphone,
@@ -32,7 +32,7 @@ function send(event: string, screen: string | null, meta: any) {
       event,
       screen,
       meta: { ...meta, ...deviceInfo() },
-    }).then(() => {}).catch(() => {})
+    }).then(() => {})
   } catch {
     // аналитика не должна ломать приложение
   }
