@@ -43,7 +43,7 @@ function deviceLabel(meta: any): string {
 }
 
 export function AdminDashboard() {
-  const { user } = useTelegramUser()
+    const [tab, setTab] = useState('summary')
   const [tab, setTab] = useState('summary')
   const [users, setUsers] = useState<any[]>([])
   const [objects, setObjects] = useState<any[]>([])
