@@ -13,10 +13,9 @@ import { ObjectAdd, ObjectEdit } from '../components/ObjectManager'
 import TeamManager from '../components/TeamManager'
 import ContactsEditor from '../components/ContactsEditor'
 import { ensureNextPayment } from '../lib/nextPayment'
+import { setAnalyticsUser, trackOpen, trackScreen } from '../lib/analytics'
 import { BottomNav, Modal, PromptNumber, Progress, ConfirmDelete, showToast } from '../components/ui'
 import { T } from '../theme'
-import { setAnalyticsUser, trackOpen, trackScreen } from '../lib/analytics'
-
 import type { Object as PropertyObject, Contract, NotificationLog, User } from '../types/database'
 
 interface ObjectWithStatus extends PropertyObject {
@@ -196,19 +195,19 @@ export function LandlordDashboard() {
             if (firstMonth) { statusDetail = 'Первый месяц — ждёт оплаты'; statusColor = '#a80' }
             else if (isOverdue) { status = 'overdue'; statusDetail = `Просрочка ${Math.round((todayMid.getTime() - dueMid.getTime()) / 86400000)} дн.`; statusColor = '#c00' }
             else if (waitingForReadings) { statusDetail = 'Ждём показания'; statusColor = '#a80' }
-            else if (paidPart > 0) { statusDetail = `Оплачено частично · до оплаты ${daysUntilDue} дн.`; statusColor = '#a80' }
-            else if (daysUntilDue === 0) { statusDetail = 'Сегодня последний день оплаты'; statusColor = '#a80' }
-                        else if (daysUntilDue <= reminder) { statusDetail = `До оплаты ${daysUntilDue} дн. (${dueMid.toLocaleDateString('ru-RU')})`; statusColor = '#a80' }
-                        else { statusDetail = `До оплаты ${daysUntilDue} дн. (${dueMid.toLocaleDateString('ru-RU')})`; statusColor = '#080' }
+            else if (paidPart > 0) { statusDetail = `Оплачено частично · до оплаты ${daysUntilDue} дн. (${dueMid.toLocaleDateString('ru-RU')})`; statusColor = '#a80' }
+            else if (daysUntilDue === 0) { statusDetail = `Сегодня последний день оплаты (${dueMid.toLocaleDateString('ru-RU')})`; statusColor = '#a80' }
+            else if (daysUntilDue <= reminder) { statusDetail = `До оплаты ${daysUntilDue} дн. (${dueMid.toLocaleDateString('ru-RU')})`; statusColor = '#a80' }
+            else { statusDetail = `До оплаты ${daysUntilDue} дн. (${dueMid.toLocaleDateString('ru-RU')})`; statusColor = '#080' }
           } else {
             status = 'paid'
             const periodDate = parseDate(payment.period)
             const nextDue = new Date(periodDate.getFullYear(), periodDate.getMonth() + 1, contract.payment_day || 1)
             const daysLeft = Math.round((nextDue.getTime() - todayMid.getTime()) / 86400000)
-            if (daysLeft < 0) { statusDetail = `Следующий платёж просрочен на ${-daysLeft} дн.`; statusColor = '#c00' }
-            else if (daysLeft === 0) { statusDetail = 'Следующая оплата: сегодня последний день'; statusColor = '#a80' }
-                        else if (daysLeft <= reminder) { statusDetail = `${daysLeft} дн. до оплаты (${nextDue.toLocaleDateString('ru-RU')})`; statusColor = '#a80' }
-                        else { statusDetail = `${daysLeft} дн. до оплаты (${nextDue.toLocaleDateString('ru-RU')})`; statusColor = '#080' }
+            if (daysLeft < 0) { statusDetail = `Платёж просрочен на ${-daysLeft} дн. (${nextDue.toLocaleDateString('ru-RU')})`; statusColor = '#c00' }
+            else if (daysLeft === 0) { statusDetail = `Сегодня последний день оплаты (${nextDue.toLocaleDateString('ru-RU')})`; statusColor = '#a80' }
+            else if (daysLeft <= reminder) { statusDetail = `${daysLeft} дн. до оплаты (${nextDue.toLocaleDateString('ru-RU')})`; statusColor = '#a80' }
+            else { statusDetail = `${daysLeft} дн. до оплаты (${nextDue.toLocaleDateString('ru-RU')})`; statusColor = '#080' }
           }
           objectsWithStatus.push({ ...obj, status, statusDetail, statusColor, amount: baseAmount + penaltyAmount + utilitiesAmount, baseAmount, penaltyAmount, utilitiesAmount, paymentId, contract, payment, daysOverdue: isOverdue ? Math.round((todayMid.getTime() - dueMid.getTime()) / 86400000) : undefined, waitingForReadings, needUtilitiesReminder, readingsMode, frozenTotal, frozenRows: fRows, deferredRequests: dReqBy[contract.id] || [], hasConfirmedCashMeeting: !!cashMeeting })
         }
@@ -228,6 +227,15 @@ export function LandlordDashboard() {
     const interval = setInterval(() => fetchData(), 30000)
     return () => { window.removeEventListener('rentflow-refresh', onRefresh); clearInterval(interval) }
   }, [user, teamId])
+
+  useEffect(() => {
+    if (user) { setAnalyticsUser(user); trackOpen('landlord') }
+  }, [user])
+
+  useEffect(() => {
+    const screen = arch ? 'archive_item' : archiveListOpen ? 'archive_list' : current ? `object_${tab}` : 'objects_list'
+    trackScreen(screen)
+  }, [tab, openId, archiveListOpen, archiveId])
 
   function canUndo(h: any): boolean {
     return !!h.confirmed_by_landlord && !!h.confirmed_at && (Date.now() - new Date(h.confirmed_at).getTime()) < 24 * 3600 * 1000
@@ -538,14 +546,6 @@ export function LandlordDashboard() {
   const archSd = arch?.start_date ? parseDate(arch.start_date) : null
   const archSettlement = (arch as any)?.settlement || {}
 
-  useEffect(() => {
-    if (user) { setAnalyticsUser(user); trackOpen('landlord') }
-  }, [user])
-
-  useEffect(() => {
-    const screen = arch ? 'archive_item' : archiveListOpen ? 'archive_list' : current ? `object_${tab}` : 'objects_list'
-    trackScreen(screen)
-  }, [tab, openId, archiveListOpen, archiveId])
   if (userLoading || loading) return <div style={T.page}>Загрузка…</div>
   if (error) return <div style={T.page}><div style={T.card}>{error}</div></div>
 
@@ -583,14 +583,17 @@ export function LandlordDashboard() {
             const dueDay = parseDate(h.due_date)
             const confDay = h.confirmed_at ? parseDate(String(h.confirmed_at).slice(0, 10)) : null
             const late = !firstP && h.confirmed_by_landlord && confDay !== null && confDay.getTime() > dueDay.getTime() && !(archSd && dueDay < archSd)
+            const early = !firstP && h.confirmed_by_landlord && confDay !== null && confDay.getTime() < dueDay.getTime()
             const sum = Number(h.base_amount || 0) + Number(h.penalty_amount || 0) + Number(h.utilities_amount || 0)
             return (
-              <div key={h.id} style={T.row}>
-                <span style={{ flex: 1, minWidth: 0 }}>{parseDate(h.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}{firstP ? ' · первый месяц' : ''}</span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                  <span style={{ fontSize: 13, color: late ? '#ff3b30' : '#8e8e93' }}>{h.confirmed_by_landlord ? (late ? 'просрочка' : 'вовремя') : 'не подтверждён'}</span>
+              <div key={h.id} style={{ padding: '10px 0', borderBottom: '1px solid rgba(60,60,67,0.12)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+                  <span style={{ fontSize: 15, fontWeight: 600 }}>{parseDate(h.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}{firstP ? ' · первый месяц' : ''}</span>
                   <b style={{ whiteSpace: 'nowrap' }}>{sum.toFixed(0)} ₽</b>
-                </span>
+                </div>
+                <div style={{ marginTop: 2 }}>
+                  <span style={{ fontSize: 13, color: late ? '#ff3b30' : '#8e8e93' }}>{h.confirmed_by_landlord ? (late ? `просрочка · опл. ${confDay!.toLocaleDateString('ru-RU')}` : early ? `досрочно · ${confDay!.toLocaleDateString('ru-RU')}` : `вовремя · ${confDay!.toLocaleDateString('ru-RU')}`) : 'не подтверждён'}</span>
+                </div>
               </div>
             )
           })}
@@ -844,7 +847,7 @@ export function LandlordDashboard() {
             {objHistory.length === 0 ? (
               <div style={{ ...T.small, margin: '8px 0' }}>Платежей пока нет</div>
             ) : (
-                objHistory.map((h: any) => {
+              objHistory.map((h: any) => {
                 const firstP = isFirstPeriod(h.period, sd)
                 const dueDay = parseDate(h.due_date)
                 const confDay = h.confirmed_at ? parseDate(String(h.confirmed_at).slice(0, 10)) : null
@@ -852,18 +855,20 @@ export function LandlordDashboard() {
                 const early = !firstP && h.confirmed_by_landlord && confDay !== null && confDay.getTime() < dueDay.getTime()
                 const sum = Number(h.base_amount || 0) + Number(h.penalty_amount || 0) + Number(h.utilities_amount || 0)
                 return (
-                  <div key={h.id} style={T.row}>
-                    <span style={{ flex: 1, minWidth: 0 }}>{parseDate(h.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}{firstP ? ' · первый месяц' : ''}</span>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                                            <span style={{ fontSize: 13, color: late ? '#ff3b30' : '#8e8e93' }}>{h.confirmed_by_landlord ? (late ? `просрочка · опл. ${confDay!.toLocaleDateString('ru-RU')}` : early ? `досрочно · ${confDay!.toLocaleDateString('ru-RU')}` : `вовремя · ${confDay!.toLocaleDateString('ru-RU')}`) : 'не подтверждён'}</span>
+                  <div key={h.id} style={{ padding: '10px 0', borderBottom: '1px solid rgba(60,60,67,0.12)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+                      <span style={{ fontSize: 15, fontWeight: 600 }}>{parseDate(h.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}{firstP ? ' · первый месяц' : ''}</span>
                       <b style={{ whiteSpace: 'nowrap' }}>{sum.toFixed(0)} ₽</b>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginTop: 2 }}>
+                      <span style={{ fontSize: 13, color: late ? '#ff3b30' : '#8e8e93' }}>{h.confirmed_by_landlord ? (late ? `просрочка · опл. ${confDay!.toLocaleDateString('ru-RU')}` : early ? `досрочно · ${confDay!.toLocaleDateString('ru-RU')}` : `вовремя · ${confDay!.toLocaleDateString('ru-RU')}`) : 'не подтверждён'}</span>
                       {h.confirmed_by_landlord && (
-                        <span style={{ display: 'flex', gap: 10 }}>
+                        <span style={{ display: 'flex', gap: 10, flexShrink: 0 }}>
                           <button style={iosBlue} onClick={() => setReceiptFor(h)}>расписка</button>
                           {canUndo(h) && <button style={iosRed} onClick={() => setUndoId(h.id)}>отменить</button>}
                         </span>
                       )}
-                    </span>
+                    </div>
                   </div>
                 )
               })
