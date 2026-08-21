@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { useTelegramUser } from '../hooks/useTelegramUser'
+
 import { T } from '../theme'
 import { showToast } from '../components/ui'
 
@@ -44,7 +44,7 @@ function deviceLabel(meta: any): string {
 
 export function AdminDashboard() {
     const [tab, setTab] = useState('summary')
-  const [tab, setTab] = useState('summary')
+  
   const [users, setUsers] = useState<any[]>([])
   const [objects, setObjects] = useState<any[]>([])
   const [contracts, setContracts] = useState<any[]>([])
