@@ -55,7 +55,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     if (!consent) { showToast('Нужно согласие на обработку данных'); return }
     if (!/^\S+@\S+\.\S+$/.test(email.trim())) { showToast('Проверьте e-mail'); return }
     setBusy(true)
-    const { error } = await supabase.auth.signInWithOtp({ email: email.trim(), options: { shouldRedirect: false } })
+   const { error } = await supabase.auth.signInWithOtp({ email: email.trim() })
     setBusy(false)
     if (error) { showToast('Ошибка: ' + error.message); return }
     setStage('code')
