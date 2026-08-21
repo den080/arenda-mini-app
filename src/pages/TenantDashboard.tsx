@@ -5,10 +5,9 @@ import CashNegotiation from '../components/CashNegotiation'
 import BillUploader from '../components/BillUploader'
 import { ensureNextPayment } from '../lib/nextPayment'
 import Chat from '../components/Chat'
+import { setAnalyticsUser, trackOpen, trackScreen } from '../lib/analytics'
 import { BottomNav, PromptNumber, Progress, showToast } from '../components/ui'
 import { T } from '../theme'
-import { setAnalyticsUser, trackOpen, trackScreen } from '../lib/analytics'
-
 
 interface PayDetail { type: 'card' | 'sbp'; bank: string; number: string }
 interface Notification { id: string; user_id: string; type: string; related_id: string; sent_at: string }
@@ -77,11 +76,13 @@ export function TenantDashboard() {
   useEffect(() => {
     trackScreen(openId ? `rental_${tab}` : 'rental_list')
   }, [tab, openId])
+
   const getNotificationText = (type: string) => {
     switch (type) {
       case 'payment_claimed': return '✅ Арендатор сообщил об оплате'
       case 'payment_confirmed': return '🟢 Арендодатель подтвердил оплату'
       case 'payment_partial': return '💰 Частичная оплата учтена'
+      case 'payment_undo': return '↩️ Подтверждение оплаты отменено'
       case 'meter_submitted': return '💦 Переданы новые показания'
       case 'cash_proposed': return '💵 Предложено время встречи наличными'
       case 'cash_confirmed': return '🤝 Встреча по оплате согласована'
@@ -92,8 +93,6 @@ export function TenantDashboard() {
       case 'bill_confirmed': return '✅ Арендодатель подтвердил оплату по квитанции'
       case 'contract_terminated': return '🏁 Договор завершён'
       case 'amendment': return '📝 Допсоглашение по аренде'
-      case 'payment_undo': return '↩️ Подтверждение оплаты отменено'
-
       default: return type
     }
   }
@@ -329,9 +328,12 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
   const frozenTotal = (frozenRows || []).reduce((sum: number, f: any) => sum + Number(f.amount || 0), 0)
 
   const iosBlue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: 4, flexShrink: 0 }
+  const actBlue: React.CSSProperties = { ...iosBlue, fontSize: 14 }
   const iosMuted: React.CSSProperties = { color: '#8e8e93', fontSize: 14 }
+  const valText: React.CSSProperties = { fontSize: 16, fontWeight: 500, color: '#1d1d1f' }
+  const valMoney: React.CSSProperties = { fontSize: 16, fontWeight: 600, color: '#1d1d1f', whiteSpace: 'nowrap' }
   const secHead: React.CSSProperties = { fontSize: 13, color: '#8e8e93', margin: '14px 16px 6px', textTransform: 'uppercase', letterSpacing: 0.3 }
-  const rightInput: React.CSSProperties = { width: 110, border: 'none', outline: 'none', background: 'rgba(120,120,128,0.08)', borderRadius: 8, padding: '8px 10px', fontSize: 15, textAlign: 'right', color: '#1d1d1f', boxSizing: 'border-box' }
+  const rightInput: React.CSSProperties = { width: 110, border: 'none', outline: 'none', background: 'rgba(120,120,128,0.08)', borderRadius: 8, padding: '8px 10px', fontSize: 16, fontWeight: 600, textAlign: 'right', color: '#1d1d1f', boxSizing: 'border-box' }
   const actionRow: React.CSSProperties = { display: 'flex', justifyContent: 'center', padding: '8px 0 10px' }
   const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProperties
 
@@ -341,27 +343,29 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
       <div>
         <div style={T.card}>
           <div style={T.h2}>Договор завершён</div>
-          <div style={T.row}><span style={iosMuted}>Дата съезда</span><b>{contract.terminated_at ? new Date(contract.terminated_at).toLocaleDateString('ru-RU') : '—'}</b></div>
-          {contract.termination_note && <div style={T.row}><span style={iosMuted}>Примечание</span><b>{contract.termination_note}</b></div>}
-          {s.deposit_paid != null && <div style={T.row}><span style={iosMuted}>Депозит внесён</span><b>{Number(s.deposit_paid).toFixed(0)} ₽</b></div>}
-          {s.frozen_total != null && Number(s.frozen_total) > 0 && <div style={T.row}><span style={iosMuted}>Удержано по штрафам</span><b>{Number(s.frozen_total).toFixed(0)} ₽</b></div>}
-          {s.open_debt != null && Number(s.open_debt) > 0 && <div style={T.row}><span style={iosMuted}>Долг по счетам</span><b>{Number(s.open_debt).toFixed(0)} ₽</b></div>}
+          <div style={T.row}><span style={iosMuted}>Дата съезда</span><span style={valText}>{contract.terminated_at ? new Date(contract.terminated_at).toLocaleDateString('ru-RU') : '—'}</span></div>
+          {contract.termination_note && <div style={T.row}><span style={iosMuted}>Примечание</span><span style={valText}>{contract.termination_note}</span></div>}
+          {s.deposit_paid != null && <div style={T.row}><span style={iosMuted}>Депозит внесён</span><span style={valMoney}>{Number(s.deposit_paid).toFixed(0)} ₽</span></div>}
+          {s.frozen_total != null && Number(s.frozen_total) > 0 && <div style={T.row}><span style={iosMuted}>Удержано по штрафам</span><span style={valMoney}>{Number(s.frozen_total).toFixed(0)} ₽</span></div>}
+          {s.open_debt != null && Number(s.open_debt) > 0 && <div style={T.row}><span style={iosMuted}>Долг по счетам</span><span style={valMoney}>{Number(s.open_debt).toFixed(0)} ₽</span></div>}
           <div style={{ ...T.row, borderBottom: 'none' }}>
             <span style={iosMuted}>Итог</span>
-            <b style={{ color: Number(s.result || 0) >= 0 ? '#1e7e34' : '#ff3b30' }}>
+            <span style={{ ...valMoney, color: Number(s.result || 0) >= 0 ? '#1e7e34' : '#ff3b30' }}>
               {Number(s.result || 0) >= 0 ? `К возврату арендатору ${Number(s.result).toFixed(0)} ₽` : `Долг арендатора ${Math.abs(Number(s.result || 0)).toFixed(0)} ₽`}
-            </b>
+            </span>
           </div>
         </div>
         <div style={T.card}>
           <div style={T.h2}>История платежей</div>
           {(payments || []).slice(0, 24).map((p: any) => (
-            <div key={p.id} style={T.row}>
-              <span style={{ flex: 1, minWidth: 0 }}>{new Date(p.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}</span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            <div key={p.id} style={{ padding: '10px 0', borderBottom: '1px solid rgba(60,60,67,0.12)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+                <span style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f' }}>{new Date(p.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}</span>
+                <span style={valMoney}>{(Number(p.base_amount) + Number(p.penalty_amount || 0) + Number(p.utilities_amount || 0)).toFixed(0)} ₽</span>
+              </div>
+              <div style={{ marginTop: 2 }}>
                 <span style={{ fontSize: 13, color: p.confirmed_by_landlord ? '#1e7e34' : '#b25000' }}>{p.confirmed_by_landlord ? 'оплачен' : 'ожидает'}</span>
-                <b style={{ whiteSpace: 'nowrap' }}>{(Number(p.base_amount) + Number(p.penalty_amount || 0) + Number(p.utilities_amount || 0)).toFixed(0)} ₽</b>
-              </span>
+              </div>
             </div>
           ))}
         </div>
@@ -427,24 +431,24 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
         <>
           <div style={T.card}>
             <div style={T.h2}>Счёт за {monthLabel}</div>
-            <div style={T.row}><span style={iosMuted}>Аренда</span><b>{Number(payment?.base_amount ?? contract.rent_amount).toFixed(2)} ₽</b></div>
-            <div style={T.row}><span style={iosMuted}>Штраф</span><b>{Number(payment?.penalty_amount || 0).toFixed(2)} ₽</b></div>
+            <div style={T.row}><span style={iosMuted}>Аренда</span><span style={valMoney}>{Number(payment?.base_amount ?? contract.rent_amount).toFixed(2)} ₽</span></div>
+            <div style={T.row}><span style={iosMuted}>Штраф</span><span style={valMoney}>{Number(payment?.penalty_amount || 0).toFixed(2)} ₽</span></div>
             {utilities > 0 && (
-              <div style={T.row}><span style={iosMuted}>Ресурсы по квитанции</span><b>{utilities.toFixed(2)} ₽</b></div>
+              <div style={T.row}><span style={iosMuted}>Ресурсы по квитанции</span><span style={valMoney}>{utilities.toFixed(2)} ₽</span></div>
             )}
             <div style={T.row}><span style={iosMuted}>Итого</span><span style={T.total}>{total.toFixed(2)} ₽</span></div>
             {!payment?.confirmed_by_landlord && paidPart > 0 && (
-              <div style={T.row}><span style={iosMuted}>Оплачено</span><b style={{ color: '#1e7e34' }}>−{paidPart.toFixed(2)} ₽</b></div>
+              <div style={T.row}><span style={iosMuted}>Оплачено</span><span style={{ ...valMoney, color: '#1e7e34' }}>−{paidPart.toFixed(2)} ₽</span></div>
             )}
             {!payment?.confirmed_by_landlord && balance > 0 && (
-              <div style={T.row}><span style={iosMuted}>Баланс (переплата)</span><b style={{ color: '#1e7e34' }}>−{balance.toFixed(2)} ₽</b></div>
+              <div style={T.row}><span style={iosMuted}>Баланс (переплата)</span><span style={{ ...valMoney, color: '#1e7e34' }}>−{balance.toFixed(2)} ₽</span></div>
             )}
             {!payment?.confirmed_by_landlord && (paidPart > 0 || balance > 0) && (
               <div style={T.row}><span style={iosMuted}>К оплате</span><span style={T.total}>{toPay.toFixed(2)} ₽</span></div>
             )}
             <div style={{ ...T.row, borderBottom: 'none' }}>
               <span style={iosMuted}>{firstMonth ? 'Оплата при подписании договора' : 'Оплатить до'}</span>
-              <b>{firstMonth ? '' : parseDate(payment.due_date).toLocaleDateString('ru-RU')}</b>
+              <span style={valText}>{firstMonth ? '' : parseDate(payment.due_date).toLocaleDateString('ru-RU')}</span>
             </div>
             <div style={{ padding: '0 0 8px' }}><span style={statusChip}>{statusText}</span></div>
             {isOverdue && <div style={T.noteRed}>+{penaltyRate} руб за каждый день просрочки</div>}
@@ -455,7 +459,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
               deferralPending ? (
                 <div style={T.note}>Отсрочка штрафа: заявка на рассмотрении</div>
               ) : (
-                <div style={actionRow}><button onClick={requestDeferral} style={iosBlue}>Попросить отсрочку штрафа</button></div>
+                <div style={actionRow}><button onClick={requestDeferral} style={actBlue}>Попросить отсрочку штрафа</button></div>
               )
             )}
           </div>
@@ -471,7 +475,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
                   <div key={o.v}>
                     {i > 0 && <div style={hair} />}
                     <button
-                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', minHeight: 44, border: 'none', background: 'transparent', cursor: 'pointer', padding: '4px 0', fontSize: 15, color: '#1d1d1f' }}
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', minHeight: 44, border: 'none', background: 'transparent', cursor: 'pointer', padding: '4px 0', fontSize: 16, fontWeight: 500, color: '#1d1d1f' }}
                       onClick={() => choosePayMethod(o.v)}
                     >
                       {o.l}
@@ -494,10 +498,10 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
                     <div key={i} style={T.item}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
                         <div style={{ minWidth: 0 }}>
-                          <div style={{ fontSize: 15, fontWeight: 600 }}>{d.type === 'card' ? d.bank : `СБП · ${d.bank}`}</div>
-                          <div style={{ fontFamily: 'monospace', fontSize: 15, marginTop: 2 }}>{d.type === 'card' ? formatCardNumber(d.number) : formatPhoneDisplay(d.number)}</div>
+                          <div style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f' }}>{d.type === 'card' ? d.bank : `СБП · ${d.bank}`}</div>
+                          <div style={{ fontFamily: 'monospace', fontSize: 15, marginTop: 2, color: '#1d1d1f' }}>{d.type === 'card' ? formatCardNumber(d.number) : formatPhoneDisplay(d.number)}</div>
                         </div>
-                        <button style={iosBlue} onClick={() => copyToClipboard(d.type === 'card' ? formatCardNumber(d.number) : d.number, d.type === 'card' ? 'номер карты' : 'номер СБП')}>Скопировать</button>
+                        <button style={actBlue} onClick={() => copyToClipboard(d.type === 'card' ? formatCardNumber(d.number) : d.number, d.type === 'card' ? 'номер карты' : 'номер СБП')}>Скопировать</button>
                       </div>
                     </div>
                   ))
@@ -506,7 +510,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
                   payment.card_claimed ? (
                     <div style={T.note}>Безналичная оплата отмечена: ожидает подтверждения арендодателем</div>
                   ) : (
-                    <div style={actionRow}><button onClick={claimPaid} style={iosBlue}>Я оплатил</button></div>
+                    <div style={actionRow}><button onClick={claimPaid} style={actBlue}>Я оплатил</button></div>
                   )
                 )}
               </div>
@@ -527,20 +531,22 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
 
           <div style={T.card}>
             <div style={T.row}>
-              <span style={{ fontSize: 15 }}>Оплата досрочно</span>
-              <button style={iosBlue} onClick={() => setAdvOpen(true)}>Внести на несколько месяцев</button>
+              <span style={{ fontSize: 16, fontWeight: 500, color: '#1d1d1f' }}>Оплата досрочно</span>
+              <button style={actBlue} onClick={() => setAdvOpen(true)}>Внести на несколько месяцев</button>
             </div>
           </div>
 
           <div style={T.card}>
             <div style={T.h2}>История платежей</div>
             {payments.slice(0, 8).map((p: any) => (
-              <div key={p.id} style={T.row}>
-                <span style={{ flex: 1, minWidth: 0 }}>{new Date(p.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}</span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+              <div key={p.id} style={{ padding: '10px 0', borderBottom: '1px solid rgba(60,60,67,0.12)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+                  <span style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f' }}>{new Date(p.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}</span>
+                  <span style={valMoney}>{(Number(p.base_amount) + Number(p.penalty_amount || 0) + Number(p.utilities_amount || 0)).toFixed(0)} ₽</span>
+                </div>
+                <div style={{ marginTop: 2 }}>
                   <span style={{ fontSize: 13, color: p.confirmed_by_landlord ? '#1e7e34' : '#b25000' }}>{p.confirmed_by_landlord ? 'оплачен' : 'ожидает'}</span>
-                  <b style={{ whiteSpace: 'nowrap' }}>{(Number(p.base_amount) + Number(p.penalty_amount || 0) + Number(p.utilities_amount || 0)).toFixed(0)} ₽</b>
-                </span>
+                </div>
               </div>
             ))}
           </div>
@@ -555,7 +561,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
               <div style={T.card}>
                 <div style={{ ...T.row, borderBottom: 'none' }}>
                   <span style={iosMuted}>Срок подачи</span>
-                  <b>до {contract.meter_deadline_day} числа</b>
+                  <span style={valText}>до {contract.meter_deadline_day} числа</span>
                 </div>
                 {overallReading === 'incomplete' && <div style={T.noteRed}>Арендодатель отметил: показания получены не полностью — передайте недостающие ещё раз</div>}
                 {overallReading === 'confirmed' && <div style={T.noteGreen}>Показания получены арендодателем</div>}
@@ -569,7 +575,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
                 return (
                   <div key={m.id} style={T.card}>
                     <div style={{ ...T.row, borderBottom: 'none', alignItems: 'center' }}>
-                      <span style={{ fontSize: 15, fontWeight: 600 }}>{t?.label || 'Счётчик'}{m.label ? ` · № ${m.label}` : ''}</span>
+                      <span style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f' }}>{t?.label || 'Счётчик'}{m.label ? ` · № ${m.label}` : ''}</span>
                       <input
                         value={vals[m.id] || ''}
                         onChange={(e) => setVals({ ...vals, [m.id]: e.target.value })}
@@ -621,19 +627,19 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
         <>
           <div style={T.card}>
             <div style={T.h2}>Договор</div>
-            <div style={T.row}><span style={iosMuted}>Арендодатель</span><b>{landlord?.full_name}</b></div>
-            {landlord?.phone && <div style={T.row}><span style={iosMuted}>Телефон</span><b>{formatPhoneDisplay(landlord.phone)}</b></div>}
+            <div style={T.row}><span style={iosMuted}>Арендодатель</span><span style={valText}>{landlord?.full_name}</span></div>
+            {landlord?.phone && <div style={T.row}><span style={iosMuted}>Телефон</span><span style={valText}>{formatPhoneDisplay(landlord.phone)}</span></div>}
             {contract.start_date && contract.end_date && (
-              <div style={T.row}><span style={iosMuted}>Срок</span><b>{parseDate(contract.start_date).toLocaleDateString('ru-RU')} — {parseDate(contract.end_date).toLocaleDateString('ru-RU')}</b></div>
+              <div style={T.row}><span style={iosMuted}>Срок</span><span style={valText}>{parseDate(contract.start_date).toLocaleDateString('ru-RU')} — {parseDate(contract.end_date).toLocaleDateString('ru-RU')}</span></div>
             )}
-            <div style={T.row}><span style={iosMuted}>Аренда</span><b>{Number(contract.rent_amount).toFixed(0)} ₽/мес</b></div>
+            <div style={T.row}><span style={iosMuted}>Аренда</span><span style={valMoney}>{Number(contract.rent_amount).toFixed(0)} ₽/мес</span></div>
             {(contract as any).amendment_at && (
-              <div style={T.row}><span style={iosMuted}>Допсоглашение</span><b>{Number(contract.rent_amount).toFixed(0)} ₽ с {(contract as any).amendment_from ? new Date((contract as any).amendment_from).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : new Date((contract as any).amendment_at).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}</b></div>
+              <div style={T.row}><span style={iosMuted}>Допсоглашение</span><span style={valText}>{Number(contract.rent_amount).toFixed(0)} ₽ с {(contract as any).amendment_from ? new Date((contract as any).amendment_from).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : new Date((contract as any).amendment_at).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}</span></div>
             )}
             {balance > 0 && (
-              <div style={T.row}><span style={iosMuted}>Баланс (переплата)</span><b>{balance.toFixed(0)} ₽</b></div>
+              <div style={T.row}><span style={iosMuted}>Баланс (переплата)</span><span style={valMoney}>{balance.toFixed(0)} ₽</span></div>
             )}
-            <div style={T.row}><span style={iosMuted}>Оплата</span><b>до {contract.payment_day} числа</b></div>
+            <div style={T.row}><span style={iosMuted}>Оплата</span><span style={valText}>до {contract.payment_day} числа</span></div>
             {deposit > 0 && (
               <div style={{ padding: '8px 0 4px' }}>
                 <Progress value={depositPaid} max={deposit} />
@@ -642,9 +648,9 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
           </div>
           <div style={T.card}>
             <div style={T.h2}>Штрафы</div>
-            <div style={T.row}><span style={iosMuted}>Просрочка оплаты</span><b>+{penaltyRate} ₽/день</b></div>
+            <div style={T.row}><span style={iosMuted}>Просрочка оплаты</span><span style={valMoney}>+{penaltyRate} ₽/день</span></div>
             {readingsMode === 'manual' && readingsRule && Number(readingsRule.rate) > 0 && (
-              <div style={{ ...T.row, borderBottom: 'none' }}><span style={iosMuted}>Просрочка показаний</span><b>+{Number(readingsRule.rate)} ₽/день</b></div>
+              <div style={{ ...T.row, borderBottom: 'none' }}><span style={iosMuted}>Просрочка показаний</span><span style={valMoney}>+{Number(readingsRule.rate)} ₽/день</span></div>
             )}
           </div>
           {contacts && contacts.length > 0 && (
@@ -655,7 +661,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
                   {i > 0 && <div style={hair} />}
                   <div style={T.row}>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 15 }}>{c.label}</div>
+                      <div style={{ fontSize: 16, fontWeight: 500, color: '#1d1d1f' }}>{c.label}</div>
                       {c.note && <div style={{ fontSize: 13, color: '#8e8e93', marginTop: 2 }}>{c.note}</div>}
                     </div>
                     <a
@@ -672,9 +678,9 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
               <div style={T.h2}>Замороженные штрафы · {frozenTotal.toFixed(0)} ₽</div>
               {(frozenRows || []).map((f: any) => (
                 <div key={f.id} style={T.item}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 15 }}>
-                    <span>{f.period ? parseDate(f.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : 'без месяца'}</span>
-                    <b>{Number(f.amount).toFixed(0)} ₽</b>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                    <span style={{ fontSize: 15, fontWeight: 500, color: '#1d1d1f' }}>{f.period ? parseDate(f.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : 'без месяца'}</span>
+                    <span style={valMoney}>{Number(f.amount).toFixed(0)} ₽</span>
                   </div>
                   {f.adjusted_note && <div style={T.tiny}>{f.adjusted_note}</div>}
                 </div>
