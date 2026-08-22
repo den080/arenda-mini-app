@@ -233,21 +233,21 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
   }
 
   async function claimPaid() {
-    if (!data?.landlord) return
+    if (!data?.obj?.landlord_id) return
     const open0 = (data.payments || []).filter((p: any) => !p.confirmed_by_landlord)
     const payment = open0.length ? open0[open0.length - 1] : data.payments[0]
     if (!payment) return
     const { error: e } = await supabase.from('payments').update({ card_claimed: true }).eq('id', payment.id)
     if (e) { showToast('Ошибка: ' + e.message); return }
     await supabase.from('notifications_log').insert({
-      user_id: data.landlord.id, type: 'payment_claimed', related_id: payment.id, sent_at: new Date().toISOString(),
+      user_id: data.obj.landlord_id, type: 'payment_claimed', related_id: payment.id, sent_at: new Date().toISOString(),
     })
     showToast('✅ Арендодатель уведомлён')
     load()
   }
 
   async function requestDeferral() {
-    if (!data?.landlord) return
+    if (!data?.obj?.landlord_id) return
     const open0 = (data.payments || []).filter((p: any) => !p.confirmed_by_landlord)
     const payment = open0.length ? open0[open0.length - 1] : data.payments[0]
     if (!payment || Number(payment.penalty_amount) <= 0) return
@@ -257,7 +257,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
     })
     if (e) { showToast('Ошибка: ' + e.message); return }
     await supabase.from('notifications_log').insert({
-      user_id: data.landlord.id, type: 'deferred_proposed', related_id: contract.id, sent_at: new Date().toISOString(),
+      user_id: data.obj.landlord_id, type: 'deferred_proposed', related_id: contract.id, sent_at: new Date().toISOString(),
     })
     showToast('✅ Заявка на отсрочку отправлена')
     load()
@@ -294,8 +294,13 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
     }
     showToast('✅ Показания переданы')
     setVals({})
+    // Пуш арендодателю: id берём напрямую из объекта — он всегда есть
     await supabase.from('notifications_log').insert({
-      user_id: data.landlord?.id || user!.id, type: 'meter_submitted', related_id: contract.id, sent_at: new Date().toISOString()
+      user_id: data.obj?.landlord_id || data.landlord?.id || user!.id,
+      type: 'meter_submitted',
+      related_id: contract.id,
+      message: '💦 Переданы новые показания',
+      sent_at: new Date().toISOString(),
     })
     load()
   }
@@ -501,7 +506,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
                     <div key={i} style={T.item}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
                         <div style={{ minWidth: 0 }}>
-                                                   <div style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f' }}>{d.type === 'card' ? (d.bank || 'Банк не указан') : `СБП · ${d.bank || 'банк не указан'}`}</div>
+                          <div style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f' }}>{d.type === 'card' ? (d.bank || 'Банк не указан') : `СБП · ${d.bank || 'банк не указан'}`}</div>
                           <div style={{ fontFamily: 'monospace', fontSize: 15, marginTop: 2, color: '#1d1d1f' }}>{d.type === 'card' ? formatCardNumber(d.number) : formatPhoneDisplay(d.number)}</div>
                         </div>
                         <button style={actBlue} onClick={() => copyToClipboard(d.type === 'card' ? formatCardNumber(d.number) : d.number, d.type === 'card' ? 'номер карты' : 'номер СБП')}>Скопировать</button>
