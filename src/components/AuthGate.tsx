@@ -104,7 +104,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
                 Другой e-mail
               </button>
             </div>
-            <div style={{ ...T.tiny, margin: '10px 0 0', textAlign: 'center' }}>Письмо могло попасть в «Спам» — проверьте папку.</div>
+           <div style={{ ...T.tiny, margin: '10px 0 0', textAlign: 'center' }}>Письмо могло попасть в «Спам» — проверьте папку.<br />Пришла ссылка вместо кода? Закройте приложение полностью и откройте заново.</div>
           </>
         )}
       </div>
