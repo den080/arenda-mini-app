@@ -272,8 +272,8 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
     if (e) { showToast('Ошибка: ' + e.message); return }
     showToast('✅ Показания переданы')
     setVals({})
-    await supabase.from('notifications_log').insert({
-      user_id: user!.id, type: 'meter_submitted', related_id: contract.id, sent_at: new Date().toISOString()
+        await supabase.from('notifications_log').insert({
+      user_id: data.landlord?.id || user!.id, type: 'meter_submitted', related_id: contract.id, sent_at: new Date().toISOString()
     })
     load()
   }
