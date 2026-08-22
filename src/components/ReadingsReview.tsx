@@ -4,10 +4,12 @@ import { useTelegramUser } from '../hooks/useTelegramUser'
 import { T } from '../theme'
 import { showToast } from './ui'
 
-const iosBlue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: 4, flexShrink: 0 }
-const iosRed: React.CSSProperties = { border: 'none', background: 'transparent', color: '#ff3b30', fontSize: 15, cursor: 'pointer', padding: 4, flexShrink: 0 }
+const actBlue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 14, fontWeight: 600, cursor: 'pointer', padding: 4, flexShrink: 0 }
+const actRed: React.CSSProperties = { border: 'none', background: 'transparent', color: '#ff3b30', fontSize: 14, cursor: 'pointer', padding: 4, flexShrink: 0 }
+const valMoney: React.CSSProperties = { fontSize: 16, fontWeight: 600, color: '#1d1d1f', whiteSpace: 'nowrap' }
+const iosMuted: React.CSSProperties = { color: '#8e8e93', fontSize: 14 }
 const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProperties
-const rightInput: React.CSSProperties = { width: 110, border: 'none', outline: 'none', background: 'rgba(120,120,128,0.08)', borderRadius: 8, padding: '8px 10px', fontSize: 15, textAlign: 'right', color: '#1d1d1f', boxSizing: 'border-box' }
+const rightInput: React.CSSProperties = { width: 150, border: 'none', outline: 'none', background: 'rgba(120,120,128,0.08)', borderRadius: 8, padding: '8px 10px', fontSize: 16, fontWeight: 600, textAlign: 'right', color: '#1d1d1f', boxSizing: 'border-box' }
 
 export function ReadingsReview({ contractId, tenantId }: { contractId: string; tenantId: string }) {
   const { user } = useTelegramUser()
@@ -82,47 +84,80 @@ export function ReadingsReview({ contractId, tenantId }: { contractId: string; t
   if (!ready) return null
   if (meters.length === 0) return <div style={T.card}><div style={{ ...T.small, margin: '8px 0' }}>На объекте нет счётчиков с ручной подачей.</div></div>
 
-  const inputRow = (m: any, hint?: string) => (
-    <>
-      {hint && <div style={{ fontSize: 13, color: '#8e8e93', marginTop: 2 }}>{hint}</div>}
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 }}>
-        <input
-          value={vals[m.id] || ''}
-          onChange={(e) => setVals(prev => ({ ...prev, [m.id]: e.target.value }))}
-          placeholder="Значение с фото"
-          style={{ ...rightInput, width: 150 }}
-          inputMode="decimal"
-        />
-        <button style={iosBlue} onClick={() => enterValue(m.id)}>Внести</button>
-      </div>
-    </>
-  )
-
   return (
     <div style={T.card}>
-      <div style={{ ...T.tiny, margin: '0 0 10px' }}>Если арендатор прислал фото счётчиков в чат — впишите значения здесь сами: учёт и расчёты не прервутся.</div>
+      <div style={T.h2}>Показания за этот месяц</div>
+      <div style={{ ...T.tiny, margin: '0 0 10px' }}>Если арендатор прислал фото счётчиков в чат — впишите значения сами, чтобы учёт и расчёты не прерывались.</div>
+
       {meters.map((m, i) => {
         const t = types.find(x => x.id === m.meter_type_id)
         const rd = reads[m.id]
+        const title = `${t?.label || 'Счётчик'}${m.label ? ` · № ${m.label}` : ''}`
+        const noReading = !rd
+        const incomplete = rd && rd.status === 'incomplete'
+        const confirmed = rd && rd.status === 'confirmed'
+        const source = rd ? (rd.entered_by ? 'внёс арендодатель' : 'от арендатора') : ''
         return (
           <div key={m.id}>
             {i > 0 && <div style={hair} />}
             <div style={{ padding: '10px 0' }}>
-              <div style={{ fontSize: 15, fontWeight: 600 }}>{t?.label || 'Счётчик'}{m.label ? ` · № ${m.label}` : ''}</div>
-              {!rd && inputRow(m)}
-              {rd && rd.status === 'incomplete' && inputRow(m, `последние от арендатора: ${rd.value} — отмечены неполными`)}
-              {rd && rd.status !== 'incomplete' && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginTop: 4 }}>
-                  <span style={{ fontSize: 15 }}>Значение: <b>{rd.value}</b>{rd.entered_by ? ' · внёс арендодатель' : ' · арендатор'}</span>
-                  {rd.status === 'confirmed' ? (
-                    <span style={{ fontSize: 13, color: '#1e7e34', fontWeight: 600 }}>подтверждены</span>
-                  ) : (
-                    <span style={{ display: 'flex', gap: 12 }}>
-                      <button style={iosRed} onClick={() => setStatus(rd.id, 'incomplete')}>не полностью</button>
-                      <button style={iosBlue} onClick={() => setStatus(rd.id, 'confirmed')}>Подтвердить</button>
+              {noReading && (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+                    <span style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f' }}>{title}</span>
+                    <input
+                      value={vals[m.id] || ''}
+                      onChange={(e) => setVals(prev => ({ ...prev, [m.id]: e.target.value }))}
+                      placeholder="0"
+                      style={rightInput}
+                      inputMode="decimal"
+                    />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+                    <span style={{ fontSize: 13, color: '#8e8e93' }}>показаний ещё нет</span>
+                    <button style={actBlue} onClick={() => enterValue(m.id)}>Внести по фото</button>
+                  </div>
+                </>
+              )}
+              {incomplete && (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+                    <span style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f' }}>{title}</span>
+                    <input
+                      value={vals[m.id] || ''}
+                      onChange={(e) => setVals(prev => ({ ...prev, [m.id]: e.target.value }))}
+                      placeholder="исправить"
+                      style={rightInput}
+                      inputMode="decimal"
+                    />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+                    <span style={{ fontSize: 13, color: '#ff3b30' }}>арендатор · {rd.value} — отмечены неполными</span>
+                    <button style={actBlue} onClick={() => enterValue(m.id)}>Внести</button>
+                  </div>
+                </>
+              )}
+              {rd && !incomplete && (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+                    <span style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f' }}>{title}</span>
+                    <span style={valMoney}>{rd.value}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+                    <span style={{
+                      fontSize: 13,
+                      color: confirmed ? '#1e7e34' : '#8e8e93',
+                    }}>
+                      {source}{confirmed ? ' · подтверждены' : ' · ожидают'}
                     </span>
-                  )}
-                </div>
+                    {!confirmed && (
+                      <span style={{ display: 'flex', gap: 12, flexShrink: 0 }}>
+                        <button style={actRed} onClick={() => setStatus(rd.id, 'incomplete')}>не полностью</button>
+                        <button style={actBlue} onClick={() => setStatus(rd.id, 'confirmed')}>Подтвердить</button>
+                      </span>
+                    )}
+                  </div>
+                </>
               )}
             </div>
           </div>
