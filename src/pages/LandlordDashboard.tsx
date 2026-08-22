@@ -88,8 +88,9 @@ export function LandlordDashboard() {
   const [archDelOpen, setArchDelOpen] = useState(false)
   const [archivePays, setArchivePays] = useState<any[]>([])
   const [archiveFrozen, setArchiveFrozen] = useState<any[]>([])
-  const [hasPro, setHasPro] = useState(false)
+  const [showTeam, setShowTeam] = useState(false)
 
+  // Совместный доступ: виден при активном Pro ИЛИ если номер в списке «Доступ» (admin/tester)
   useEffect(() => {
     if (!user) return
     ;(async () => {
@@ -101,7 +102,11 @@ export function LandlordDashboard() {
       const { data: s } = await supabase.from('subscriptions').select('until_date').eq('owner_id', owner).order('until_date', { ascending: false }).maybeSingle()
       const today = new Date()
       const todayS = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-      setHasPro(!!(s && s.until_date >= todayS))
+      const pro = !!(s && s.until_date >= todayS)
+      const dig = (v: string) => (v || '').replace(/\D/g, '').slice(-10)
+      const { data: ac } = await supabase.from('access_control').select('phone, role')
+      const priv = (ac || []).some((r: any) => (r.role === 'admin' || r.role === 'tester') && dig(r.phone) === dig(user.phone || ''))
+      setShowTeam(pro || priv)
     })()
   }, [user, teamId])
 
@@ -756,7 +761,7 @@ export function LandlordDashboard() {
         <div style={T.card}>
           <ObjectAdd />
         </div>
-        {hasPro && <TeamManager />}
+        {showTeam && <TeamManager />}
         {archived.length > 0 && (
           <div style={T.card}>
             <button
