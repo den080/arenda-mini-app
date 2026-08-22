@@ -16,8 +16,9 @@ export async function ensureNextPayment(contractId: string) {
   const nextPeriod = new Date(periodDate.getFullYear(), periodDate.getMonth() + 1, 1)
   const nextISO = toISO(nextPeriod)
   if (pays.some(p => toISO(parsePeriod(p.period)) === nextISO)) return
-  const payDay = Number(con.payment_day) || 1
-  const due = new Date(nextPeriod.getFullYear(), nextPeriod.getMonth(), payDay)
+    const payDay = Number(con.payment_day) || 1
+  const lastDay = new Date(nextPeriod.getFullYear(), nextPeriod.getMonth() + 1, 0).getDate()
+  const due = new Date(nextPeriod.getFullYear(), nextPeriod.getMonth(), Math.min(Math.max(1, payDay), lastDay))
   const today = new Date()
   const todayMid = new Date(today.getFullYear(), today.getMonth(), today.getDate())
   const daysToDue = Math.round((due.getTime() - todayMid.getTime()) / 86400000)
