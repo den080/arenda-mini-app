@@ -31,7 +31,7 @@ function flush() {
   if (!queue.length) return
   const rows = queue
   queue = []
-  supabase.from('analytics_events').insert(rows).then(() => {}).catch(() => {})
+  supabase.from('analytics_events').insert(rows).then(() => {}, () => {})
 }
 
 function send(event: string, screen: string | null, meta: any) {
