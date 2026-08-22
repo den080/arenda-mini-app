@@ -9,22 +9,17 @@ import AuthGate from './components/AuthGate'
 import { Toaster, showToast } from './components/ui'
 import { C } from './theme'
 
-const GLOBAL_CSS = `
-  button:active { opacity: 0.55; }
-  select { min-width: 0; }
-  button:disabled { opacity: 0.6; }
-`
+const GLOBAL_CSS = `button:active { opacity: 0.55; } select { min-width: 0; } button:disabled { opacity: 0.6; }`
 
 // ========== ЗАГЛУШКА ==========
 const LOCKDOWN = true
-
 const ALLOWED_IDS = ['28606967']
 const ALLOWED_PHONES = ['+79057674225', '+77475885016', '+79651947084', '+79999110921', '+79063190766']
 const OWNER_PHONE = '+79057674225'
 // ==============================
 
 function normPhone(v: string): string {
-  let c = (v || '').replace(/[\s\-\(\)]/g, '')
+  let c = (v || '').replace(/[\s-()]/g, '')
   if (c.startsWith('8') && c.length === 11) c = '+7' + c.slice(1)
   if (c && !c.startsWith('+')) c = '+' + c
   return c
@@ -109,7 +104,6 @@ function AppInner() {
   }
 
   if (loading) return <div style={st.wrap}>Загрузка...</div>
-
   if (accessDenied) {
     return (
       <div style={{ ...st.wrap, textAlign: 'center', paddingTop: 60 }}>
@@ -120,7 +114,6 @@ function AppInner() {
       </div>
     )
   }
-
   if (!user) {
     return (
       <div style={st.wrap}>
@@ -144,28 +137,19 @@ function AppInner() {
       <style>{GLOBAL_CSS}</style>
       <Toaster />
       <div style={st.topbar}>
-        {isTester ? (
-          <>
-            <button style={mode === 'tenant' ? st.segActive : st.seg} onClick={() => { setMode('tenant'); setAdminMode(false) }}>Арендатор</button>
-            <button style={mode === 'landlord' ? st.segActive : st.seg} onClick={() => { setMode('landlord'); setAdminMode(false) }}>Арендодатель</button>
-            <button style={st.seg} onClick={logout}>Выйти</button>
-          </>
-        ) : (
-          <>
-            <div style={st.segActive}>{mode === 'landlord' ? 'Арендодатель' : 'Арендатор'}</div>
-            <button style={st.seg} onClick={logout}>Выйти</button>
-          </>
+        <button style={mode === 'tenant' ? st.segActive : st.seg} onClick={() => { setMode('tenant'); setAdminMode(false) }}>Арендатор</button>
+        <button style={mode === 'landlord' ? st.segActive : st.seg} onClick={() => { setMode('landlord'); setAdminMode(false) }}>Арендодатель</button>
+        {isTester && (
+          <button style={st.seg} onClick={logout}>Выйти</button>
         )}
         <FeedbackButton />
         {isOwner && (
           <button style={adminMode ? st.segActive : st.seg} onClick={openAdmin}>{adminMode ? 'В приложение' : 'Админка'}</button>
         )}
       </div>
-
       {adminMode && isOwner && adminUnlocked
         ? <AdminDashboard />
         : mode === 'landlord' ? <LandlordDashboard /> : <TenantDashboard />}
-
       {pinOpen && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: '#fff', borderRadius: 14, padding: 20, width: '100%', maxWidth: 320 }}>
