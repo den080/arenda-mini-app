@@ -6,7 +6,7 @@ import BillUploader from '../components/BillUploader'
 import { ensureNextPayment } from '../lib/nextPayment'
 import Chat from '../components/Chat'
 import { setAnalyticsUser, trackOpen, trackScreen } from '../lib/analytics'
-import { BottomNav, PromptNumber, Progress, showToast } from '../components/ui'
+import { BottomNav, Progress, showToast } from '../components/ui'
 import { T } from '../theme'
 
 interface PayDetail { type: 'card' | 'sbp'; bank: string; number: string }
