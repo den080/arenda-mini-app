@@ -1,7 +1,7 @@
 import { supabase } from './supabase'
 
-// Следующий месячный счёт появляется за 7 дней до его срока оплаты
-// (и только если текущий счёт подтверждён арендодателем)
+// Следующий месячный счёт создаётся сразу после подтверждения текущего.
+// Вперёд всегда существует только один открытый счёт.
 export async function ensureNextPayment(contractId: string) {
   const { data: pays } = await supabase
     .from('payments').select('*')
@@ -16,13 +16,9 @@ export async function ensureNextPayment(contractId: string) {
   const nextPeriod = new Date(periodDate.getFullYear(), periodDate.getMonth() + 1, 1)
   const nextISO = toISO(nextPeriod)
   if (pays.some(p => toISO(parsePeriod(p.period)) === nextISO)) return
-    const payDay = Number(con.payment_day) || 1
+  const payDay = Number(con.payment_day) || 1
   const lastDay = new Date(nextPeriod.getFullYear(), nextPeriod.getMonth() + 1, 0).getDate()
   const due = new Date(nextPeriod.getFullYear(), nextPeriod.getMonth(), Math.min(Math.max(1, payDay), lastDay))
-  const today = new Date()
-  const todayMid = new Date(today.getFullYear(), today.getMonth(), today.getDate())
-  const daysToDue = Math.round((due.getTime() - todayMid.getTime()) / 86400000)
-  if (daysToDue > 7) return
   await supabase.from('payments').insert({
     contract_id: contractId,
     period: nextISO,
