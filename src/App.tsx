@@ -11,12 +11,7 @@ import { C } from './theme'
 
 const GLOBAL_CSS = `button:active { opacity: 0.55; } select { min-width: 0; } button:disabled { opacity: 0.6; }`
 
-// ========== ЗАГЛУШКА (вход в закрытую бету) ==========
 const LOCKDOWN = true
-const ALLOWED_IDS = ['28606967']
-const ALLOWED_PHONES = ['+79057674225', '+77475885016', '+79651947084', '+79999110921', '+79063190766']
-const OWNER_PHONE = '+79057674225'
-// =====================================================
 
 function normPhone(v: string): string {
   let c = (v || '').replace(/[\s-()]/g, '')
@@ -25,13 +20,7 @@ function normPhone(v: string): string {
   return c
 }
 
-function isAllowed(v: string): boolean {
-  const t = v.trim()
-  if (ALLOWED_IDS.includes(t)) return true
-  return ALLOWED_PHONES.includes(normPhone(t))
-}
-
-export { LOCKDOWN, ALLOWED_IDS, ALLOWED_PHONES, isAllowed, normPhone }
+export { LOCKDOWN, normPhone }
 
 function AppInner() {
   const { user, loading, error, loginWithId, logout, accessDenied } = useTelegramUser()
@@ -45,17 +34,19 @@ function AppInner() {
   const [accessList, setAccessList] = useState<any[]>([])
   const [accessLoading, setAccessLoading] = useState(true)
 
-  // Роли (tester/admin) берутся из таблицы access_control — управляется в Админке → «Доступ»
   useEffect(() => {
-    supabase.from('access_control').select('*').then(({ data }) => {
-      setAccessList(data || [])
-      setAccessLoading(false)
-    }).catch(() => setAccessLoading(false))
+    supabase.from('access_control').select('*').then(
+      ({ data }) => {
+        setAccessList(data || [])
+        setAccessLoading(false)
+      },
+      () => setAccessLoading(false)
+    )
   }, [])
 
   const userPhone = normPhone(user?.phone || '')
   const isTester = !!user && accessList.some(a => (a.role === 'tester' || a.role === 'admin') && normPhone(a.phone) === userPhone)
-  const isOwner = (!!user && accessList.some(a => a.role === 'admin' && normPhone(a.phone) === userPhone)) || (!!user && userPhone === normPhone(OWNER_PHONE))
+  const isOwner = !!user && accessList.some(a => a.role === 'admin' && normPhone(a.phone) === userPhone)
 
   useEffect(() => {
     const tg = (window as any).Telegram?.WebApp
@@ -75,9 +66,12 @@ function AppInner() {
   useEffect(() => {
     if (!user) { setMode(null); return }
     if (mode !== null) return
-    supabase.from('contracts').select('id').eq('tenant_id', user.id).eq('status', 'active').limit(1).then(({ data }) => {
-      setMode(data && data.length > 0 ? 'tenant' : 'landlord')
-    })
+    supabase.from('contracts').select('id').eq('tenant_id', user.id).eq('status', 'active').limit(1).then(
+      ({ data }) => {
+        setMode(data && data.length > 0 ? 'tenant' : 'landlord')
+      },
+      () => {}
+    )
   }, [user])
 
   function tryLogin() {
