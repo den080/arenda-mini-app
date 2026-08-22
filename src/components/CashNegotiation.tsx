@@ -147,7 +147,7 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
       })
       if (error) { showToast('Ошибка: ' + error.message); return }
       setDate(''); setFrom('08:50'); setTo('09:50')
-      showToast('✅ Окно добавлено')
+      showToast('✅ Окно встречи добавлено')
       window.dispatchEvent(new Event('rentflow-refresh'))
     } finally {
       setBusy(false)
@@ -157,7 +157,7 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
   async function removeWindow(id: string) {
     await supabase.from('cash_meetings').delete().eq('parent_id', id)
     await supabase.from('cash_meetings').delete().eq('id', id)
-    showToast('Окно удалено')
+    showToast('Окно встречи удалено')
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
 
@@ -165,11 +165,11 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
     if (busy) return
     const s = sub[w.id] || { from: '', to: '' }
     if (!s.from || !s.to || s.from >= s.to) {
-      showToast('Выберите время начала и окончания внутри окна')
+      showToast('Выберите время начала и окончания внутри окна встречи')
       return
     }
     if (s.from < w.time_from || s.to > w.time_to) {
-      showToast(`Время должно быть внутри окна ${w.time_from}–${w.time_to}`)
+      showToast(`Время должно быть внутри окна встречи ${w.time_from}–${w.time_to}`)
       return
     }
     setBusy(true)
@@ -227,7 +227,7 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
         <div style={{ ...S.row, borderBottom: 'none', paddingBottom: 0 }}>
           <div style={{ minWidth: 0 }}>
             <div style={S.label}>{fmtDate(w.meeting_date)}</div>
-            <div style={S.sub}>окно {w.time_from}–{w.time_to}</div>
+            <div style={S.sub}>окно встречи {w.time_from}–{w.time_to}</div>
           </div>
         </div>
         <div style={S.sep} />
@@ -250,7 +250,7 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
         </div>
         <div style={S.sep} />
         <div style={S.actionRow}>
-        <button style={S.blue} disabled={busy} onClick={() => propose(w, resched && confirmed ? confirmed.id : undefined)}>{resched ? 'Перенести встречу' : 'Беру это окно'}</button>
+          <button style={S.blue} disabled={busy} onClick={() => propose(w, resched && confirmed ? confirmed.id : undefined)}>{resched ? 'Перенести встречу' : 'Беру это окно встречи'}</button>
         </div>
       </div>
     )
@@ -273,7 +273,6 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
           {!canResched && <div style={{ ...S.foot, margin: '0 0 8px' }}>Перенос возможен не позже чем за 24 ч до встречи — дальше только по договорённости по телефону.</div>}
         </div>
       )}
-
       {cashWarning && D && (
         pauseActive ? (
           <div style={T.note}>Штраф приостановлен до встречи {fmtDate(confirmed?.meeting_date)}: встреча в пределах 3 дней после срока оплаты. Если встреча пройдёт без оплаты — штраф начислится с {D.toLocaleDateString('ru-RU')} полностью. Переключение на безналичную оплату также вернёт штраф за пропущенные дни.</div>
@@ -281,20 +280,18 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
           <div style={T.note}>Согласована встреча для оплаты наличными: {fmtDate(confirmed?.meeting_date)}. До получения оплаты штраф начисляется по обычным правилам. Переключение на безналичную оплату не отменяет начисленный штраф за пропущенные дни.</div>
         )
       )}
-
       {resched && !firstMonthActive && (
         <>
           <div style={S.head}>Новое время</div>
-          {windows.length === 0 && <div style={S.foot}>Нет открытых окон — добавьте новое ниже.</div>}
+          {windows.length === 0 && <div style={S.foot}>Нет открытых окон встречи — добавьте новое ниже.</div>}
           {windowPicker(windows)}
         </>
       )}
-
       {!resched && !firstMonthActive && (
         <>
-          <div style={S.head}>Мои окна</div>
+          <div style={S.head}>Мои окна встречи</div>
           <div style={S.card}>
-            {myWindows.length === 0 && <div style={{ ...S.row, fontSize: 14, color: '#8e8e93' }}>Пока нет — добавьте окно ниже</div>}
+            {myWindows.length === 0 && <div style={{ ...S.row, fontSize: 14, color: '#8e8e93' }}>Пока нет окон встречи — добавьте ниже</div>}
             {myWindows.map((w, i) => (
               <div key={w.id}>
                 {i > 0 && <div style={S.sep} />}
@@ -303,7 +300,7 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
                     <div style={S.label}>{fmtDate(w.meeting_date)}</div>
                     <div style={S.sub}>{w.time_from}–{w.time_to}</div>
                   </div>
-                 <button style={{ ...S.red, marginRight: 16 }} onClick={() => removeWindow(w.id)}>удалить</button>
+                  <button style={{ ...S.red, marginRight: 16 }} onClick={() => removeWindow(w.id)}>удалить</button>
                 </div>
               </div>
             ))}
@@ -322,16 +319,14 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
             {timeRow('Окончание', to, setTo, TIME_OPTIONS)}
             <div style={S.sep} />
             <div style={S.actionRow}>
-              <button style={S.blue} disabled={busy} onClick={addWindow}>Добавить окно</button>
+              <button style={S.blue} disabled={busy} onClick={addWindow}>Добавить окно встречи</button>
             </div>
           </div>
-
-          <div style={S.head}>Окна второй стороны</div>
-          {theirWindows.length === 0 && <div style={S.foot}>Вторая сторона ещё не добавила окна.</div>}
+          <div style={S.head}>Окна встречи второй стороны</div>
+          {theirWindows.length === 0 && <div style={S.foot}>Вторая сторона ещё не добавила окна встречи.</div>}
           {windowPicker(theirWindows)}
         </>
       )}
-
       {!firstMonthActive && incoming.length > 0 && (
         <>
           <div style={S.head}>Ждут подтверждения</div>
@@ -352,7 +347,6 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
           </div>
         </>
       )}
-
       {!firstMonthActive && myProposals.length > 0 && (
         <>
           <div style={S.head}>Мои заявки</div>
@@ -372,7 +366,6 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
           </div>
         </>
       )}
-
       <div style={S.foot}>Место встречи по умолчанию — арендуемый объект, если не обсуждалось иное.</div>
     </div>
   )
