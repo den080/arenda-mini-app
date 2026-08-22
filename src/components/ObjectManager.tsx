@@ -348,6 +348,19 @@ export function ObjectAdd() {
 
   async function checkLimit(): Promise<boolean> {
     if (!user) return false
+    // Админы и тестеры — безлимит
+    const userPhone = (user.phone || '').replace(/\s-()/g, '')
+    const normUser = userPhone.startsWith('+') ? userPhone : (userPhone ? '+' + userPhone : '')
+    const { data: ac } = await supabase.from('access_control')
+      .select('phone, role')
+      .in('role', ['tester', 'admin'])
+    const isPrivileged = (ac || []).some((r: any) => {
+      const rp = (r.phone || '').replace(/\s-()/g, '')
+      const normRp = rp.startsWith('+') ? rp : (rp ? '+' + rp : '')
+      return normRp === normUser
+    })
+    if (isPrivileged) return true
+    // Обычные пользователи — лимит 1 объект без Pro
     const { data: s } = await supabase.from('subscriptions').select('until_date').eq('owner_id', user.id).order('until_date', { ascending: false }).maybeSingle()
     const hasPro = s && s.until_date >= iso(new Date())
     if (hasPro) return true
