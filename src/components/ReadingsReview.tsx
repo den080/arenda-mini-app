@@ -7,7 +7,6 @@ import { showToast } from './ui'
 const actBlue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 14, fontWeight: 600, cursor: 'pointer', padding: 4, flexShrink: 0 }
 const actRed: React.CSSProperties = { border: 'none', background: 'transparent', color: '#ff3b30', fontSize: 14, cursor: 'pointer', padding: 4, flexShrink: 0 }
 const valMoney: React.CSSProperties = { fontSize: 16, fontWeight: 600, color: '#1d1d1f', whiteSpace: 'nowrap' }
-
 const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProperties
 const rightInput: React.CSSProperties = { width: 150, border: 'none', outline: 'none', background: 'rgba(120,120,128,0.08)', borderRadius: 8, padding: '8px 10px', fontSize: 16, fontWeight: 600, textAlign: 'right', color: '#1d1d1f', boxSizing: 'border-box' }
 
@@ -16,11 +15,14 @@ export function ReadingsReview({ contractId, tenantId }: { contractId: string; t
   const [meters, setMeters] = useState<any[]>([])
   const [types, setTypes] = useState<any[]>([])
   const [reads, setReads] = useState<Record<string, any>>({})
+  const [prevReads, setPrevReads] = useState<Record<string, any>>({})
   const [vals, setVals] = useState<Record<string, string>>({})
   const [ready, setReady] = useState(false)
 
   const now = new Date()
   const period = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+  const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  const prevPeriod = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}-01`
 
   async function load() {
     const { data: contract } = await supabase.from('contracts').select('object_id').eq('id', contractId).maybeSingle()
@@ -28,7 +30,7 @@ export function ReadingsReview({ contractId, tenantId }: { contractId: string; t
     const [mRes, tRes, rRes] = await Promise.all([
       supabase.from('object_meters').select('*').eq('object_id', contract.object_id).eq('is_active', true),
       supabase.from('meter_types').select('*'),
-      supabase.from('meter_readings').select('*').eq('contract_id', contractId).eq('period', period).order('submitted_at', { ascending: false }),
+      supabase.from('meter_readings').select('*').eq('contract_id', contractId).in('period', [period, prevPeriod]).order('submitted_at', { ascending: false }),
     ])
     const list = (mRes.data || []) as any[]
     const typesList = (tRes.data || []) as any[]
@@ -42,8 +44,13 @@ export function ReadingsReview({ contractId, tenantId }: { contractId: string; t
     setMeters(list)
     setTypes(typesList)
     const map: Record<string, any> = {}
-    for (const rd of readings) if (!map[rd.object_meter_id]) map[rd.object_meter_id] = rd
+    const pmap: Record<string, any> = {}
+    for (const rd of readings) {
+      if (rd.period === period) { if (!map[rd.object_meter_id]) map[rd.object_meter_id] = rd }
+      else { if (!pmap[rd.object_meter_id]) pmap[rd.object_meter_id] = rd }
+    }
     setReads(map)
+    setPrevReads(pmap)
     setReady(true)
   }
 
@@ -92,6 +99,8 @@ export function ReadingsReview({ contractId, tenantId }: { contractId: string; t
       {meters.map((m, i) => {
         const t = types.find(x => x.id === m.meter_type_id)
         const rd = reads[m.id]
+        const pv = prevReads[m.id]?.value
+        const prevLabel = pv != null ? `прошлый мес: ${pv}` : 'прошлого месяца нет'
         const title = `${t?.label || 'Счётчик'}${m.label ? ` · № ${m.label}` : ''}`
         const noReading = !rd
         const incomplete = rd && rd.status === 'incomplete'
@@ -114,7 +123,7 @@ export function ReadingsReview({ contractId, tenantId }: { contractId: string; t
                     />
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
-                    <span style={{ fontSize: 13, color: '#8e8e93' }}>показаний ещё нет</span>
+                    <span style={{ fontSize: 13, color: '#8e8e93' }}>{prevLabel} · показаний ещё нет</span>
                     <button style={actBlue} onClick={() => enterValue(m.id)}>Внести по фото</button>
                   </div>
                 </>
@@ -132,7 +141,7 @@ export function ReadingsReview({ contractId, tenantId }: { contractId: string; t
                     />
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
-                    <span style={{ fontSize: 13, color: '#ff3b30' }}>арендатор · {rd.value} — отмечены неполными</span>
+                    <span style={{ fontSize: 13, color: '#8e8e93' }}>{prevLabel} · <span style={{ color: '#ff3b30' }}>{rd.value} — отмечены неполными</span></span>
                     <button style={actBlue} onClick={() => enterValue(m.id)}>Внести</button>
                   </div>
                 </>
@@ -144,11 +153,8 @@ export function ReadingsReview({ contractId, tenantId }: { contractId: string; t
                     <span style={valMoney}>{rd.value}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
-                    <span style={{
-                      fontSize: 13,
-                      color: confirmed ? '#1e7e34' : '#8e8e93',
-                    }}>
-                      {source}{confirmed ? ' · подтверждены' : ' · ожидают'}
+                    <span style={{ fontSize: 13, color: '#8e8e93' }}>
+                      {prevLabel} · {source} · <span style={{ color: confirmed ? '#1e7e34' : '#8e8e93' }}>{confirmed ? 'подтверждены' : 'ожидают'}</span>
                     </span>
                     {!confirmed && (
                       <span style={{ display: 'flex', gap: 12, flexShrink: 0 }}>
