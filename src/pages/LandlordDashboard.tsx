@@ -796,7 +796,7 @@ export function LandlordDashboard() {
           )}
           {contract && current.paymentId && !current.payment?.confirmed_by_landlord && !firstMonthPending && (
             <div style={T.card}>
-              <div style={T.h2}>Подтверждение оплаты</div>
+             <div style={T.h2}>Подтверждение оплаты · {pcMonth}</div>
               {pcPaid > 0 && (
                 <div style={T.row}>
                   <span style={iosMuted}>Получено</span>
@@ -835,7 +835,7 @@ export function LandlordDashboard() {
               {!current.payment?.card_claimed && !current.hasConfirmedCashMeeting && (
                 <>
                   <div style={{ ...T.tiny, margin: '10px 0 6px' }}>Арендатор не отмечал оплату в приложении? Если деньги получены наличными или переводом напрямую — подтвердите здесь, заявка арендатора не нужна.</div>
-                  <button style={T.btn} onClick={() => { setPayConfirmOk(false); setPayConfirm({ kind: 'full' }) }}>{pcPaid > 0 ? `Подтвердить получение остатка (${Math.max(0, pcSum - pcPaid).toFixed(0)} ₽)` : 'Получил оплату вне приложения'}</button>
+                                     <button style={T.btn} onClick={() => { setPayConfirmOk(false); setPayConfirm({ kind: 'full' }) }}>{pcPaid > 0 ? `Подтвердить получение остатка за ${pcMonth} (${Math.max(0, pcSum - pcPaid).toFixed(0)} ₽)` : `Получил оплату за ${pcMonth} вне приложения`}</button>
                 </>
               )}
               <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 4px' }}>
