@@ -69,9 +69,10 @@ export function ReadingsReview({ contractId, tenantId }: { contractId: string; t
     load()
   }
 
-  async function enterValue(meterId: string) {
+  async function enterValue(meterId: string, ref: number | null) {
     const v = Number(String(vals[meterId] || '').replace(',', '.'))
     if (isNaN(v) || v <= 0) { showToast('Введите значение показания'); return }
+    if (ref != null && v < ref) { showToast(`Значение не может быть меньше предыдущего (${ref})`); return }
     const { error } = await supabase.from('meter_readings').insert({
       object_meter_id: meterId, contract_id: contractId, value: v, period,
       submitted_at: new Date().toISOString(), status: 'confirmed', entered_by: user!.id,
@@ -99,8 +100,11 @@ export function ReadingsReview({ contractId, tenantId }: { contractId: string; t
       {meters.map((m, i) => {
         const t = types.find(x => x.id === m.meter_type_id)
         const rd = reads[m.id]
-        const pv = prevReads[m.id]?.value
-        const prevLabel = pv != null ? `прошлый мес: ${pv}` : 'прошлого месяца нет'
+        const prevRaw = prevReads[m.id]?.value
+        const refVal = prevRaw != null ? Number(prevRaw) : (m.initial_value != null ? Number(m.initial_value) : null)
+        const prevLabel = prevRaw != null
+          ? `прошлый мес: ${prevRaw}`
+          : (m.initial_value != null ? `стартовые: ${Number(m.initial_value).toFixed(0)}` : 'прошлого месяца нет')
         const title = `${t?.label || 'Счётчик'}${m.label ? ` · № ${m.label}` : ''}`
         const noReading = !rd
         const incomplete = rd && rd.status === 'incomplete'
@@ -124,7 +128,7 @@ export function ReadingsReview({ contractId, tenantId }: { contractId: string; t
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
                     <span style={{ fontSize: 13, color: '#8e8e93' }}>{prevLabel} · показаний ещё нет</span>
-                    <button style={actBlue} onClick={() => enterValue(m.id)}>Внести по фото</button>
+                    <button style={actBlue} onClick={() => enterValue(m.id, refVal)}>Внести по фото</button>
                   </div>
                 </>
               )}
@@ -142,7 +146,7 @@ export function ReadingsReview({ contractId, tenantId }: { contractId: string; t
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
                     <span style={{ fontSize: 13, color: '#8e8e93' }}>{prevLabel} · <span style={{ color: '#ff3b30' }}>{rd.value} — отмечены неполными</span></span>
-                    <button style={actBlue} onClick={() => enterValue(m.id)}>Внести</button>
+                    <button style={actBlue} onClick={() => enterValue(m.id, refVal)}>Внести</button>
                   </div>
                 </>
               )}
