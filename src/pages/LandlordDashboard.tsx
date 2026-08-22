@@ -50,6 +50,11 @@ function isFirstPeriod(period: any, sd: Date | null): boolean {
   return p.getMonth() === sd.getMonth() && p.getFullYear() === sd.getFullYear()
 }
 
+function clampDay(y: number, m: number, d: number): number {
+  const last = new Date(y, m + 1, 0).getDate()
+  return Math.min(Math.max(1, d), last)
+}
+
 const OBJ_TABS = [
   { id: 'pay', l: 'Оплата' },
   { id: 'meters', l: 'Счётчики' },
@@ -241,7 +246,7 @@ export function LandlordDashboard() {
             const periodDate = parseDate(payment.period)
             const nm = periodDate.getMonth() + 1
             const ny = periodDate.getFullYear() + Math.floor(nm / 12)
-            const nextDue = new Date(ny, nm % 12, Math.min(Math.max(1, contract.payment_day || 1), new Date(ny, (nm % 12) + 1, 0).getDate()))
+            const nextDue = new Date(ny, nm % 12, clampDay(ny, nm % 12, contract.payment_day || 1))
             const daysLeft = Math.round((nextDue.getTime() - todayMid.getTime()) / 86400000)
             if (daysLeft < 0) { statusDetail = `Платёж просрочен на ${-daysLeft} дн. (${nextDue.toLocaleDateString('ru-RU')})`; statusColor = '#c00' }
             else if (daysLeft === 0) { statusDetail = `Сегодня последний день оплаты (${nextDue.toLocaleDateString('ru-RU')})`; statusColor = '#a80' }
@@ -266,6 +271,7 @@ export function LandlordDashboard() {
     const interval = setInterval(() => fetchData(), 30000)
     return () => { window.removeEventListener('rentflow-refresh', onRefresh); clearInterval(interval) }
   }, [user, teamId])
+
   useEffect(() => {
     if (user) { setAnalyticsUser(user); trackOpen('landlord') }
   }, [user])
@@ -361,7 +367,7 @@ export function LandlordDashboard() {
       const { data: lastp } = await supabase.from('payments').select('*').eq('contract_id', contract.id).order('period', { ascending: false }).limit(1)
       const base = lastp && lastp[0] ? parseDate(lastp[0].period) : parseDate((contract as any).start_date || new Date().toISOString())
       const nextPeriod = new Date(base.getFullYear(), base.getMonth() + 1, 1)
-      const due = new Date(nextPeriod.getFullYear(), nextPeriod.getMonth(), Math.min(Math.max(1, Number(contract.payment_day) || 1), new Date(nextPeriod.getFullYear(), nextPeriod.getMonth() + 1, 0).getDate()))
+      const due = new Date(nextPeriod.getFullYear(), nextPeriod.getMonth(), clampDay(nextPeriod.getFullYear(), nextPeriod.getMonth(), Number(contract.payment_day) || 1))
       const { error } = await supabase.from('payments').insert({
         contract_id: contract.id, period: toISO(nextPeriod), due_date: toISO(due),
         base_amount: Number(contract.rent_amount) || 0, penalty_amount: 0, utilities_amount: amount,
@@ -584,6 +590,7 @@ export function LandlordDashboard() {
   const arch = archived.find(a => a.id === archiveId) || null
   const archSd = arch?.start_date ? parseDate(arch.start_date) : null
   const archSettlement = (arch as any)?.settlement || {}
+
   if (userLoading || loading) return <div style={T.page}>Загрузка…</div>
   if (error) return <div style={T.page}><div style={T.card}>{error}</div></div>
 
@@ -751,6 +758,7 @@ export function LandlordDashboard() {
       </div>
     )
   }
+
   return (
     <div style={{ ...T.page, paddingBottom: 90 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 0 8px' }}>
@@ -803,12 +811,12 @@ export function LandlordDashboard() {
                       )
                       : <span style={iosMuted}>не заявлена</span>}
               </div>
-                        {!current.payment?.card_claimed && !current.hasConfirmedCashMeeting && (
-            <>
-              <div style={{ ...T.tiny, margin: '10px 0 6px' }}>Арендатор не отмечал оплату в приложении? Если деньги получены наличными или переводом напрямую — подтвердите здесь, заявка арендатора не нужна.</div>
-              <button style={T.btn} onClick={() => { setPayConfirmOk(false); setPayConfirm({ kind: 'full' }) }}>{pcPaid > 0 ? `Подтвердить получение остатка (${Math.max(0, pcSum - pcPaid).toFixed(0)} ₽)` : 'Получил оплату вне приложения'}</button>
-            </>
-          )}
+              {!current.payment?.card_claimed && !current.hasConfirmedCashMeeting && (
+                <>
+                  <div style={{ ...T.tiny, margin: '10px 0 6px' }}>Арендатор не отмечал оплату в приложении? Если деньги получены наличными или переводом напрямую — подтвердите здесь, заявка арендатора не нужна.</div>
+                  <button style={T.btn} onClick={() => { setPayConfirmOk(false); setPayConfirm({ kind: 'full' }) }}>{pcPaid > 0 ? `Подтвердить получение остатка (${Math.max(0, pcSum - pcPaid).toFixed(0)} ₽)` : 'Получил оплату вне приложения'}</button>
+                </>
+              )}
               <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 4px' }}>
                 <button style={actBlue} onClick={() => setReceiptOpen(true)}>Учесть частичную оплату</button>
               </div>
@@ -1093,5 +1101,3 @@ export function LandlordDashboard() {
 }
 
 export default LandlordDashboard
-
-
