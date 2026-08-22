@@ -7,15 +7,14 @@ import { Modal, showToast, Toaster } from './ui'
 const inp: React.CSSProperties = { width: '100%', padding: '12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box', outline: 'none' }
 
 const POLICY = `ПОЛИТИКА КОНФИДЕНЦИАЛЬНОСТИ (кратко)
-
-1. Оператор: владелец сервиса Roomio (самозанятый, РФ).
-2. Состав данных: имя, номер телефона, e-mail, адреса арендуемых/сдаваемых объектов, суммы аренды и депозитов, показания счётчиков, история платежей и действий в приложении.
-3. Цели: организация расчётов между арендодателем и арендатором, уведомления, поддержка работы сервиса.
-4. Хранение: защищённая облачная база данных; доступ имеют только вы и ваш контрагент по договору, а также владелец сервиса для технической поддержки.
-5. Передача третьим лицам: не осуществляется, кроме случаев, требуемых законом.
-6. Срок: до удаления аккаунта или договора из системы.
-7. Ваши права: запросить, изменить, удалить данные — через владельца сервиса (кнопка «Обратная связь» или по контакту в приложении).
-8. Согласие даётся проставлением галочки при входе и может быть отозвано письменно.`
+Оператор: владелец сервиса Roomio (самозанятый, РФ).
+Состав данных: имя, номер телефона, e-mail, адреса арендуемых/сдаваемых объектов, суммы аренды и депозитов, показания счётчиков, история платежей и действий в приложении.
+Цели: организация расчётов между арендодателем и арендатором, уведомления, поддержка работы сервиса.
+Хранение: защищённая облачная база данных; доступ имеют только вы и ваш контрагент по договору, а также владелец сервиса для технической поддержки.
+Передача третьим лицам: не осуществляется, кроме случаев, требуемых законом.
+Срок: до удаления аккаунта или договора из системы.
+Ваши права: запросить, изменить, удалить данные — через владельца сервиса (кнопка «Обратная связь» или по контакту в приложении).
+Согласие даётся проставлением галочки при входе и может быть отозвано письменно.`
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const { user } = useTelegramUser()
@@ -29,10 +28,23 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setHasSession(!!data.session)
+    ;(async () => {
+      // Локальная сессия может быть устаревшей (пользователя удалили) —
+      // проверяем на сервере и принудительно разлогиниваем.
+      const { data } = await supabase.auth.getSession()
+      if (data.session) {
+        const { error } = await supabase.auth.getUser()
+        if (error) {
+          await supabase.auth.signOut()
+          setHasSession(false)
+        } else {
+          setHasSession(true)
+        }
+      } else {
+        setHasSession(false)
+      }
       setReady(true)
-    })
+    })()
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setHasSession(!!s))
     return () => sub.subscription.unsubscribe()
   }, [])
@@ -55,9 +67,9 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     if (!consent) { showToast('Нужно согласие на обработку данных'); return }
     if (!/^\S+@\S+\.\S+$/.test(email.trim())) { showToast('Проверьте e-mail'); return }
     setBusy(true)
-   const { error } = await supabase.auth.signInWithOtp({ email: email.trim() })
+    const { error } = await supabase.auth.signInWithOtp({ email: email.trim() })
     setBusy(false)
-       if (error) { showToast(`Ошибка ${error.status ?? ''} ${error.code ?? ''}: ${error.message || 'без сообщения'}`); return }
+    if (error) { showToast(`Ошибка ${error.status ?? ''} ${error.code ?? ''}: ${error.message || 'без сообщения'}`); return }
     setStage('code')
     showToast('Код отправлен на ' + email.trim())
   }
@@ -72,7 +84,6 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   }
 
   if (!ready) return <div style={T.page}>Загрузка…</div>
-
   if (hasSession) return <>{children}</>
 
   return (
@@ -81,7 +92,6 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       <div style={T.card}>
         <div style={{ fontSize: 22, fontWeight: 800, marginBottom: 6 }}>Вход в Roomio</div>
         <div style={{ ...T.small, margin: '0 0 14px' }}>Код придёт на e-mail. Аккаунт привяжется к вашему профилю автоматически.</div>
-
         {stage === 'email' ? (
           <>
             <input style={inp} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@mail.ru" inputMode="email" autoComplete="email" />
@@ -104,11 +114,10 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
                 Другой e-mail
               </button>
             </div>
-           <div style={{ ...T.tiny, margin: '10px 0 0', textAlign: 'center' }}>Письмо могло попасть в «Спам» — проверьте папку.<br />Пришла ссылка вместо кода? Закройте приложение полностью и откройте заново.</div>
+            <div style={{ ...T.tiny, margin: '10px 0 0', textAlign: 'center' }}>Письмо могло попасть в «Спам» — проверьте папку.</div>
           </>
         )}
       </div>
-
       <Modal open={policyOpen} title="Политика конфиденциальности" onClose={() => setPolicyOpen(false)}>
         <div style={{ whiteSpace: 'pre-wrap', fontSize: 13, lineHeight: 1.5, maxHeight: '60vh', overflowY: 'auto' }}>{POLICY}</div>
       </Modal>
