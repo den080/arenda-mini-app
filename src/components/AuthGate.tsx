@@ -29,8 +29,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     ;(async () => {
-      // Локальная сессия может быть устаревшей (пользователя удалили) —
-      // проверяем на сервере и принудительно разлогиниваем.
+      // Локальная сессия может быть устаревшей (аккаунт удалили) — проверяем на сервере
       const { data } = await supabase.auth.getSession()
       if (data.session) {
         const { error } = await supabase.auth.getUser()
@@ -77,9 +76,16 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   async function verify() {
     if (code.trim().length < 4) { showToast('Введите код из письма'); return }
     setBusy(true)
-    const { error } = await supabase.auth.verifyOtp({ email: email.trim(), token: code.trim(), type: 'email' })
+    // Письмо могло уйти по любому из шаблонов — пробуем все типы кода
+    const types: Array<'email' | 'signup' | 'magiclink'> = ['email', 'signup', 'magiclink']
+    let lastErr: any = null
+    for (const t of types) {
+      const { error } = await supabase.auth.verifyOtp({ email: email.trim(), token: code.trim(), type: t })
+      if (!error) { lastErr = null; break }
+      lastErr = error
+    }
     setBusy(false)
-    if (error) { showToast('Неверный код: ' + error.message); return }
+    if (lastErr) { showToast('Неверный код: ' + lastErr.message); return }
     showToast('✅ Вход выполнен')
   }
 
