@@ -803,9 +803,12 @@ export function LandlordDashboard() {
                       )
                       : <span style={iosMuted}>не заявлена</span>}
               </div>
-              {!current.payment?.card_claimed && !current.hasConfirmedCashMeeting && (
-                <button style={T.btn} onClick={() => { setPayConfirmOk(false); setPayConfirm({ kind: 'full' }) }}>{pcPaid > 0 ? `Подтвердить получение остатка (${Math.max(0, pcSum - pcPaid).toFixed(0)} ₽)` : 'Подтвердить получение оплаты'}</button>
-              )}
+                        {!current.payment?.card_claimed && !current.hasConfirmedCashMeeting && (
+            <>
+              <div style={{ ...T.tiny, margin: '10px 0 6px' }}>Арендатор не отмечал оплату в приложении? Если деньги получены наличными или переводом напрямую — подтвердите здесь, заявка арендатора не нужна.</div>
+              <button style={T.btn} onClick={() => { setPayConfirmOk(false); setPayConfirm({ kind: 'full' }) }}>{pcPaid > 0 ? `Подтвердить получение остатка (${Math.max(0, pcSum - pcPaid).toFixed(0)} ₽)` : 'Получил оплату вне приложения'}</button>
+            </>
+          )}
               <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 4px' }}>
                 <button style={actBlue} onClick={() => setReceiptOpen(true)}>Учесть частичную оплату</button>
               </div>
