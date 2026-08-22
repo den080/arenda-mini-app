@@ -29,6 +29,11 @@ function formatPhoneDisplay(v: string): string {
   return v || ''
 }
 
+function clampDay(y: number, m: number, d: number): number {
+  const last = new Date(y, m + 1, 0).getDate()
+  return Math.min(Math.max(1, d), last)
+}
+
 const TABS = [
   { id: 'pay', l: 'Оплата' },
   { id: 'meters', l: 'Счётчики' },
@@ -391,7 +396,9 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
       else { statusChip = T.chipGreen; statusText = `До оплаты ${daysUntilDue} дн.` }
     } else {
       const periodDate = parseDate(payment.period)
-      const nextDue = new Date(periodDate.getFullYear(), periodDate.getMonth() + 1, contract.payment_day || 1)
+            const nm = periodDate.getMonth() + 1
+      const ny = periodDate.getFullYear() + Math.floor(nm / 12)
+      const nextDue = new Date(ny, nm % 12, clampDay(ny, nm % 12, contract.payment_day || 1))
       const daysLeft = Math.round((nextDue.getTime() - todayMid.getTime()) / 86400000)
       if (daysLeft < 0) { statusChip = T.chipRed; statusText = `Следующий платёж просрочен на ${-daysLeft} дн.` }
       else if (daysLeft === 0) { statusChip = T.chipOrange; statusText = 'Следующая оплата: сегодня последний день' }
