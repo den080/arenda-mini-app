@@ -6,7 +6,6 @@ import { ensureNextPayment } from '../lib/nextPayment'
 import { T } from '../theme'
 import { ConfirmDelete, Modal, showToast } from './ui'
 
-const BANKS = ['Сбербанк', 'Т-Банк (Тинькофф)', 'ВТБ', 'Альфа-Банк', 'Газпромбанк', 'Россельхозбанк', 'Райффайзен Банк', 'Росбанк', 'Открытие', 'Совкомбанк', 'МТС Банк', 'Промсвязьбанк', 'Почта Банк', 'Дом.РФ', 'ЮниКредит Банк']
 const OWNER_PHONE = '+79057674225'
 const PRO_PRICE = 299
 const SBP_PHONE = '+7 905 767-42-25'
@@ -268,9 +267,12 @@ function DetailsEditor({ list, onChange }: { list: PayDetail[]; onChange: (v: Pa
               <option value="card">Карта банка</option>
               <option value="sbp">СБП по телефону</option>
             </select>
-            <select value={d.bank} onChange={e => { const v = [...list]; v[i] = { ...v[i], bank: e.target.value }; onChange(v) }} style={{ ...S.sel, flex: 1 }}>
-              {BANKS.map(b => <option key={b} value={b}>{b}</option>)}
-            </select>
+            <input
+              value={d.bank}
+              onChange={e => { const v = [...list]; v[i] = { ...v[i], bank: e.target.value }; onChange(v) }}
+              placeholder="Название банка"
+              style={{ ...S.inp, flex: 1, borderBottom: 'none', background: 'rgba(120,120,128,0.08)', borderRadius: 8, padding: '9px 10px' }}
+            />
           </div>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 8 }}>
             <input
@@ -285,7 +287,7 @@ function DetailsEditor({ list, onChange }: { list: PayDetail[]; onChange: (v: Pa
         </div>
       ))}
       <div style={{ padding: '10px 0' }}>
-        <button style={S.blue} onClick={() => onChange([...list, { type: 'sbp', bank: BANKS[0], number: '' }])}>+ Добавить способ оплаты</button>
+        <button style={S.blue} onClick={() => onChange([...list, { type: 'sbp', bank: '', number: '' }])}>+ Добавить способ оплаты</button>
       </div>
     </div>
   )
@@ -348,19 +350,12 @@ export function ObjectAdd() {
 
   async function checkLimit(): Promise<boolean> {
     if (!user) return false
-    // Админы и тестеры — безлимит
-    const userPhone = (user.phone || '').replace(/\s-()/g, '')
-    const normUser = userPhone.startsWith('+') ? userPhone : (userPhone ? '+' + userPhone : '')
-    const { data: ac } = await supabase.from('access_control')
-      .select('phone, role')
-      .in('role', ['tester', 'admin'])
-    const isPrivileged = (ac || []).some((r: any) => {
-      const rp = (r.phone || '').replace(/\s-()/g, '')
-      const normRp = rp.startsWith('+') ? rp : (rp ? '+' + rp : '')
-      return normRp === normUser
-    })
+    // Админы и тестеры из «Доступ» — безлимит
+    const dig = (v: string) => (v || '').replace(/\D/g, '').slice(-10)
+    const { data: ac } = await supabase.from('access_control').select('phone, role').in('role', ['tester', 'admin'])
+    const isPrivileged = (ac || []).some((r: any) => dig(r.phone) === dig(user.phone || ''))
     if (isPrivileged) return true
-    // Обычные пользователи — лимит 1 объект без Pro
+    // Обычные пользователи — Pro или 1 объект
     const { data: s } = await supabase.from('subscriptions').select('until_date').eq('owner_id', user.id).order('until_date', { ascending: false }).maybeSingle()
     const hasPro = s && s.until_date >= iso(new Date())
     if (hasPro) return true
@@ -398,6 +393,7 @@ export function ObjectAdd() {
     if (endDate && pdate(endDate) <= pdate(startDate || iso(new Date()))) { showToast('Окончание договора должно быть позже начала'); return }
     if (method !== 'cash') {
       for (const d of details) {
+        if (!d.bank || !d.bank.trim()) { showToast('Укажите название банка в способах оплаты'); return }
         const dg = (d.number || '').replace(/\D/g, '')
         if (d.type === 'card' ? dg.length !== 16 : dg.length !== 11) { showToast('Проверьте номер карты или СБП в способах оплаты'); return }
       }
@@ -532,7 +528,7 @@ export function ObjectAdd() {
           <select style={S.sel} value={method} onChange={(e) => setMethod(e.target.value)}>{methodOptions}</select>
           {method !== 'cash' && (
             <div>
-              <div style={S.lab}>Способы оплаты (карты банков и СБП) *</div>
+              <div style={S.lab}>Способы оплаты (карта или СБП) *</div>
               <DetailsEditor list={details} onChange={(v) => { setDetails(v); if (v.length > 0) setAddDetailsErr(null) }} />
               {addDetailsErr && <div style={T.noteRed}>{addDetailsErr}</div>}
             </div>
@@ -693,6 +689,7 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
     if (eStartDate && eEndDate && pdate(eEndDate) <= pdate(eStartDate)) { showToast('Окончание договора должно быть позже начала'); return }
     if (eMethod !== 'cash') {
       for (const d of eDetails) {
+        if (!d.bank || !d.bank.trim()) { showToast('Укажите название банка в способах оплаты'); return }
         const dg = (d.number || '').replace(/\D/g, '')
         if (d.type === 'card' ? dg.length !== 16 : dg.length !== 11) { showToast('Проверьте номер карты или СБП в способах оплаты'); return }
       }
@@ -801,7 +798,7 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
       <select style={S.sel} value={eMethod} onChange={(e) => setEMethod(e.target.value)}>{methodOptions}</select>
       {eMethod !== 'cash' && (
         <div>
-          <div style={S.lab}>Способы оплаты (карты банков и СБП) *</div>
+          <div style={S.lab}>Способы оплаты (карта или СБП) *</div>
           <DetailsEditor list={eDetails} onChange={(v) => { setEDetails(v); if (v.length > 0) setEditDetailsErr(null) }} />
           {editDetailsErr && <div style={T.noteRed}>{editDetailsErr}</div>}
         </div>
