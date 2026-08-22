@@ -56,6 +56,7 @@ export function AdminDashboard() {
   const [feedbacks, setFeedbacks] = useState<any[]>([])
   const [events, setEvents] = useState<any[]>([])
   const [analytics, setAnalytics] = useState<any[]>([])
+  const [openLogins, setOpenLogins] = useState<Record<string, boolean>>({})
   const [loading, setLoading] = useState(true)
 
   async function load() {
@@ -122,6 +123,16 @@ export function AdminDashboard() {
   const opens = analytics.filter(a => a.event === 'open')
   const screenEvents = analytics.filter(a => a.event === 'screen')
   const errorEvents = analytics.filter(a => a.event === 'error')
+
+  const loginGroups = (() => {
+    const g: Record<string, any> = {}
+    for (const a of opens) {
+      const key = a.user_id || a.phone || 'anon'
+      if (!g[key]) g[key] = { name: a.user_name || '—', phone: a.phone || '', role: a.role || '—', items: [] as any[] }
+      g[key].items.push(a)
+    }
+    return Object.entries(g).sort((x, y) => y[1].items.length - x[1].items.length)
+  })()
 
   const screenAgg: Record<string, { sec: number; count: number; users: Set<string> }> = {}
   for (const s of screenEvents) {
@@ -215,17 +226,41 @@ export function AdminDashboard() {
 
       {tab === 'analytics' && (
         <>
-          <div style={secHead}>Входы в приложение</div>
+          <div style={secHead}>Входы в приложение · по пользователям</div>
           <div style={T.card}>
-            {opens.length === 0 && <div style={{ ...muted, padding: '8px 0' }}>Пока нет входов с аналитикой.</div>}
-            {opens.slice(0, 30).map((a, i) => (
-              <div key={a.id} style={i === 0 ? last : row}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f' }}>{a.user_name || '—'} · {a.phone || ''}</div>
-                  <div style={muted}>{fmtDate(a.created_at)} · {deviceLabel(a.meta)} · роль: {a.role || '—'}</div>
+            {loginGroups.length === 0 && <div style={{ ...muted, padding: '8px 0' }}>Пока нет входов с аналитикой.</div>}
+            {loginGroups.map(([key, g], i) => {
+              const expanded = !!openLogins[key]
+              const lastAt = g.items[0]?.created_at
+              return (
+                <div key={key} style={{ padding: '10px 0', borderBottom: i === loginGroups.length - 1 ? 'none' : '1px solid rgba(60,60,67,0.12)' }}>
+                  <button
+                    onClick={() => setOpenLogins({ ...openLogins, [key]: !expanded })}
+                    style={{ display: 'flex', width: '100%', border: 'none', background: 'transparent', cursor: 'pointer', padding: 0, textAlign: 'left', alignItems: 'center', gap: 8 }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f' }}>{g.name} · {g.phone}</div>
+                      <div style={muted}>входов: {g.items.length} · последний: {lastAt ? fmtDate(lastAt) : '—'} · роль: {g.role}</div>
+                    </div>
+                    <span style={{ color: '#0071e3', fontSize: 14, fontWeight: 600, flexShrink: 0 }}>{expanded ? '▲' : '▼'}</span>
+                  </button>
+                  {expanded && (
+                    <div style={{ paddingTop: 6 }}>
+                      {g.items.slice(0, 50).map((a: any) => (
+                        <div key={a.id} style={{ padding: '6px 0 6px 12px', borderTop: '1px solid rgba(60,60,67,0.08)' }}>
+                          <div style={{ fontSize: 14, fontWeight: 500, color: '#1d1d1f' }}>{fmtDate(a.created_at)}</div>
+                          <div style={muted}>
+                            {deviceLabel(a.meta)}
+                            {a.meta?.tg_version ? ` · Telegram ${a.meta.tg_version}` : ''}
+                            {a.meta?.lang ? ` · ${a.meta.lang}` : ''}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
 
           <div style={secHead}>Время на экранах</div>
