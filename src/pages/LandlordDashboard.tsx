@@ -88,6 +88,22 @@ export function LandlordDashboard() {
   const [archDelOpen, setArchDelOpen] = useState(false)
   const [archivePays, setArchivePays] = useState<any[]>([])
   const [archiveFrozen, setArchiveFrozen] = useState<any[]>([])
+  const [hasPro, setHasPro] = useState(false)
+
+  useEffect(() => {
+    if (!user) return
+    ;(async () => {
+      let owner = user.id
+      if (teamId) {
+        const { data: t } = await supabase.from('teams').select('owner_id').eq('id', teamId).maybeSingle()
+        if (t) owner = t.owner_id
+      }
+      const { data: s } = await supabase.from('subscriptions').select('until_date').eq('owner_id', owner).order('until_date', { ascending: false }).maybeSingle()
+      const today = new Date()
+      const todayS = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+      setHasPro(!!(s && s.until_date >= todayS))
+    })()
+  }, [user, teamId])
 
   useEffect(() => {
     if (!archiveId) return
@@ -740,7 +756,7 @@ export function LandlordDashboard() {
         <div style={T.card}>
           <ObjectAdd />
         </div>
-        <TeamManager />
+        {hasPro && <TeamManager />}
         {archived.length > 0 && (
           <div style={T.card}>
             <button
