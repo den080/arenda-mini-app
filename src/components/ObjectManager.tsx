@@ -762,7 +762,6 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
       <div style={S.lab}>Заметка</div>
       <input style={S.inp} value={eNotes} onChange={(e) => setENotes(e.target.value)} />
       <div style={S.lab}>Арендатор (имя)</div>
-      
       <input style={S.inp} value={eName} onChange={(e) => setEName(e.target.value)} />
       <div style={S.lab}>Телефон арендатора</div>
       <input style={S.inp} value={ePhone} onChange={(e) => setEPhone(formatPhoneInput(e.target.value))} inputMode="tel" />
@@ -770,6 +769,7 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
       <input style={locked ? S.inpLocked : S.inp} type="date" value={eStartDate} disabled={locked} onChange={(e) => { const v = e.target.value; setEStartDate(v); const d = Number(v.slice(8, 10)); if (d >= 1 && d <= 31) setEPaymentDay(String(d)) }} />
       <div style={S.lab}>Сумма аренды, руб</div>
       <input style={locked ? S.inpLocked : S.inp} value={eRent} disabled={locked} onChange={(e) => setERent(e.target.value)} inputMode="numeric" />
+      {!locked && <div style={{ ...T.tiny, margin: '4px 0 0' }}>Новая аренда действует со следующего счёта.</div>}
       <div style={S.lab}>Залоговый депозит, руб</div>
       <input style={locked ? S.inpLocked : S.inp} value={eDeposit} disabled={locked} onChange={(e) => setEDeposit(e.target.value)} inputMode="numeric" />
       <div style={S.lab}>День платежа</div>
