@@ -258,13 +258,22 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
     load()
   }
 
-  async function submitMeters() {
+    async function submitMeters() {
     if (!data) return
     const period = new Date().toISOString().slice(0, 7) + '-01'
     const rows: any[] = []
     for (const m of data.meters) {
       const v = vals[m.id]
-      if (v) rows.push({ object_meter_id: m.id, contract_id: contract.id, value: Number(v), period, submitted_at: new Date().toISOString(), status: 'proposed' })
+      if (!v) continue
+      const hist = (data.readingsByMeter || {})[m.id] || []
+      const ref = hist.length ? Number(hist[0].value) : (m.initial_value != null ? Number(m.initial_value) : null)
+      const num = Number(String(v).replace(',', '.'))
+      if (ref != null && (isNaN(num) || num < ref)) {
+        const label = data.meterTypes.find((x: any) => x.id === m.meter_type_id)?.label || 'Счётчик'
+        showToast(`«${label}»: значение не может быть меньше предыдущего (${ref})`)
+        return
+      }
+      rows.push({ object_meter_id: m.id, contract_id: contract.id, value: num, period, submitted_at: new Date().toISOString(), status: 'proposed' })
     }
     if (rows.length === 0) { showToast('Введите показания счётчиков'); return }
     const { error: e } = await supabase.from('meter_readings').insert(rows)
