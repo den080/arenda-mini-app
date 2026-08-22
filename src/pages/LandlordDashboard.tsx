@@ -110,7 +110,6 @@ export function LandlordDashboard() {
         const todayMid = new Date(today.getFullYear(), today.getMonth(), today.getDate())
         const currentMonth = today.getMonth()
         const currentYear = today.getFullYear()
-
         const [notifRes, objRes] = await Promise.all([
           supabase.from('notifications_log').select('*').eq('user_id', user!.id).order('sent_at', { ascending: false }).limit(5),
           supabase.from('objects').select('*').eq(teamId ? 'team_id' : 'landlord_id', (teamId || user!.id) as string),
@@ -118,7 +117,6 @@ export function LandlordDashboard() {
         if (notifRes.data) setNotifications(notifRes.data)
         const objectsData = objRes.data
         if (!objectsData || objectsData.length === 0) { setObjects([]); setHistory([]); setLoading(false); return }
-
         const objIds = objectsData.map((o: any) => o.id)
         const { data: contractsData } = await supabase
           .from('contracts').select('*, tenant:users!tenant_id(full_name, phone)')
@@ -126,17 +124,14 @@ export function LandlordDashboard() {
         const contractByObj: Record<string, any> = {}
         for (const c of contractsData || []) contractByObj[c.object_id] = c
         const contractIds = (contractsData || []).map((c: any) => c.id)
-
         const { data: archData } = await supabase
           .from('contracts').select('*, object:objects(id, address), tenant:users(full_name, phone)')
           .in('object_id', objIds).eq('status', 'terminated')
           .order('terminated_at', { ascending: false })
         setArchived(archData || [])
-
         if (contractIds.length) {
           await Promise.all(contractIds.map((id: string) => ensureNextPayment(id).catch(() => {})))
         }
-
         const [paysRes, dReqRes, fRowsRes, meetRes, readRes] = await Promise.all([
           supabase.from('payments').select('*').in('contract_id', contractIds).order('period', { ascending: false }),
           supabase.from('deferred_requests').select('*').in('contract_id', contractIds).eq('status', 'proposed'),
@@ -146,7 +141,17 @@ export function LandlordDashboard() {
             .gte('submitted_at', new Date(currentYear, currentMonth, 1).toISOString())
             .lt('submitted_at', new Date(currentYear, currentMonth + 1, 1).toISOString()),
         ])
-
+        const periodISO = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`
+        let rulesBy: Record<string, any[]> = {}
+        let readPeriodBy: Record<string, any[]> = {}
+        if (contractIds.length) {
+          const [rulesRes, readPeriodRes] = await Promise.all([
+            supabase.from('penalty_rules').select('*').in('contract_id', contractIds),
+            supabase.from('meter_readings').select('contract_id, period, status, submitted_at').in('contract_id', contractIds).eq('period', periodISO),
+          ])
+          for (const r of rulesRes.data || []) { (rulesBy[r.contract_id] = rulesBy[r.contract_id] || []).push(r) }
+          for (const r of readPeriodRes.data || []) { (readPeriodBy[r.contract_id] = readPeriodBy[r.contract_id] || []).push(r) }
+        }
         const paysBy: Record<string, any[]> = {}
         for (const p of paysRes.data || []) { (paysBy[p.contract_id] = paysBy[p.contract_id] || []).push(p) }
         const dReqBy: Record<string, any[]> = {}
@@ -157,7 +162,6 @@ export function LandlordDashboard() {
         for (const m of meetRes.data || []) if (!meetBy[m.contract_id]) meetBy[m.contract_id] = m
         const readCountBy: Record<string, number> = {}
         for (const r of readRes.data || []) readCountBy[r.contract_id] = (readCountBy[r.contract_id] || 0) + 1
-
         const objectsWithStatus: ObjectWithStatus[] = []
         const allHistory: any[] = []
         for (const obj of objectsData) {
@@ -168,6 +172,39 @@ export function LandlordDashboard() {
           const allPays = paysBy[contract.id] || []
           for (const p of allPays) allHistory.push({ ...p, objId: obj.id, address: obj.address })
           const fRows = fRowsBy[contract.id] || []
+          // ===== Штраф за просрочку показаний: начисление в замороженные (уменьшает депозит) =====
+          if (readingsMode === 'manual' && contract.meter_deadline_day) {
+            const rr = (rulesBy[contract.id] || []).find((r: any) => r.violation_type === 'readings_overdue')
+            const rRate = rr ? Number(rr.rate) || 0 : 0
+            if (rRate > 0) {
+              const deadline = new Date(currentYear, currentMonth, Number(contract.meter_deadline_day))
+              if (todayMid > deadline) {
+                const periodReads = readPeriodBy[contract.id] || []
+                const confirmed = periodReads.some((r: any) => r.status === 'confirmed')
+                if (!confirmed) {
+                  let endT = todayMid.getTime()
+                  if (periodReads.length) {
+                    const firstSub = Math.min(...periodReads.map((r: any) => parseDate(String(r.submitted_at).slice(0, 10)).getTime()))
+                    endT = Math.min(firstSub, endT)
+                  }
+                  const daysLate = Math.round((endT - deadline.getTime()) / 86400000)
+                  const amount = Math.max(0, daysLate) * rRate
+                  const isReadingsRow = (f: any) => String(f.note || '').includes('показаний')
+                  const existing = fRows.find((f: any) => f.period === periodISO && isReadingsRow(f))
+                  const wasAdjusted = fRows.some((f: any) => f.period === periodISO && isReadingsRow(f) && f.adjusted_at)
+                  if (amount > 0 && !existing && !wasAdjusted) {
+                    await supabase.from('frozen_penalties').insert({
+                      contract_id: contract.id, payment_id: null, period: periodISO,
+                      amount, original_amount: amount, note: 'штраф за просрочку показаний',
+                    })
+                  } else if (existing && !existing.adjusted_at && Number(existing.amount) !== amount) {
+                    await supabase.from('frozen_penalties').update({ amount }).eq('id', existing.id)
+                  }
+                }
+              }
+            }
+          }
+          // ===== конец блока =====
           const frozenTotal = fRows.reduce((s2: number, d: any) => s2 + Number(d.amount || 0), 0)
           const openPays = allPays.filter((p: any) => !p.confirmed_by_landlord)
           const payment = openPays.length ? openPays[openPays.length - 1] : allPays[0]
@@ -202,7 +239,9 @@ export function LandlordDashboard() {
           } else {
             status = 'paid'
             const periodDate = parseDate(payment.period)
-            const nextDue = new Date(periodDate.getFullYear(), periodDate.getMonth() + 1, contract.payment_day || 1)
+            const nm = periodDate.getMonth() + 1
+            const ny = periodDate.getFullYear() + Math.floor(nm / 12)
+            const nextDue = new Date(ny, nm % 12, Math.min(Math.max(1, contract.payment_day || 1), new Date(ny, (nm % 12) + 1, 0).getDate()))
             const daysLeft = Math.round((nextDue.getTime() - todayMid.getTime()) / 86400000)
             if (daysLeft < 0) { statusDetail = `Платёж просрочен на ${-daysLeft} дн. (${nextDue.toLocaleDateString('ru-RU')})`; statusColor = '#c00' }
             else if (daysLeft === 0) { statusDetail = `Сегодня последний день оплаты (${nextDue.toLocaleDateString('ru-RU')})`; statusColor = '#a80' }
@@ -227,7 +266,6 @@ export function LandlordDashboard() {
     const interval = setInterval(() => fetchData(), 30000)
     return () => { window.removeEventListener('rentflow-refresh', onRefresh); clearInterval(interval) }
   }, [user, teamId])
-
   useEffect(() => {
     if (user) { setAnalyticsUser(user); trackOpen('landlord') }
   }, [user])
@@ -323,7 +361,7 @@ export function LandlordDashboard() {
       const { data: lastp } = await supabase.from('payments').select('*').eq('contract_id', contract.id).order('period', { ascending: false }).limit(1)
       const base = lastp && lastp[0] ? parseDate(lastp[0].period) : parseDate((contract as any).start_date || new Date().toISOString())
       const nextPeriod = new Date(base.getFullYear(), base.getMonth() + 1, 1)
-      const due = new Date(nextPeriod.getFullYear(), nextPeriod.getMonth(), Number(contract.payment_day) || 1)
+      const due = new Date(nextPeriod.getFullYear(), nextPeriod.getMonth(), Math.min(Math.max(1, Number(contract.payment_day) || 1), new Date(nextPeriod.getFullYear(), nextPeriod.getMonth() + 1, 0).getDate()))
       const { error } = await supabase.from('payments').insert({
         contract_id: contract.id, period: toISO(nextPeriod), due_date: toISO(due),
         base_amount: Number(contract.rent_amount) || 0, penalty_amount: 0, utilities_amount: amount,
@@ -537,19 +575,15 @@ export function LandlordDashboard() {
   const showUtilities = !!(contract && current?.paymentId && current.readingsMode !== 'self' && (openPay ? !firstMonthCurrent : lastConfirmedIsFirst))
   const tenantChoseCash = contract && (contract.payment_method === 'cash' || (contract.payment_method === 'both' && (contract as any).tenant_pay_method === 'cash'))
   const objHistory = history.filter(h => h.objId === current?.id).slice(0, 10)
-
   const pcPay = current?.payment
   const pcMonth = pcPay ? new Date(pcPay.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : ''
   const pcSum = pcPay ? Number(pcPay.base_amount || 0) + Number(pcPay.penalty_amount || 0) + Number(pcPay.utilities_amount || 0) : 0
   const pcPaid = Number(pcPay?.paid_amount || 0)
-
   const payBadge = !!((current?.payment && !current.payment.confirmed_by_landlord) || firstMonthPending)
   const metersBadge = !!current?.waitingForReadings
-
   const arch = archived.find(a => a.id === archiveId) || null
   const archSd = arch?.start_date ? parseDate(arch.start_date) : null
   const archSettlement = (arch as any)?.settlement || {}
-
   if (userLoading || loading) return <div style={T.page}>Загрузка…</div>
   if (error) return <div style={T.page}><div style={T.card}>{error}</div></div>
 
@@ -560,7 +594,6 @@ export function LandlordDashboard() {
           <button style={iosBlue} onClick={() => setArchiveId(null)}>← Архив договоров</button>
         </div>
         <h1 style={T.h1}>{arch.object?.address || 'Объект'}</h1>
-
         <div style={T.card}>
           <div style={T.h2}>Договор завершён · архив</div>
           <div style={T.row}><span style={iosMuted}>Арендатор</span><span style={valText}>{arch.tenant?.full_name || '—'}</span></div>
@@ -578,7 +611,6 @@ export function LandlordDashboard() {
             </span>
           </div>
         </div>
-
         <div style={T.card}>
           <div style={T.h2}>История платежей</div>
           {archivePays.length === 0 && <div style={{ ...T.small, margin: '8px 0' }}>Платежей нет.</div>}
@@ -603,7 +635,6 @@ export function LandlordDashboard() {
             )
           })}
         </div>
-
         {archiveFrozen.length > 0 && (
           <div style={T.card}>
             <div style={T.h2}>Замороженные штрафы</div>
@@ -619,11 +650,9 @@ export function LandlordDashboard() {
             <div style={T.tiny}>Записи хранятся постоянно — это ваша защита при спорах и в суде.</div>
           </div>
         )}
-
         <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0' }}>
           <button style={iosRed} onClick={() => setArchDelOpen(true)}>Удалить из архива</button>
         </div>
-
         <ConfirmDelete
           open={archDelOpen}
           text="Договор и вся его история (платежи, штрафы, расчёт при съезде) будут удалены безвозвратно."
@@ -678,7 +707,6 @@ export function LandlordDashboard() {
             ))}
           </div>
         )}
-
         <div style={secHead}>Объекты</div>
         {objects.length === 0 && (
           <div style={T.card}><div style={{ ...T.small, margin: '8px 0' }}>Пока нет объектов — добавьте первый.</div></div>
@@ -705,9 +733,7 @@ export function LandlordDashboard() {
         <div style={T.card}>
           <ObjectAdd />
         </div>
-
         <TeamManager />
-
         {archived.length > 0 && (
           <div style={T.card}>
             <button
@@ -725,14 +751,12 @@ export function LandlordDashboard() {
       </div>
     )
   }
-
   return (
     <div style={{ ...T.page, paddingBottom: 90 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 0 8px' }}>
         <button style={iosBlue} onClick={() => setOpenId(null)}>← Мои объекты</button>
       </div>
       <h1 style={T.h1}>{current.address}</h1>
-
       {tab === 'pay' && (
         <>
           {contract && firstMonthPending && (
@@ -741,7 +765,6 @@ export function LandlordDashboard() {
               <button style={T.btn} onClick={() => confirmSigning(current.paymentId!)}>Подтвердить: первый месяц получен при подписании</button>
             </div>
           )}
-
           {contract && current.paymentId && !current.payment?.confirmed_by_landlord && !firstMonthPending && (
             <div style={T.card}>
               <div style={T.h2}>Подтверждение оплаты</div>
@@ -788,7 +811,6 @@ export function LandlordDashboard() {
               </div>
             </div>
           )}
-
           {showUtilities && (
             <div style={T.card}>
               <div style={T.h2}>Ресурсы по квитанции</div>
@@ -809,14 +831,12 @@ export function LandlordDashboard() {
               <div style={{ ...T.tiny, margin: '0 0 10px' }}>Введённая сумма записывается как есть (заменяет предыдущую), добавляется к платежу отдельно, не растёт при просрочке и не входит в штрафы.</div>
             </div>
           )}
-
           {current.readingsMode === 'self' && contract && (
             <div>
               <div style={secHead}>Квитанции</div>
               <BillReview contractId={contract.id} tenantId={contract.tenant_id} />
             </div>
           )}
-
           {contract && ((current.deferredRequests || []).length > 0 || ((current.penaltyAmount || 0) > 0 && !current.payment?.confirmed_by_landlord)) && (
             <div style={T.card}>
               <div style={T.h2}>Штраф текущего платежа</div>
@@ -834,7 +854,6 @@ export function LandlordDashboard() {
               )}
             </div>
           )}
-
           {contract && tenantChoseCash && (
             <div>
               <div style={secHead}>Оплата наличными</div>
@@ -846,7 +865,6 @@ export function LandlordDashboard() {
               />
             </div>
           )}
-
           <div style={T.card}>
             <div style={T.h2}>История платежей</div>
             {objHistory.length === 0 ? (
@@ -882,7 +900,6 @@ export function LandlordDashboard() {
           </div>
         </>
       )}
-
       {tab === 'meters' && (
         <>
           {current.readingsMode === 'manual' && contract && (
@@ -895,11 +912,9 @@ export function LandlordDashboard() {
           <MetersEditor objId={current.id} />
         </>
       )}
-
       {tab === 'contract' && !contract && (
         <ObjectEdit objectId={current.id} />
       )}
-
       {tab === 'contract' && contract && (
         <>
           <div style={T.card}>
@@ -911,7 +926,7 @@ export function LandlordDashboard() {
             )}
             <div style={T.row}><span style={iosMuted}>Аренда</span><span style={valMoney}>{Number(contract.rent_amount).toFixed(0)} ₽/мес</span></div>
             {(contract as any).amendment_at && (
-              <div style={T.row}><span style={iosMuted}>Допсоглашение</span><span style={valText}>{Number(contract.rent_amount).toFixed(0)} ₽ с {(contract as any).amendment_from ? new Date((contract as any).amendment_from).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : new Date((contract as any).amendment_at).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}</span></div>
+              <div style={T.row}><span style={iosMuted}>Допсоглашение</span><span style={valText}>{Number(contract.rent_amount).toFixed(0)} ₽ с {(contract as any).amendment_from ? new Date((contract as any).amendment_from).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : new Date((contract as any).amendment_at).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })} · со следующего счёта</span></div>
             )}
             {contractBalance > 0 && (
               <div style={T.row}><span style={iosMuted}>Баланс (переплата)</span><span style={valMoney}>{contractBalance.toFixed(0)} ₽</span></div>
@@ -927,10 +942,8 @@ export function LandlordDashboard() {
               </div>
             )}
           </div>
-
           <div style={secHead}>Экстренные контакты</div>
           <ContactsEditor objId={current.id} />
-
           <div style={T.card}>
             <div style={T.h2}>Способ оплаты</div>
             {[
@@ -951,7 +964,6 @@ export function LandlordDashboard() {
             ))}
             {contract.payment_method === 'both' && <div style={T.tiny}>Способ оплаты выбирает арендатор: карта или наличные.</div>}
           </div>
-
           <div style={T.card}>
             <div style={T.h2}>Замороженные штрафы</div>
             {(current.frozenRows || []).length === 0 && <div style={{ ...T.small, margin: '8px 0' }}>Замороженных штрафов нет</div>}
@@ -977,30 +989,24 @@ export function LandlordDashboard() {
             )}
             <div style={T.tiny}>Записи не удаляются до конца договора; каждое изменение сохраняется с примечанием и датой.</div>
           </div>
-
           {contract.status === 'active' && (
             <>
               <div style={secHead}>Допсоглашение</div>
               <AmendmentWizard contractId={contract.id} tenantId={contract.tenant_id} />
-
               <div style={secHead}>Завершение договора</div>
               <TerminationWizard contractId={contract.id} />
             </>
           )}
-
           <ObjectEdit objectId={current.id} />
         </>
       )}
-
       {tab === 'chat' && contract && (
         <div style={T.card}>
           <div style={T.h2}>Чат с арендатором</div>
           <Chat contractId={contract.id} myId={user!.id} />
         </div>
       )}
-
       <BottomNav tabs={OBJ_TABS} tab={tab} setTab={setTab} badges={{ pay: payBadge, meters: metersBadge }} />
-
       <Modal open={!!payConfirm} title="Подтверждение оплаты" onClose={() => setPayConfirm(null)}>
         <div style={{ fontSize: 14, color: '#555', marginBottom: 12 }}>
           Счёт за {pcMonth} на {pcSum.toFixed(0)} ₽.{' '}
@@ -1028,7 +1034,6 @@ export function LandlordDashboard() {
           <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 15, cursor: 'pointer' }} onClick={() => setPayConfirm(null)}>Отмена</button>
         </div>
       </Modal>
-
       <Modal open={!!receiptFor} title="Расписка" onClose={() => setReceiptFor(null)}>
         <div style={{ whiteSpace: 'pre-wrap', fontSize: 14, lineHeight: 1.5, background: 'rgba(120,120,128,0.08)', borderRadius: 10, padding: 12, marginBottom: 12 }}>
           {receiptFor ? receiptText(receiptFor) : ''}
@@ -1038,14 +1043,12 @@ export function LandlordDashboard() {
           <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 15, cursor: 'pointer' }} onClick={() => setReceiptFor(null)}>Закрыть</button>
         </div>
       </Modal>
-
       <ConfirmDelete
         open={!!undoId}
         text="Подтверждение оплаты будет отменено, счёт снова станет открытым. Арендатор получит уведомление."
         onClose={() => setUndoId(null)}
         onConfirm={() => { if (undoId) undoConfirm(undoId) }}
       />
-
       <PromptNumber
         open={receiptOpen}
         title="Частичная оплата"
@@ -1068,7 +1071,6 @@ export function LandlordDashboard() {
         onClose={() => setDepModal(null)}
         onSubmit={(n) => doEditDeposit(n)}
       />
-
       <Modal open={!!fz} title={fz?.zero ? 'Обнулить замороженный штраф' : 'Изменить замороженный штраф'} onClose={() => setFz(null)}>
         {!fz?.zero && (
           <>
@@ -1088,3 +1090,5 @@ export function LandlordDashboard() {
 }
 
 export default LandlordDashboard
+
+
