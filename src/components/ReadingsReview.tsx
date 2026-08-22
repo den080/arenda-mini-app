@@ -79,11 +79,23 @@ export function ReadingsReview({ contractId, tenantId }: { contractId: string; t
     const v = Number(String(vals[meterId] || '').replace(',', '.'))
     if (isNaN(v) || v <= 0) { showToast('Введите значение показания'); return }
     if (ref != null && v < ref) { showToast(`Значение не может быть меньше предыдущего (${ref})`); return }
-    const { error } = await supabase.from('meter_readings').insert({
-      object_meter_id: meterId, contract_id: contractId, value: v, period,
-      submitted_at: new Date().toISOString(), status: 'confirmed', entered_by: user!.id,
-    })
-    if (error) { showToast('Ошибка: ' + error.message); return }
+    const existing = reads[meterId]
+    if (existing && existing.status === 'confirmed') {
+      showToast('Эти показания уже подтверждены')
+      return
+    }
+    if (existing) {
+      const { error } = await supabase.from('meter_readings').update({
+        value: v, submitted_at: new Date().toISOString(), status: 'confirmed', entered_by: user!.id,
+      }).eq('id', existing.id)
+      if (error) { showToast('Ошибка: ' + error.message); return }
+    } else {
+      const { error } = await supabase.from('meter_readings').insert({
+        object_meter_id: meterId, contract_id: contractId, value: v, period,
+        submitted_at: new Date().toISOString(), status: 'confirmed', entered_by: user!.id,
+      })
+      if (error) { showToast('Ошибка: ' + error.message); return }
+    }
     await supabase.from('notifications_log').insert({
       user_id: tenantId, type: 'meter_submitted', related_id: contractId,
       message: '🧾 Арендодатель внёс показания по фото',
