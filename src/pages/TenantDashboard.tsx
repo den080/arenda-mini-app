@@ -165,7 +165,6 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
   const [data, setData] = useState<any>(rentalCache[contract.id] || null)
   const [vals, setVals] = useState<Record<string, string>>({})
   const [historyOpen, setHistoryOpen] = useState<Record<string, boolean>>({})
-  const [advOpen, setAdvOpen] = useState(false)
   const [methodOverride, setMethodOverride] = useState<string | null>(null)
 
   async function load() {
@@ -272,7 +271,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
     if (e) { showToast('Ошибка: ' + e.message); return }
     showToast('✅ Показания переданы')
     setVals({})
-        await supabase.from('notifications_log').insert({
+    await supabase.from('notifications_log').insert({
       user_id: data.landlord?.id || user!.id, type: 'meter_submitted', related_id: contract.id, sent_at: new Date().toISOString()
     })
     load()
@@ -285,27 +284,6 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
     } catch {
       showToast('Не удалось скопировать')
     }
-  }
-
-  async function payAdvanceMonths(n0: number) {
-    if (!data) return
-    const n = Math.min(12, Math.max(1, Math.round(n0) || 1))
-    const pays = data.payments || []
-    const base = pays.length ? parseDate(pays[0].period) : parseDate(contract.start_date || new Date().toISOString())
-    const rows: any[] = []
-    for (let i = 1; i <= n; i++) {
-      const pd = new Date(base.getFullYear(), base.getMonth() + i, 1)
-      const iso = `${pd.getFullYear()}-${String(pd.getMonth() + 1).padStart(2, '0')}-01`
-      if (pays.some((p: any) => String(p.period).slice(0, 10) === iso)) continue
-      const due = new Date(pd.getFullYear(), pd.getMonth(), Number(contract.payment_day) || 1)
-      const dueISO = `${due.getFullYear()}-${String(due.getMonth() + 1).padStart(2, '0')}-${String(due.getDate()).padStart(2, '0')}`
-      rows.push({ contract_id: contract.id, period: iso, due_date: dueISO, base_amount: Number(contract.rent_amount) || 0, penalty_amount: 0, utilities_amount: 0 })
-    }
-    if (rows.length === 0) { showToast('Эти месяцы уже созданы'); return }
-    const { error } = await supabase.from('payments').insert(rows)
-    if (error) { showToast('Ошибка: ' + error.message); return }
-    showToast(`✅ Созданы счета на ${rows.length} мес. вперёд`)
-    load()
   }
 
   if (!data) return <div style={T.card}>Загрузка…</div>
@@ -530,13 +508,6 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
           )}
 
           <div style={T.card}>
-            <div style={T.row}>
-              <span style={{ fontSize: 16, fontWeight: 500, color: '#1d1d1f' }}>Оплата досрочно</span>
-              <button style={actBlue} onClick={() => setAdvOpen(true)}>Внести на несколько месяцев</button>
-            </div>
-          </div>
-
-          <div style={T.card}>
             <div style={T.h2}>История платежей</div>
             {payments.slice(0, 8).map((p: any) => (
               <div key={p.id} style={{ padding: '10px 0', borderBottom: '1px solid rgba(60,60,67,0.12)' }}>
@@ -704,15 +675,6 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
       )}
 
       <BottomNav tabs={TABS} tab={tab} setTab={setTab} badges={{ pay: payBadge, meters: metersBadge }} />
-
-      <PromptNumber
-        open={advOpen}
-        title="Оплата досрочно"
-        label="На сколько месяцев вперёд внести оплату? (1–12)"
-        initial="1"
-        onClose={() => setAdvOpen(false)}
-        onSubmit={(n) => payAdvanceMonths(n)}
-      />
     </div>
   )
 }
