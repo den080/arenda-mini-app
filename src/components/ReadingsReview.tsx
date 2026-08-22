@@ -16,6 +16,8 @@ export function ReadingsReview({ contractId, tenantId }: { contractId: string; t
   const [types, setTypes] = useState<any[]>([])
   const [reads, setReads] = useState<Record<string, any>>({})
   const [prevReads, setPrevReads] = useState<Record<string, any>>({})
+  const [histByMeter, setHistByMeter] = useState<Record<string, any[]>>({})
+  const [historyOpen, setHistoryOpen] = useState<Record<string, boolean>>({})
   const [vals, setVals] = useState<Record<string, string>>({})
   const [ready, setReady] = useState(false)
 
@@ -30,7 +32,7 @@ export function ReadingsReview({ contractId, tenantId }: { contractId: string; t
     const [mRes, tRes, rRes] = await Promise.all([
       supabase.from('object_meters').select('*').eq('object_id', contract.object_id).eq('is_active', true),
       supabase.from('meter_types').select('*'),
-      supabase.from('meter_readings').select('*').eq('contract_id', contractId).in('period', [period, prevPeriod]).order('submitted_at', { ascending: false }),
+      supabase.from('meter_readings').select('*').eq('contract_id', contractId).order('submitted_at', { ascending: false }),
     ])
     const list = (mRes.data || []) as any[]
     const typesList = (tRes.data || []) as any[]
@@ -45,12 +47,16 @@ export function ReadingsReview({ contractId, tenantId }: { contractId: string; t
     setTypes(typesList)
     const map: Record<string, any> = {}
     const pmap: Record<string, any> = {}
+    const hmap: Record<string, any[]> = {}
     for (const rd of readings) {
+      if (!hmap[rd.object_meter_id]) hmap[rd.object_meter_id] = []
+      hmap[rd.object_meter_id].push(rd)
       if (rd.period === period) { if (!map[rd.object_meter_id]) map[rd.object_meter_id] = rd }
-      else { if (!pmap[rd.object_meter_id]) pmap[rd.object_meter_id] = rd }
+      else if (rd.period === prevPeriod) { if (!pmap[rd.object_meter_id]) pmap[rd.object_meter_id] = rd }
     }
     setReads(map)
     setPrevReads(pmap)
+    setHistByMeter(hmap)
     setReady(true)
   }
 
@@ -100,6 +106,8 @@ export function ReadingsReview({ contractId, tenantId }: { contractId: string; t
       {meters.map((m, i) => {
         const t = types.find(x => x.id === m.meter_type_id)
         const rd = reads[m.id]
+        const hist = histByMeter[m.id] || []
+        const open = !!historyOpen[m.id]
         const prevRaw = prevReads[m.id]?.value
         const refVal = prevRaw != null ? Number(prevRaw) : (m.initial_value != null ? Number(m.initial_value) : null)
         const prevLabel = prevRaw != null
@@ -168,6 +176,18 @@ export function ReadingsReview({ contractId, tenantId }: { contractId: string; t
                     )}
                   </div>
                 </>
+              )}
+              {hist.length > 0 && (
+                <div>
+                  <div style={{ ...actBlue, padding: '8px 0 0' }} onClick={() => setHistoryOpen({ ...historyOpen, [m.id]: !open })}>
+                    история · {hist.length} {open ? '▲' : '▼'}
+                  </div>
+                  {open && hist.slice(0, 12).map((r: any) => (
+                    <div key={r.id} style={{ fontSize: 12, color: '#8e8e93', padding: '3px 0' }}>
+                      {r.value} · {new Date(r.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })} · {r.status === 'confirmed' ? 'подтверждены' : r.status === 'incomplete' ? 'не полностью' : 'ожидают'}{r.entered_by ? ' · внёс арендодатель' : ''}
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           </div>
