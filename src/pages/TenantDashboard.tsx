@@ -263,10 +263,10 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
     load()
   }
 
-    async function submitMeters() {
+  async function submitMeters() {
     if (!data) return
     const period = new Date().toISOString().slice(0, 7) + '-01'
-    const rows: any[] = []
+    const prepared: { meter: any; num: number }[] = []
     for (const m of data.meters) {
       const v = vals[m.id]
       if (!v) continue
@@ -278,11 +278,20 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
         showToast(`«${label}»: значение не может быть меньше предыдущего (${ref})`)
         return
       }
-      rows.push({ object_meter_id: m.id, contract_id: contract.id, value: num, period, submitted_at: new Date().toISOString(), status: 'proposed' })
+      prepared.push({ meter: m, num })
     }
-    if (rows.length === 0) { showToast('Введите показания счётчиков'); return }
-    const { error: e } = await supabase.from('meter_readings').insert(rows)
-    if (e) { showToast('Ошибка: ' + e.message); return }
+    if (prepared.length === 0) { showToast('Введите показания счётчиков'); return }
+    for (const r of prepared) {
+      const hist = (data.readingsByMeter || {})[r.meter.id] || []
+      const cur = hist.find((h: any) => h.period === period)
+      if (cur && cur.status !== 'confirmed') {
+        const { error } = await supabase.from('meter_readings').update({ value: r.num, submitted_at: new Date().toISOString(), status: 'proposed' }).eq('id', cur.id)
+        if (error) { showToast('Ошибка: ' + error.message); return }
+      } else if (!cur) {
+        const { error } = await supabase.from('meter_readings').insert({ object_meter_id: r.meter.id, contract_id: contract.id, value: r.num, period, submitted_at: new Date().toISOString(), status: 'proposed' })
+        if (error) { showToast('Ошибка: ' + error.message); return }
+      }
+    }
     showToast('✅ Показания переданы')
     setVals({})
     await supabase.from('notifications_log').insert({
@@ -396,7 +405,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
       else { statusChip = T.chipGreen; statusText = `До оплаты ${daysUntilDue} дн.` }
     } else {
       const periodDate = parseDate(payment.period)
-            const nm = periodDate.getMonth() + 1
+      const nm = periodDate.getMonth() + 1
       const ny = periodDate.getFullYear() + Math.floor(nm / 12)
       const nextDue = new Date(ny, nm % 12, clampDay(ny, nm % 12, contract.payment_day || 1))
       const daysLeft = Math.round((nextDue.getTime() - todayMid.getTime()) / 86400000)
@@ -621,7 +630,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
             )}
             <div style={T.row}><span style={iosMuted}>Аренда</span><span style={valMoney}>{Number(contract.rent_amount).toFixed(0)} ₽/мес</span></div>
             {(contract as any).amendment_at && (
-              <div style={T.row}><span style={iosMuted}>Допсоглашение</span><span style={valText}>{Number(contract.rent_amount).toFixed(0)} ₽ с {(contract as any).amendment_from ? new Date((contract as any).amendment_from).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : new Date((contract as any).amendment_at).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}</span></div>
+              <div style={T.row}><span style={iosMuted}>Допсоглашение</span><span style={valText}>{Number(contract.rent_amount).toFixed(0)} ₽ с {(contract as any).amendment_from ? new Date((contract as any).amendment_from).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : new Date((contract as any).amendment_at).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })} · со следующего счёта</span></div>
             )}
             {balance > 0 && (
               <div style={T.row}><span style={iosMuted}>Баланс (переплата)</span><span style={valMoney}>{balance.toFixed(0)} ₽</span></div>
