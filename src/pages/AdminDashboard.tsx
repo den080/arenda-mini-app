@@ -13,6 +13,7 @@ const TABS = [
   { id: 'events', l: 'События' },
   { id: 'feedback', l: 'Обращения' },
   { id: 'control', l: 'Контроль' },
+  { id: 'access', l: 'Доступ' },
 ]
 
 const row: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', gap: 8, padding: '10px 0', borderBottom: '1px solid rgba(60,60,67,0.12)', fontSize: 15, alignItems: 'center' }
@@ -56,13 +57,16 @@ export function AdminDashboard() {
   const [feedbacks, setFeedbacks] = useState<any[]>([])
   const [events, setEvents] = useState<any[]>([])
   const [analytics, setAnalytics] = useState<any[]>([])
+  const [accessList, setAccessList] = useState<any[]>([])
   const [openLogins, setOpenLogins] = useState<Record<string, boolean>>({})
+  const [newPhone, setNewPhone] = useState('')
+  const [newRole, setNewRole] = useState<'tester' | 'admin'>('tester')
   const [loading, setLoading] = useState(true)
 
   async function load() {
     const now = new Date()
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
-    const [u, o, c, p, r, m, f, e, a] = await Promise.all([
+    const [u, o, c, p, r, m, f, e, a, ac] = await Promise.all([
       supabase.from('users').select('*').order('created_at', { ascending: false }),
       supabase.from('objects').select('*'),
       supabase.from('contracts').select('*'),
@@ -72,6 +76,7 @@ export function AdminDashboard() {
       supabase.from('feedback').select('*').order('created_at', { ascending: false }),
       supabase.from('notifications_log').select('*').order('sent_at', { ascending: false }).limit(50),
       supabase.from('analytics_events').select('*').order('created_at', { ascending: false }).limit(1000),
+      supabase.from('access_control').select('*').order('created_at', { ascending: false }),
     ])
     setUsers(u.data || [])
     setObjects(o.data || [])
@@ -82,6 +87,7 @@ export function AdminDashboard() {
     setFeedbacks(f.data || [])
     setEvents(e.data || [])
     setAnalytics(a.data || [])
+    setAccessList(ac.data || [])
     setLoading(false)
   }
 
@@ -165,6 +171,24 @@ export function AdminDashboard() {
 
   async function deleteFeedback(id: string) {
     await supabase.from('feedback').delete().eq('id', id)
+    showToast('Удалено')
+    load()
+  }
+
+  async function addAccess() {
+    const phone = newPhone.trim()
+    if (!phone) { showToast('Введите номер'); return }
+    const normalized = phone.startsWith('+') ? phone : '+' + phone
+    const { error } = await supabase.from('access_control').insert({ phone: normalized, role: newRole })
+    if (error) { showToast('Ошибка: ' + error.message); return }
+    showToast('✅ Добавлено')
+    setNewPhone('')
+    load()
+  }
+
+  async function removeAccess(id: string) {
+    const { error } = await supabase.from('access_control').delete().eq('id', id)
+    if (error) { showToast('Ошибка: ' + error.message); return }
     showToast('Удалено')
     load()
   }
@@ -372,6 +396,43 @@ export function AdminDashboard() {
 
       {tab === 'control' && (
         <FamilyDetector />
+      )}
+
+      {tab === 'access' && (
+        <div style={T.card}>
+          <div style={T.h2}>Управление доступом</div>
+          <div style={{ ...T.tiny, margin: '0 0 10px' }}>
+            <b>tester</b> — видит переключатель «Арендатор / Арендодатель» и кнопку «Выйти».<br />
+            <b>admin</b> — дополнительно видит кнопку «Админка».
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+            <input
+              value={newPhone}
+              onChange={(e) => setNewPhone(e.target.value)}
+              placeholder="+7 900 000-00-00"
+              style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }}
+            />
+            <select
+              value={newRole}
+              onChange={(e) => setNewRole(e.target.value as any)}
+              style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }}
+            >
+              <option value="tester">tester</option>
+              <option value="admin">admin</option>
+            </select>
+            <button style={blue} onClick={addAccess}>+</button>
+          </div>
+          {accessList.length === 0 && <div style={{ ...muted, padding: '8px 0' }}>Список пуст.</div>}
+          {accessList.map((a: any) => (
+            <div key={a.id} style={row}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f' }}>{a.phone}</div>
+                <div style={muted}>{a.role}</div>
+              </div>
+              <button style={red} onClick={() => removeAccess(a.id)}>удалить</button>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   )
