@@ -11,9 +11,11 @@ import { C } from './theme'
 
 const GLOBAL_CSS = `button:active { opacity: 0.55; } select { min-width: 0; } button:disabled { opacity: 0.6; }`
 
+// ========== ЗАГЛУШКА (вход в закрытую бету) ==========
 const LOCKDOWN = true
 const ALLOWED_IDS = ['28606967']
 const ALLOWED_PHONES = ['+79057674225', '+77475885016', '+79651947084', '+79999110921', '+79063190766']
+// =====================================================
 
 function normPhone(v: string): string {
   let c = (v || '').replace(/[\s-()]/g, '')
@@ -42,6 +44,11 @@ function AppInner() {
   const [accessList, setAccessList] = useState<any[]>([])
   const [accessLoading, setAccessLoading] = useState(true)
 
+  // Telegram-ID устройства: на телефоне владельца «Выйти» и «Админка» есть всегда,
+  // даже когда он залогинен под тестовым/чужим аккаунтом
+  const tgDeviceId = String((window as any).Telegram?.WebApp?.initDataUnsafe?.user?.id || '')
+  const devicePriv = ALLOWED_IDS.includes(tgDeviceId)
+
   useEffect(() => {
     supabase.from('access_control').select('*').then(
       ({ data }) => {
@@ -53,8 +60,8 @@ function AppInner() {
   }, [])
 
   const userPhone = normPhone(user?.phone || '')
-  const isTester = !!user && accessList.some(a => (a.role === 'tester' || a.role === 'admin') && normPhone(a.phone) === userPhone)
-  const isOwner = !!user && accessList.some(a => a.role === 'admin' && normPhone(a.phone) === userPhone)
+  const isTester = devicePriv || (!!user && accessList.some(a => (a.role === 'tester' || a.role === 'admin') && normPhone(a.phone) === userPhone))
+  const isOwner = devicePriv || (!!user && accessList.some(a => a.role === 'admin' && normPhone(a.phone) === userPhone))
 
   useEffect(() => {
     const tg = (window as any).Telegram?.WebApp
