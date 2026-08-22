@@ -12,6 +12,8 @@ import { C } from './theme'
 const GLOBAL_CSS = `button:active { opacity: 0.55; } select { min-width: 0; } button:disabled { opacity: 0.6; }`
 
 const LOCKDOWN = true
+const ALLOWED_IDS = ['28606967']
+const ALLOWED_PHONES = ['+79057674225', '+77475885016', '+79651947084', '+79999110921', '+79063190766']
 
 function normPhone(v: string): string {
   let c = (v || '').replace(/[\s-()]/g, '')
@@ -20,7 +22,13 @@ function normPhone(v: string): string {
   return c
 }
 
-export { LOCKDOWN, normPhone }
+function isAllowed(v: string): boolean {
+  const t = v.trim()
+  if (ALLOWED_IDS.includes(t)) return true
+  return ALLOWED_PHONES.includes(normPhone(t))
+}
+
+export { LOCKDOWN, ALLOWED_IDS, ALLOWED_PHONES, isAllowed, normPhone }
 
 function AppInner() {
   const { user, loading, error, loginWithId, logout, accessDenied } = useTelegramUser()
