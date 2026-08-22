@@ -1,8 +1,19 @@
 import { useState, useEffect } from 'react'
 
+function haptic(type: 'success' | 'error' | 'light' = 'light') {
+  try {
+    const tg = (window as any).Telegram?.WebApp
+    const h = tg?.HapticFeedback
+    if (!h) return
+    if (type === 'light') h.impactOccurred('light')
+    else h.notificationOccurred(type)
+  } catch {}
+}
+
 let toastFn: ((msg: string) => void) | null = null
 
 export function showToast(msg: string) {
+  haptic(msg.includes('✅') || msg.includes('🟢') ? 'success' : msg.startsWith('Ошибка') || msg.includes('⚠️') ? 'error' : 'light')
   if (toastFn) toastFn(msg)
 }
 
@@ -80,7 +91,7 @@ export function ConfirmDelete({ open, text, onClose, onConfirm }: { open: boolea
         Понимаю и подтверждаю
       </label>
       <div style={{ display: 'flex', gap: 8 }}>
-        <button disabled={!ok} style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#ff3b30', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer', opacity: ok ? 1 : 0.4 }} onClick={() => { onConfirm(); onClose() }}>Удалить</button>
+        <button disabled={!ok} style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#ff3b30', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer', opacity: ok ? 1 : 0.4 }} onClick={() => { haptic('success'); onConfirm(); onClose() }}>Удалить</button>
         <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 15, cursor: 'pointer' }} onClick={onClose}>Отмена</button>
       </div>
     </Modal>
@@ -105,7 +116,7 @@ export function BottomNav({ tabs, tab, setTab, badges }: { tabs: { id: string; l
       {tabs.map(t => (
         <button
           key={t.id}
-          onClick={() => setTab(t.id)}
+          onClick={() => { if (t.id !== tab) haptic('light'); setTab(t.id) }}
           style={{
             flex: 1,
             border: 'none',
