@@ -7,7 +7,6 @@ import { T } from '../theme'
 import { ConfirmDelete, Modal, showToast } from './ui'
 
 const BANKS = ['Сбербанк', 'Т-Банк (Тинькофф)', 'ВТБ', 'Альфа-Банк', 'Газпромбанк', 'Россельхозбанк', 'Райффайзен Банк', 'Росбанк', 'Открытие', 'Совкомбанк', 'МТС Банк', 'Промсвязьбанк', 'Почта Банк', 'Дом.РФ', 'ЮниКредит Банк']
-
 const OWNER_PHONE = '+79057674225'
 const PRO_PRICE = 299
 const SBP_PHONE = '+7 905 767-42-25'
@@ -25,7 +24,7 @@ const S: Record<string, React.CSSProperties> = {
 }
 
 function normalizePhone(input: string): string {
-  let cleaned = input.replace(/[\s\-\(\)]/g, '')
+  let cleaned = input.replace(/[\s-()]/g, '')
   if (cleaned.startsWith('8') && cleaned.length === 11) cleaned = '+7' + cleaned.slice(1)
   if (!cleaned.startsWith('+')) cleaned = '+' + cleaned
   return cleaned
@@ -57,6 +56,18 @@ function iso(d: Date): string {
 function pdate(s: string): Date {
   const [y, m, d] = String(s).slice(0, 10).split('-').map(Number)
   return new Date(y, (m || 1) - 1, d || 1)
+}
+
+function clampDay(y: number, m: number, d: number): number {
+  const last = new Date(y, m + 1, 0).getDate()
+  return Math.min(Math.max(1, d), last)
+}
+
+function moneyOk(v: string, max = 10000000): number | null {
+  if (String(v).trim() === '') return 0
+  const n = Number(String(v).replace(',', '.'))
+  if (isNaN(n) || n < 0 || n > max) return null
+  return n
 }
 
 function compress(file: File): Promise<Blob> {
@@ -199,7 +210,6 @@ export function SubscriptionBlock() {
         {sub ? `Тариф Pro · до ${new Date(sub.until_date + 'T12:00:00').toLocaleDateString('ru-RU')}` : 'Тариф Free · 1 объект'}
       </span>
       <button style={S.blue} onClick={() => setPayOpen(true)}>{sub ? 'Продлить' : 'Оформить Pro'}</button>
-
       <Modal open={payOpen} title={sub ? 'Продление Pro' : 'Тариф Pro'} onClose={() => setPayOpen(false)}>
         <div style={{ fontSize: 14, color: '#555', marginBottom: 10 }}>
           Pro — {PRO_PRICE} ₽/мес: объекты без лимита, совместный доступ, приоритетная поддержка. Free — 1 объект.
@@ -222,7 +232,6 @@ export function SubscriptionBlock() {
             </label>
           </div>
         )}
-
         {isOwner && (
           <div style={{ marginTop: 16, borderTop: '1px solid rgba(60,60,67,0.12)', paddingTop: 10 }}>
             <div style={{ fontSize: 13, color: '#8e8e93', marginBottom: 6 }}>Ручные заявки ({requests.length})</div>
@@ -240,7 +249,6 @@ export function SubscriptionBlock() {
           </div>
         )}
       </Modal>
-
       {view && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)', zIndex: 400, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={() => setView(null)}>
           <img src={view} alt="" style={{ maxWidth: '100%', maxHeight: '90%', borderRadius: 8 }} />
@@ -319,7 +327,6 @@ export function ObjectAdd() {
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
   const [paywall, setPaywall] = useState(false)
-
   const [address, setAddress] = useState('')
   const [notes, setNotes] = useState('')
   const [name, setName] = useState('')
@@ -361,6 +368,27 @@ export function ObjectAdd() {
     if (!validPhone(phone)) { showToast('Проверьте номер телефона арендатора'); return }
     if (method !== 'cash' && details.length === 0) { setAddDetailsErr('Добавьте хотя бы один способ безналичной оплаты'); return }
     setAddDetailsErr(null)
+    const rentN = moneyOk(rent)
+    if (rentN === null || rentN <= 0) { showToast('Сумма аренды — число больше 0'); return }
+    const depN = moneyOk(deposit)
+    if (depN === null) { showToast('Депозит — число не меньше 0'); return }
+    const payDayN = Math.round(Number(paymentDay) || 1)
+    if (payDayN < 1 || payDayN > 31) { showToast('День платежа — число от 1 до 31'); return }
+    const meterDayN = Math.round(Number(meterDay) || 15)
+    if (meterDayN < 1 || meterDayN > 31) { showToast('День показаний — число от 1 до 31'); return }
+    const penPayN = moneyOk(penPay)
+    if (penPayN === null) { showToast('Штраф за просрочку оплаты — число не меньше 0'); return }
+    const penReadN = moneyOk(penRead)
+    if (penReadN === null) { showToast('Штраф за показания — число не меньше 0'); return }
+    const remindN = Math.round(Number(remind) || 3)
+    if (remindN < 0 || remindN > 30) { showToast('Напоминание — от 0 до 30 дней'); return }
+    if (endDate && pdate(endDate) <= pdate(startDate || iso(new Date()))) { showToast('Окончание договора должно быть позже начала'); return }
+    if (method !== 'cash') {
+      for (const d of details) {
+        const dg = (d.number || '').replace(/\D/g, '')
+        if (d.type === 'card' ? dg.length !== 16 : dg.length !== 11) { showToast('Проверьте номер карты или СБП в способах оплаты'); return }
+      }
+    }
     const allowed = await checkLimit()
     if (!allowed) { setPaywall(true); return }
     setSaving(true)
@@ -381,32 +409,28 @@ export function ObjectAdd() {
       const startISO = startDate || new Date().toISOString().slice(0, 10)
       const { data: contract, error: conErr } = await supabase.from('contracts').insert({
         object_id: obj.id, tenant_id: counter.id,
-        rent_amount: Number(rent) || 0,
-        deposit_amount: Number(deposit) || 0,
-        payment_day: Number(paymentDay) || 1,
-        meter_deadline_day: Number(meterDay) || 15,
+        rent_amount: rentN,
+        deposit_amount: depN,
+        payment_day: payDayN,
+        meter_deadline_day: meterDayN,
         readings_mode: readingsMode,
         start_date: startISO,
         end_date: endDate || null,
         payment_method: method,
         card_number: firstCard ? firstCard.number : null,
         payment_details: details,
-        reminder_days_before: Number(remind) || 3,
+        reminder_days_before: remindN,
         status: 'active',
       }).select().single()
       if (conErr) { showToast('Ошибка: ' + conErr.message); return }
       const rules: any[] = [
-        { contract_id: contract.id, violation_type: 'payment_overdue', rate: Number(penPay) || 500, rate_unit: 'per_day_rub', starts_after_days: 0 },
+        { contract_id: contract.id, violation_type: 'payment_overdue', rate: penPayN, rate_unit: 'per_day_rub', starts_after_days: 0 },
       ]
       if (readingsMode === 'manual') {
-        rules.push({ contract_id: contract.id, violation_type: 'readings_overdue', rate: Number(penRead) || 100, rate_unit: 'per_day_rub', starts_after_days: 0 })
+        rules.push({ contract_id: contract.id, violation_type: 'readings_overdue', rate: penReadN, rate_unit: 'per_day_rub', starts_after_days: 0 })
       }
       await supabase.from('penalty_rules').insert(rules)
-
       const startD = new Date(startISO + 'T00:00:00')
-      const rentN = Number(rent) || 0
-      const payDayN = Number(paymentDay) || 1
-
       if (oldContract) {
         const today0 = new Date()
         const tMid = new Date(today0.getFullYear(), today0.getMonth(), today0.getDate())
@@ -415,7 +439,7 @@ export function ObjectAdd() {
         let openDone = false
         let guard = 0
         while (guard++ < 240) {
-          const due = new Date(cur.getFullYear(), cur.getMonth(), payDayN)
+          const due = new Date(cur.getFullYear(), cur.getMonth(), clampDay(cur.getFullYear(), cur.getMonth(), payDayN))
           if (due < tMid) {
             rows.push({ contract_id: contract.id, period: iso(cur), due_date: iso(due), base_amount: rentN, penalty_amount: 0, utilities_amount: 0, confirmed_by_landlord: true, confirmed_at: iso(due) })
           } else if (!openDone) {
@@ -428,7 +452,7 @@ export function ObjectAdd() {
         if (rows.length) await supabase.from('payments').insert(rows)
       } else {
         const periodD = new Date(startD.getFullYear(), startD.getMonth(), 1)
-        let due = new Date(periodD.getFullYear(), periodD.getMonth(), payDayN)
+        let due = new Date(periodD.getFullYear(), periodD.getMonth(), clampDay(periodD.getFullYear(), periodD.getMonth(), payDayN))
         if (due < startD) due = new Date(startD.getFullYear(), startD.getMonth(), startD.getDate())
         const period = `${periodD.getFullYear()}-${String(periodD.getMonth() + 1).padStart(2, '0')}-01`
         await supabase.from('payments').insert({
@@ -448,7 +472,7 @@ export function ObjectAdd() {
   return (
     <div>
       {!showForm ? (
-                <>
+        <>
           <div style={{ ...T.row, borderBottom: 'none' }}>
             <span style={{ fontSize: 15 }}>Новый объект</span>
             <button style={S.blue} onClick={() => setShowForm(true)}>Добавить объект</button>
@@ -513,7 +537,6 @@ export function ObjectAdd() {
           <button style={T.btn} onClick={save}>{saving ? 'Сохранение…' : 'Сохранить'}</button>
         </div>
       )}
-
       <Modal open={paywall} title="Лимит тарифа Free" onClose={() => setPaywall(false)}>
         <div style={{ fontSize: 14, color: '#555', marginBottom: 12 }}>
           На бесплатном тарифе доступен 1 объект. Тариф Pro ({PRO_PRICE} ₽/мес) снимает лимит и открывает командный доступ.
@@ -534,7 +557,6 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
   const [repairOk, setRepairOk] = useState(false)
   const [repairing, setRepairing] = useState(false)
   const [locked, setLocked] = useState(false)
-
   const [editContractId, setEditContractId] = useState<string | null>(null)
   const [editCounterId, setEditCounterId] = useState<string | null>(null)
   const [cRent, setCRent] = useState(0)
@@ -616,7 +638,7 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
         const rows: any[] = []
         let guard = 0
         while (guard++ < 240) {
-          const due = new Date(next.getFullYear(), next.getMonth(), cPayDay)
+          const due = new Date(next.getFullYear(), next.getMonth(), clampDay(next.getFullYear(), next.getMonth(), cPayDay))
           if (due >= tMid) break
           rows.push({ contract_id: editContractId, period: iso(next), due_date: iso(due), base_amount: cRent, penalty_amount: 0, utilities_amount: 0, confirmed_by_landlord: true, confirmed_at: iso(due) })
           next = new Date(next.getFullYear(), next.getMonth() + 1, 1)
@@ -637,6 +659,31 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
     if (!validPhone(ePhone)) { showToast('Проверьте номер телефона арендатора'); return }
     if (eMethod !== 'cash' && eDetails.length === 0) { setEditDetailsErr('Добавьте хотя бы один способ безналичной оплаты'); return }
     setEditDetailsErr(null)
+    const eRentRaw = locked ? Number(eRent) || 0 : moneyOk(eRent)
+    if (!locked && (eRentRaw === null || eRentRaw <= 0)) { showToast('Сумма аренды — число больше 0'); return }
+    const eRentN = eRentRaw ?? 0
+    const eDepRaw = locked ? Number(eDeposit) || 0 : moneyOk(eDeposit)
+    if (!locked && eDepRaw === null) { showToast('Депозит — число не меньше 0'); return }
+    const eDepN = eDepRaw ?? 0
+    const ePayDayN = Math.round(Number(ePaymentDay) || 1)
+    if (!locked && (ePayDayN < 1 || ePayDayN > 31)) { showToast('День платежа — число от 1 до 31'); return }
+    const eMeterDayN = Math.round(Number(eMeterDay) || 15)
+    if (eMeterDayN < 1 || eMeterDayN > 31) { showToast('День показаний — число от 1 до 31'); return }
+    const ePenPayRaw = locked ? Number(ePenPay) || 0 : moneyOk(ePenPay)
+    if (!locked && ePenPayRaw === null) { showToast('Штраф за просрочку оплаты — число не меньше 0'); return }
+    const ePenPayN = ePenPayRaw ?? 0
+    const ePenReadRaw = locked ? Number(ePenRead) || 0 : moneyOk(ePenRead)
+    if (!locked && ePenReadRaw === null) { showToast('Штраф за показания — число не меньше 0'); return }
+    const ePenReadN = ePenReadRaw ?? 0
+    const eRemindN = Math.round(Number(eRemind) || 3)
+    if (eRemindN < 0 || eRemindN > 30) { showToast('Напоминание — от 0 до 30 дней'); return }
+    if (eStartDate && eEndDate && pdate(eEndDate) <= pdate(eStartDate)) { showToast('Окончание договора должно быть позже начала'); return }
+    if (eMethod !== 'cash') {
+      for (const d of eDetails) {
+        const dg = (d.number || '').replace(/\D/g, '')
+        if (d.type === 'card' ? dg.length !== 16 : dg.length !== 11) { showToast('Проверьте номер карты или СБП в способах оплаты'); return }
+      }
+    }
     const { error: oe } = await supabase.from('objects').update({ address: eAddress, notes: eNotes || null }).eq('id', objectId)
     if (oe) { showToast('Ошибка: ' + oe.message); return }
     if (editContractId) {
@@ -645,24 +692,24 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
         payment_method: eMethod,
         card_number: firstCard ? firstCard.number : null,
         payment_details: eDetails,
-        reminder_days_before: Number(eRemind) || 3,
-        meter_deadline_day: Number(eMeterDay) || 15,
+        reminder_days_before: eRemindN,
+        meter_deadline_day: eMeterDayN,
         readings_mode: eReadingsMode,
         end_date: eEndDate || null,
       }
       if (!locked) {
-        upd.rent_amount = Number(eRent) || 0
-        upd.deposit_amount = Number(eDeposit) || 0
-        upd.payment_day = Number(ePaymentDay) || 1
+        upd.rent_amount = eRentN
+        upd.deposit_amount = eDepN
+        upd.payment_day = ePayDayN
         upd.start_date = eStartDate || null
       }
       const { error: ce } = await supabase.from('contracts').update(upd).eq('id', editContractId)
       if (ce) { showToast('Ошибка: ' + ce.message); return }
       if (!locked) {
         const rules: Array<['payment_overdue' | 'readings_overdue', number]> = [
-          ['payment_overdue', Number(ePenPay) || 500],
+          ['payment_overdue', ePenPayN],
         ]
-        if (eReadingsMode === 'manual') rules.push(['readings_overdue', Number(ePenRead) || 100])
+        if (eReadingsMode === 'manual') rules.push(['readings_overdue', ePenReadN])
         for (const [vt, rate] of rules) {
           const { data: ex } = await supabase.from('penalty_rules').select('id').eq('contract_id', editContractId).eq('violation_type', vt).limit(1)
           if (ex && ex.length) await supabase.from('penalty_rules').update({ rate }).eq('id', ex[0].id)
@@ -715,6 +762,7 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
       <div style={S.lab}>Заметка</div>
       <input style={S.inp} value={eNotes} onChange={(e) => setENotes(e.target.value)} />
       <div style={S.lab}>Арендатор (имя)</div>
+      
       <input style={S.inp} value={eName} onChange={(e) => setEName(e.target.value)} />
       <div style={S.lab}>Телефон арендатора</div>
       <input style={S.inp} value={ePhone} onChange={(e) => setEPhone(formatPhoneInput(e.target.value))} inputMode="tel" />
@@ -759,14 +807,12 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
         <button style={S.blue} onClick={saveEdit}>Сохранить</button>
         <button style={S.red} onClick={() => setDelOpen(true)}>Удалить объект</button>
       </div>
-
       <div style={{ borderTop: '1px solid rgba(60,60,67,0.12)', paddingTop: 12, marginTop: 4 }}>
         <div style={{ ...T.tiny, margin: '0 0 8px' }}>Если договор внесён задним числом и в реальности просрочек не было — выровняйте историю: прошлые счета станут «оплачены вовремя», создастся текущий счёт.</div>
         <div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0 8px' }}>
           <button style={S.blue} onClick={() => { setRepairOk(false); setRepairOpen(true) }}>Выровнять историю старых платежей</button>
         </div>
       </div>
-
       <Modal open={repairOpen} title="Выровнять историю" onClose={() => setRepairOpen(false)}>
         <div style={{ fontSize: 14, color: '#555', marginBottom: 12 }}>
           Все счета с прошедшей датой будут отмечены «оплачены вовремя», недостающие месяцы дозаполнятся, создастся текущий открытый счёт. Используйте, только если в реальности просрочек не было.
@@ -784,7 +830,6 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
           <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 15, cursor: 'pointer' }} onClick={() => setRepairOpen(false)}>Отмена</button>
         </div>
       </Modal>
-
       <ConfirmDelete
         open={delOpen}
         text="Объект, договор, платежи и вся история будут удалены безвозвратно."
