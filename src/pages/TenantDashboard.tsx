@@ -501,7 +501,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
                     <div key={i} style={T.item}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
                         <div style={{ minWidth: 0 }}>
-                          <div style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f' }}>{d.type === 'card' ? d.bank : `СБП · ${d.bank}`}</div>
+                                                   <div style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f' }}>{d.type === 'card' ? (d.bank || 'Банк не указан') : `СБП · ${d.bank || 'банк не указан'}`}</div>
                           <div style={{ fontFamily: 'monospace', fontSize: 15, marginTop: 2, color: '#1d1d1f' }}>{d.type === 'card' ? formatCardNumber(d.number) : formatPhoneDisplay(d.number)}</div>
                         </div>
                         <button style={actBlue} onClick={() => copyToClipboard(d.type === 'card' ? formatCardNumber(d.number) : d.number, d.type === 'card' ? 'номер карты' : 'номер СБП')}>Скопировать</button>
