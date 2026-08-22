@@ -66,8 +66,8 @@ export function useTelegramUser() {
           || isAllowed(found.phone || '')
           || (await isTeamUser(found.id))
         if (!allowed) { setAccessDenied(true); setLoading(false); return }
-        const autoId = getAutoId()
-        if (autoId && String(found.telegram_id || '') !== autoId) {
+                      const autoId = getAutoId()
+        if (autoId && !found.telegram_id) {
           await supabase.from('users').update({ telegram_id: autoId }).eq('id', found.id)
           found.telegram_id = autoId
         }
