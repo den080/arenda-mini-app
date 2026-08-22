@@ -11,12 +11,12 @@ import { C } from './theme'
 
 const GLOBAL_CSS = `button:active { opacity: 0.55; } select { min-width: 0; } button:disabled { opacity: 0.6; }`
 
-// ========== ЗАГЛУШКА ==========
+// ========== ЗАГЛУШКА (вход в закрытую бету) ==========
 const LOCKDOWN = true
 const ALLOWED_IDS = ['28606967']
 const ALLOWED_PHONES = ['+79057674225', '+77475885016', '+79651947084', '+79999110921', '+79063190766']
 const OWNER_PHONE = '+79057674225'
-// ==============================
+// =====================================================
 
 function normPhone(v: string): string {
   let c = (v || '').replace(/[\s-()]/g, '')
@@ -42,12 +42,20 @@ function AppInner() {
   const [pinOpen, setPinOpen] = useState(false)
   const [pin, setPin] = useState('')
   const [pinBusy, setPinBusy] = useState(false)
+  const [accessList, setAccessList] = useState<any[]>([])
+  const [accessLoading, setAccessLoading] = useState(true)
 
-  const isTester = !!user && (
-    ALLOWED_IDS.includes(String(user.telegram_id || '')) ||
-    ALLOWED_PHONES.includes(normPhone(user.phone || ''))
-  )
-  const isOwner = !!user && normPhone(user.phone || '') === normPhone(OWNER_PHONE)
+  // Роли (tester/admin) берутся из таблицы access_control — управляется в Админке → «Доступ»
+  useEffect(() => {
+    supabase.from('access_control').select('*').then(({ data }) => {
+      setAccessList(data || [])
+      setAccessLoading(false)
+    }).catch(() => setAccessLoading(false))
+  }, [])
+
+  const userPhone = normPhone(user?.phone || '')
+  const isTester = !!user && accessList.some(a => (a.role === 'tester' || a.role === 'admin') && normPhone(a.phone) === userPhone)
+  const isOwner = (!!user && accessList.some(a => a.role === 'admin' && normPhone(a.phone) === userPhone)) || (!!user && userPhone === normPhone(OWNER_PHONE))
 
   useEffect(() => {
     const tg = (window as any).Telegram?.WebApp
@@ -103,7 +111,7 @@ function AppInner() {
     }
   }
 
-  if (loading) return <div style={st.wrap}>Загрузка...</div>
+  if (loading || accessLoading) return <div style={st.wrap}>Загрузка...</div>
   if (accessDenied) {
     return (
       <div style={{ ...st.wrap, textAlign: 'center', paddingTop: 60 }}>
