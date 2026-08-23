@@ -73,9 +73,9 @@ export function TenantDashboard() {
       const tMid = new Date(t.getFullYear(), t.getMonth(), t.getDate())
       for (const p of pays || []) {
         const c = cs.find((x: any) => x.id === p.contract_id)
-        const sd = c?.start_date ? parseDate(c.start_date) : null
+        const sdStart = c?.start_date ? parseDate(c.start_date) : null
         const pm = parseDate(p.period)
-        const isFirst = !!(sd && pm.getMonth() === sd.getMonth() && pm.getFullYear() === sd.getFullYear())
+        const isFirst = !!(sdStart && pm.getMonth() === sdStart.getMonth() && pm.getFullYear() === sdStart.getFullYear())
         const due = parseDate(p.due_date)
         if (due < tMid && !isFirst) {
           const days = Math.round((tMid.getTime() - due.getTime()) / 86400000)
@@ -428,11 +428,11 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
   if (payment) {
     if (!payment.confirmed_by_landlord) {
       const dueMid = parseDate(payment.due_date)
-      const sd = contract.start_date ? parseDate(contract.start_date) : null
-      const isFirstMonth = !!sd && dueMid.getMonth() === sd.getMonth() && dueMid.getFullYear() === sd.getFullYear()
+      const sdStart = contract.start_date ? parseDate(contract.start_date) : null
+      const isFirstMonth = !!sdStart && dueMid.getMonth() === sdStart.getMonth() && dueMid.getFullYear() === sdStart.getFullYear()
       const daysUntilDue = Math.round((dueMid.getTime() - todayMid.getTime()) / 86400000)
       if (isFirstMonth) { firstMonth = true; statusChip = T.chipOrange; statusText = 'Первый месяц — оплата при подписании' }
-      else if (todayMid > dueMid && (!sd || dueMid >= sd)) { isOverdue = true; statusChip = T.chipRed; statusText = `Просрочка ${-daysUntilDue} дн.` }
+      else if (todayMid > dueMid && (!sdStart || dueMid >= sdStart)) { isOverdue = true; statusChip = T.chipRed; statusText = `Просрочка ${-daysUntilDue} дн.` }
       else if (daysUntilDue === 0) { statusChip = T.chipOrange; statusText = 'Сегодня последний день оплаты' }
       else if (daysUntilDue <= reminder) { statusChip = T.chipOrange; statusText = `До оплаты ${daysUntilDue} дн.` }
       else { statusChip = T.chipGreen; statusText = `До оплаты ${daysUntilDue} дн.` }
@@ -453,12 +453,10 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
   const penaltyRate = paymentOverdueRule ? Number(paymentOverdueRule.rate) : 500
   const readingsRule = penaltyRules.find((r: any) => r.violation_type === 'readings_overdue')
 
-  // Отсрочки по текущему счёту
   const lastDeferral = deferredReqs && deferredReqs[0] ? deferredReqs[0] : null
   const deferralPending = !!(lastDeferral && lastDeferral.status === 'proposed' && payment && String(lastDeferral.payment_id) === String(payment.id))
   const deferralConfirmed = !!(payment && (deferredReqs || []).find((r: any) => r.status === 'confirmed' && String(r.payment_id) === String(payment.id)))
 
-  // Штраф за просрочку оплаты: начисляется ежедневно, пока не заморожен отсрочкой
   const dueMidForPen = payment ? parseDate(payment.due_date) : null
   const sd = contract.start_date ? parseDate(contract.start_date) : null
   const overdueNow = !!(payment && !payment.confirmed_by_landlord && dueMidForPen && todayMid > dueMidForPen && !firstMonth && (!sd || dueMidForPen >= sd))
@@ -475,8 +473,8 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
   const metersBadge = !!(readingsMode === 'manual' && meters.length > 0 && contractStartedToday() && overallReading === 'none' && today.getDate() >= Math.max(1, Number(contract.meter_deadline_day || 25) - reminder))
 
   function contractStartedToday(): boolean {
-    const sd = contract.start_date ? parseDate(contract.start_date) : null
-    return !sd || todayMid.getTime() >= sd.getTime()
+    const sdStart = contract.start_date ? parseDate(contract.start_date) : null
+    return !sdStart || todayMid.getTime() >= sdStart.getTime()
   }
 
   return (
@@ -487,7 +485,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
             <div style={T.h2}>Счёт за {monthLabel}</div>
             <div style={T.row}><span style={iosMuted}>Аренда</span><span style={valMoney}>{Number(payment?.base_amount ?? contract.rent_amount).toFixed(2)} ₽</span></div>
             <div style={T.row}>
-              <span style={iosMuted}>Штраф за просрочку</span>
+              <span style={iosMuted}>Штраф за просрочку оплаты</span>
               <span style={{ ...valMoney, color: shownPenalty > 0 ? '#ff3b30' : '#1d1d1f' }}>{shownPenalty.toFixed(2)} ₽</span>
             </div>
             {utilities > 0 && (
@@ -510,7 +508,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
             <div style={{ padding: '0 0 8px' }}><span style={statusChip}>{statusText}</span></div>
             {isOverdue && <div style={T.noteRed}>+{penaltyRate} руб за каждый день просрочки. Штраф удерживается из депозита или взыскивается отдельно.</div>}
             {firstMonth && !payment?.confirmed_by_landlord && (
-              sd && sdForPen && sd.getTime() > todayMid.getTime()
+              sd && todayMid.getTime() < sd.getTime()
                 ? <div style={T.note}>Договор начнётся {sd.toLocaleDateString('ru-RU')} — с этой даты пойдёт отсчёт. Первый месяц оплачивается заранее, подтверждение выставляет арендодатель.</div>
                 : <div style={T.note}>Первый месяц оплачивается при подписании договора — подтверждение выставляет арендодатель.</div>
             )}
