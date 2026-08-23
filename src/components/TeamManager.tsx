@@ -47,7 +47,7 @@ export function TeamManager() {
         tid = t.id
         await supabase.from('team_members').insert({ team_id: tid!, user_id: user!.id, role: 'owner' })
         await supabase.from('objects').update({ team_id: tid }).eq('landlord_id', user!.id)
-        selectPool(tid)
+        selectPool(tid!)
       }
       const norm = '+' + (digits.length === 11 ? digits : '7' + digits)
       const { data: all } = await supabase.from('users').select('*').not('phone', 'is', null)
