@@ -358,7 +358,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
   const total = payment ? Number(payment.base_amount) + Number(payment.penalty_amount || 0) + utilities : Number(contract.rent_amount)
   const paidPart = Number(payment?.paid_amount || 0)
   const balance = Number(contract.balance || 0)
-  const toPay = Math.max(0, total - paidPart - balance)
+  
   const monthLabel = payment ? new Date(payment.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : ''
   const deposit = Number(contract.deposit_amount || 0)
   const depositPaid = Number(contract.deposit_paid || 0)
