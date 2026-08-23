@@ -73,9 +73,9 @@ export function TenantDashboard() {
       const tMid = new Date(t.getFullYear(), t.getMonth(), t.getDate())
       for (const p of pays || []) {
         const c = cs.find((x: any) => x.id === p.contract_id)
-        const sdStart = c?.start_date ? parseDate(c.start_date) : null
+        const sd = c?.start_date ? parseDate(c.start_date) : null
         const pm = parseDate(p.period)
-        const isFirst = !!(sdStart && pm.getMonth() === sdStart.getMonth() && pm.getFullYear() === sdStart.getFullYear())
+        const isFirst = !!(sd && pm.getMonth() === sd.getMonth() && pm.getFullYear() === sd.getFullYear())
         const due = parseDate(p.due_date)
         if (due < tMid && !isFirst) {
           const days = Math.round((tMid.getTime() - due.getTime()) / 86400000)
@@ -254,8 +254,19 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
     load()
     const on = () => load()
     window.addEventListener('rentflow-refresh', on)
-    return () => window.removeEventListener('rentflow-refresh', on)
+    const iv = setInterval(() => load(), 30000)
+    return () => { window.removeEventListener('rentflow-refresh', on); clearInterval(iv) }
   }, [contract.id])
+
+  // Уведомления не должны ронять основной сценарий, если в базе что-то пойдёт не так
+  async function notify(userId: string, type: string, relatedId: string, message?: string) {
+    try {
+      await supabase.from('notifications_log').insert({
+        user_id: userId, type, related_id: relatedId,
+        message: message || null, sent_at: new Date().toISOString(),
+      })
+    } catch {}
+  }
 
   async function choosePayMethod(m: string) {
     setMethodOverride(m)
@@ -270,9 +281,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
     if (!payment) return
     const { error: e } = await supabase.from('payments').update({ card_claimed: true }).eq('id', payment.id)
     if (e) { showToast('Ошибка: ' + e.message); return }
-    await supabase.from('notifications_log').insert({
-      user_id: data.obj.landlord_id, type: 'payment_claimed', related_id: payment.id, sent_at: new Date().toISOString(),
-    })
+    await notify(data.obj.landlord_id, 'payment_claimed', payment.id)
     showToast('✅ Арендодатель уведомлён')
     load()
   }
@@ -287,9 +296,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
       amount: currentPenalty, status: 'proposed',
     })
     if (e) { showToast('Ошибка: ' + e.message); return }
-    await supabase.from('notifications_log').insert({
-      user_id: data.obj.landlord_id, type: 'deferred_proposed', related_id: contract.id, sent_at: new Date().toISOString(),
-    })
+    await notify(data.obj.landlord_id, 'deferred_proposed', contract.id)
     showToast('✅ Заявка на отсрочку отправлена')
     load()
   }
@@ -325,13 +332,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
     }
     showToast('✅ Показания переданы')
     setVals({})
-    await supabase.from('notifications_log').insert({
-      user_id: data.obj?.landlord_id || data.landlord?.id || user!.id,
-      type: 'meter_submitted',
-      related_id: contract.id,
-      message: '💦 Переданы новые показания',
-      sent_at: new Date().toISOString(),
-    })
+    await notify(data.obj?.landlord_id || data.landlord?.id || user!.id, 'meter_submitted', contract.id, '💦 Переданы новые показания')
     load()
   }
 
@@ -353,6 +354,8 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
   const payment = openPayments.length ? openPayments[openPayments.length - 1] : payments[0]
   const today = new Date()
   const todayMid = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  const sd = contract.start_date ? parseDate(contract.start_date) : null
+  const contractStarted = !sd || todayMid.getTime() >= sd.getTime()
   const utilities = Number(payment?.utilities_amount || 0)
   const paidPart = Number(payment?.paid_amount || 0)
   const balance = Number(contract.balance || 0)
@@ -428,11 +431,10 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
   if (payment) {
     if (!payment.confirmed_by_landlord) {
       const dueMid = parseDate(payment.due_date)
-      const sdStart = contract.start_date ? parseDate(contract.start_date) : null
-      const isFirstMonth = !!sdStart && dueMid.getMonth() === sdStart.getMonth() && dueMid.getFullYear() === sdStart.getFullYear()
+      const isFirstMonth = !!sd && dueMid.getMonth() === sd.getMonth() && dueMid.getFullYear() === sd.getFullYear()
       const daysUntilDue = Math.round((dueMid.getTime() - todayMid.getTime()) / 86400000)
       if (isFirstMonth) { firstMonth = true; statusChip = T.chipOrange; statusText = 'Первый месяц — оплата при подписании' }
-      else if (todayMid > dueMid && (!sdStart || dueMid >= sdStart)) { isOverdue = true; statusChip = T.chipRed; statusText = `Просрочка ${-daysUntilDue} дн.` }
+      else if (todayMid > dueMid && (!sd || dueMid >= sd)) { isOverdue = true; statusChip = T.chipRed; statusText = `Просрочка ${-daysUntilDue} дн.` }
       else if (daysUntilDue === 0) { statusChip = T.chipOrange; statusText = 'Сегодня последний день оплаты' }
       else if (daysUntilDue <= reminder) { statusChip = T.chipOrange; statusText = `До оплаты ${daysUntilDue} дн.` }
       else { statusChip = T.chipGreen; statusText = `До оплаты ${daysUntilDue} дн.` }
@@ -452,13 +454,11 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
   const paymentOverdueRule = penaltyRules.find((r: any) => r.violation_type === 'payment_overdue')
   const penaltyRate = paymentOverdueRule ? Number(paymentOverdueRule.rate) : 500
   const readingsRule = penaltyRules.find((r: any) => r.violation_type === 'readings_overdue')
-
   const lastDeferral = deferredReqs && deferredReqs[0] ? deferredReqs[0] : null
   const deferralPending = !!(lastDeferral && lastDeferral.status === 'proposed' && payment && String(lastDeferral.payment_id) === String(payment.id))
   const deferralConfirmed = !!(payment && (deferredReqs || []).find((r: any) => r.status === 'confirmed' && String(r.payment_id) === String(payment.id)))
 
   const dueMidForPen = payment ? parseDate(payment.due_date) : null
-  const sd = contract.start_date ? parseDate(contract.start_date) : null
   const overdueNow = !!(payment && !payment.confirmed_by_landlord && dueMidForPen && todayMid > dueMidForPen && !firstMonth && (!sd || dueMidForPen >= sd))
   const daysOver = overdueNow && !deferralConfirmed ? Math.max(0, Math.round((todayMid.getTime() - dueMidForPen!.getTime()) / 86400000)) : 0
   const shownPenalty = Number(payment?.penalty_amount || 0) + daysOver * penaltyRate
@@ -470,12 +470,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
     : (contract.card_number ? [{ type: 'card', bank: 'Банк не указан', number: contract.card_number }] : [])
 
   const payBadge = !!(payment && !payment.confirmed_by_landlord)
-  const metersBadge = !!(readingsMode === 'manual' && meters.length > 0 && contractStartedToday() && overallReading === 'none' && today.getDate() >= Math.max(1, Number(contract.meter_deadline_day || 25) - reminder))
-
-  function contractStartedToday(): boolean {
-    const sdStart = contract.start_date ? parseDate(contract.start_date) : null
-    return !sdStart || todayMid.getTime() >= sdStart.getTime()
-  }
+  const metersBadge = !!(readingsMode === 'manual' && meters.length > 0 && contractStarted && overallReading === 'none' && today.getDate() >= Math.max(1, Number(contract.meter_deadline_day || 25) - reminder))
 
   return (
     <div>
@@ -502,20 +497,19 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
               <div style={T.row}><span style={iosMuted}>К оплате</span><span style={T.total}>{toPay.toFixed(2)} ₽</span></div>
             )}
             <div style={{ ...T.row, borderBottom: 'none' }}>
-              <span style={iosMuted}>{firstMonth ? 'Оплата при подписании договора' : 'Оплатить до'}</span>
-              <span style={valText}>{firstMonth ? '' : payment ? parseDate(payment.due_date).toLocaleDateString('ru-RU') : ''}</span>
+              <span style={iosMuted}>Оплатить до</span>
+              <span style={valText}>{payment ? parseDate(payment.due_date).toLocaleDateString('ru-RU') : ''}</span>
             </div>
             <div style={{ padding: '0 0 8px' }}><span style={statusChip}>{statusText}</span></div>
-            {isOverdue && <div style={T.noteRed}>+{penaltyRate} руб за каждый день просрочки. Штраф удерживается из депозита или взыскивается отдельно.</div>}
+            {isOverdue && !deferralConfirmed && <div style={T.noteRed}>+{penaltyRate} руб за каждый день просрочки. Штраф удерживается из депозита или взыскивается отдельно.</div>}
+            {isOverdue && deferralConfirmed && <div style={T.note}>🧊 Штраф по этому счёту заморожен отсрочкой и больше не растёт — сумма будет учтена в конце договора.</div>}
             {firstMonth && !payment?.confirmed_by_landlord && (
               sd && todayMid.getTime() < sd.getTime()
                 ? <div style={T.note}>Договор начнётся {sd.toLocaleDateString('ru-RU')} — с этой даты пойдёт отсчёт. Первый месяц оплачивается заранее, подтверждение выставляет арендодатель.</div>
                 : <div style={T.note}>Первый месяц оплачивается при подписании договора — подтверждение выставляет арендодатель.</div>
             )}
             {payment && !payment.confirmed_by_landlord && shownPenalty > 0 && (
-              deferralConfirmed ? (
-                <div style={T.note}>🧊 Штраф заморожен по отсрочке и будет учтён в конце договора — он больше не растёт.</div>
-              ) : deferralPending ? (
+              deferralConfirmed ? null : deferralPending ? (
                 <div style={T.note}>Отсрочка штрафа: заявка на рассмотрении</div>
               ) : (
                 <div style={actionRow}><button onClick={() => requestDeferral(shownPenalty)} style={actBlue}>Попросить отсрочку штрафа</button></div>
@@ -628,10 +622,10 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
                   <span style={iosMuted}>Срок подачи</span>
                   <span style={valText}>до {contract.meter_deadline_day} числа</span>
                 </div>
-                {!contractStartedToday() && <div style={T.note}>Договор ещё не начался — показания подаются с месяца начала.</div>}
-                {contractStartedToday() && overallReading === 'incomplete' && <div style={T.noteRed}>Арендодатель отметил: показания получены не полностью — передайте недостающие ещё раз</div>}
-                {contractStartedToday() && overallReading === 'confirmed' && <div style={T.noteGreen}>Показания получены арендодателем</div>}
-                {contractStartedToday() && overallReading === 'proposed' && <div style={T.note}>Показания отправлены и ждут подтверждения арендодателем</div>}
+                {!contractStarted && <div style={T.note}>Договор ещё не начался — показания подаются с месяца начала.</div>}
+                {contractStarted && overallReading === 'incomplete' && <div style={T.noteRed}>Арендодатель отметил: показания получены не полностью — передайте недостающие ещё раз</div>}
+                {contractStarted && overallReading === 'confirmed' && <div style={T.noteGreen}>Показания получены арендодателем</div>}
+                {contractStarted && overallReading === 'proposed' && <div style={T.note}>Показания отправлены и ждут подтверждения арендодателем</div>}
               </div>
               {meters.map((m: any) => {
                 const t = meterTypes.find((x: any) => x.id === m.meter_type_id)
