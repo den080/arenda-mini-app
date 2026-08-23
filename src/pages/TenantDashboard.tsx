@@ -630,6 +630,8 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
             <div style={T.h2}>Договор</div>
             <div style={T.row}><span style={iosMuted}>Арендодатель</span><span style={valText}>{landlord?.full_name}</span></div>
             {landlord?.phone && <div style={T.row}><span style={iosMuted}>Телефон</span><span style={valText}>{formatPhoneDisplay(landlord.phone)}</span></div>}
+            {landlord?.email && <div style={T.row}><span style={iosMuted}>E-mail</span><span style={valText}>{landlord.email}</span></div>}
+
             {contract.start_date && contract.end_date && (
               <div style={T.row}><span style={iosMuted}>Срок</span><span style={valText}>{parseDate(contract.start_date).toLocaleDateString('ru-RU')} — {parseDate(contract.end_date).toLocaleDateString('ru-RU')}</span></div>
             )}
