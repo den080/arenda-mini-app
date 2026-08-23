@@ -6,7 +6,7 @@ import BillUploader from '../components/BillUploader'
 import { ensureNextPayment } from '../lib/nextPayment'
 import Chat from '../components/Chat'
 import { setAnalyticsUser, trackOpen, trackScreen } from '../lib/analytics'
-import { BottomNav, Progress, showToast } from '../components/ui'
+import { BottomNav, Progress, showToast, SkeletonList, SkeletonCard } from '../components/ui'
 import { T } from '../theme'
 
 interface PayDetail { type: 'card' | 'sbp'; bank: string; number: string }
@@ -102,7 +102,12 @@ export function TenantDashboard() {
     }
   }
 
-  if (userLoading || loading) return <div style={T.page}>Загрузка…</div>
+  if (userLoading || loading) return (
+  <div style={T.page}>
+    <h1 style={T.h1}>Моя аренда</h1>
+    <SkeletonList count={3} />
+  </div>
+)
 
   const current = contracts.find(c => c.id === openId) || null
 
@@ -314,7 +319,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
     }
   }
 
-  if (!data) return <div style={T.card}>Загрузка…</div>
+  if (!data) return <SkeletonCard rows={5} />
 
   const { obj, landlord, payments, meters, meterTypes, penaltyRules, frozenRows, deferredReqs, readingsByMeter, contacts } = data
   const readingsMode = contract.readings_mode || 'manual'
