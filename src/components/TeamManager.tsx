@@ -6,7 +6,6 @@ import { T } from '../theme'
 import { showToast, ConfirmDelete } from './ui'
 
 const ROLE_LABEL: Record<string, string> = { owner: 'Владелец', manager: 'Менеджер', viewer: 'Наблюдатель' }
-
 const iosBlue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: 4, flexShrink: 0 }
 const iosRed: React.CSSProperties = { border: 'none', background: 'transparent', color: '#ff3b30', fontSize: 15, cursor: 'pointer', padding: 4, flexShrink: 0 }
 const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProperties
@@ -14,7 +13,7 @@ const head: React.CSSProperties = { fontSize: 13, color: '#8e8e93', margin: '14p
 
 export function TeamManager() {
   const { user } = useTelegramUser()
-  const { teamId, role, members, refresh } = useTeam()
+  const { teamId, role, members, refresh, selectPool } = useTeam()
   const [phone, setPhone] = useState('')
   const [newRole, setNewRole] = useState<'manager' | 'viewer'>('manager')
   const [del, setDel] = useState<string | null>(null)
@@ -27,7 +26,7 @@ export function TeamManager() {
         <div style={T.card}>
           <div style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f', margin: '12px 0 2px' }}>Совместный доступ</div>
           <div style={{ ...T.row, borderBottom: 'none' }}>
-            <span style={{ fontSize: 15 }}>Вы подключены как</span>
+            <span style={{ fontSize: 15 }}>Вы подключены как </span>
             <b>{ROLE_LABEL[role] || role}</b>
           </div>
         </div>
@@ -48,6 +47,7 @@ export function TeamManager() {
         tid = t.id
         await supabase.from('team_members').insert({ team_id: tid, user_id: user!.id, role: 'owner' })
         await supabase.from('objects').update({ team_id: tid }).eq('landlord_id', user!.id)
+        selectPool(tid)
       }
       const norm = '+' + (digits.length === 11 ? digits : '7' + digits)
       const { data: all } = await supabase.from('users').select('*').not('phone', 'is', null)
@@ -109,7 +109,6 @@ export function TeamManager() {
           <button style={iosBlue} disabled={busy} onClick={invite}>Выдать доступ</button>
         </div>
         <div style={{ ...T.tiny, margin: '0 0 10px' }}>Сотрудник открывает бота со своего телефона: первый раз входит по номеру, дальше — автоматически. Менеджер работает как вы, но без выдачи доступа и удалений; наблюдатель — только просмотр.</div>
-
         <ConfirmDelete
           open={!!del}
           text="Сотрудник сразу потеряет доступ к пулу."
