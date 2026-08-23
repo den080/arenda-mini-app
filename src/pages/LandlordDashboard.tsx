@@ -303,10 +303,13 @@ export function LandlordDashboard() {
     if (user) { setAnalyticsUser(user); trackOpen('landlord') }
   }, [user])
 
+  const arch = archived.find(a => a.id === archiveId) || null
+  const current = objects.find(o => o.id === openId) || null
+
   useEffect(() => {
     const screen = arch ? 'archive_item' : archiveListOpen ? 'archive_list' : current ? `object_${tab}` : 'objects_list'
     trackScreen(screen)
-  }, [tab, openId, archiveListOpen, archiveId])
+  }, [tab, openId, archiveListOpen, archiveId, arch, current])
 
   function canUndo(h: any): boolean {
     return !!h.confirmed_by_landlord && !!h.confirmed_at && (Date.now() - new Date(h.confirmed_at).getTime()) < 24 * 3600 * 1000
@@ -356,7 +359,7 @@ export function LandlordDashboard() {
     const month = parseDate(h.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })
     const sum = Number(h.base_amount || 0) + Number(h.penalty_amount || 0) + Number(h.utilities_amount || 0)
     const tenantName = (contract as any)?.tenant?.full_name || 'арендатора'
-    const landlordName = user?.full_name || 'арендодателя'
+    const landlordName = (current as any)?.landlord_doc_name || user?.full_name || 'арендодателя'
     const dateStr = new Date(h.confirmed_at || Date.now()).toLocaleDateString('ru-RU')
     return `РАСПИСКА\n${dateStr}\nЯ, ${landlordName}, получил от ${tenantName} сумму ${sum.toFixed(0)} ₽ в счёт оплаты аренды за ${month} по объекту: ${current?.address || h.address}. Оплата произведена наличными. Претензий по оплате не имею.`
   }
@@ -589,7 +592,6 @@ export function LandlordDashboard() {
   const secHead: React.CSSProperties = { fontSize: 13, color: '#8e8e93', margin: '14px 16px 6px', textTransform: 'uppercase', letterSpacing: 0.3 }
   const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProperties
 
-  const current = objects.find(o => o.id === openId) || null
   const contract = current?.contract
   const deposit = Number((contract as any)?.deposit_amount || 0)
   const depositPaid = Number((contract as any)?.deposit_paid || 0)
@@ -608,16 +610,15 @@ export function LandlordDashboard() {
   const pcPaid = Number(pcPay?.paid_amount || 0)
   const payBadge = !!((current?.payment && !current.payment.confirmed_by_landlord) || firstMonthPending)
   const metersBadge = !!current?.waitingForReadings
-  const arch = archived.find(a => a.id === archiveId) || null
   const archSd = arch?.start_date ? parseDate(arch.start_date) : null
   const archSettlement = (arch as any)?.settlement || {}
 
   if (userLoading || loading) return (
-  <div style={T.page}>
-    <h1 style={T.h1}>Мои объекты</h1>
-    <SkeletonList count={4} />
-  </div>
-)
+    <div style={T.page}>
+      <h1 style={T.h1}>Мои объекты</h1>
+      <SkeletonList count={4} />
+    </div>
+  )
   if (error) return <div style={T.page}><div style={T.card}>{error}</div></div>
 
   if (arch) {
