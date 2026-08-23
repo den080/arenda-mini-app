@@ -32,58 +32,56 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const [policyOpen, setPolicyOpen] = useState(false)
   const [busy, setBusy] = useState(false)
 
-  // Однократная проверка: дальше — тихий вход без кода
+  const tgId = String((window as any).Telegram?.WebApp?.initDataUnsafe?.user?.id || (user as any)?.telegram_id || '')
+
+  // Вход: проверка сессии → тихий вход по ключу устройства → иначе ворота с кодом
   useEffect(() => {
+    let cancelled = false
     ;(async () => {
-      if (!user) { setReady(true); return }
+      if (!user) { setHasSession(false); setReady(true); return }
+
+      // 1) Почта, привязанная к профилю
       const { data: u } = await supabase.from('users').select('email').eq('id', user.id).maybeSingle()
       const bound = String(u?.email || '').toLowerCase()
-      setBoundEmail(bound)
-      if (bound) setEmail(bound)
-      const tgId = String((window as any).Telegram?.WebApp?.initDataUnsafe?.user?.id || (user as any).telegram_id || '')
-      const pwd = devicePassword(tgId)
-
-      const { data } = await supabase.auth.getSession()
-      let session = data.session
-
-      // Сессия чужой почты (переключили аккаунт) — сбрасываем
-      if (session && bound && String(session.user?.email || '').toLowerCase() !== bound) {
-        await supabase.auth.signOut()
-        session = null
+      if (!cancelled) {
+        setBoundEmail(bound)
+        setEmail(prev => prev || bound)
       }
 
-      // Нет сессии, но профиль уже верифицирован ранее — тихий вход без письма
+      // 2) Текущая сессия + серверная валидация
+      const { data: s } = await supabase.auth.getSession()
+      let session = s.session
+      if (session) {
+        const { error } = await supabase.auth.getUser()
+        if (error) {
+          await supabase.auth.signOut()
+          session = null
+        } else if (bound && String(session.user?.email || '').toLowerCase() !== bound) {
+          // Сессия от другого аккаунта (переключились в приложении) — сбрасываем
+          await supabase.auth.signOut()
+          session = null
+        }
+      }
+
+      // 3) Сессии нет, но профиль уже верифицирован — тихий вход БЕЗ кода
       if (!session && bound && tgId) {
-        const { data: ld, error } = await supabase.auth.signInWithPassword({ email: bound, password: pwd })
+        const { data: ld, error } = await supabase.auth.signInWithPassword({ email: bound, password: devicePassword(tgId) })
         if (!error && ld.session) session = ld.session
       }
 
-      if (session) {
-        const { error } = await supabase.auth.getUser()
-        if (error) { await supabase.auth.signOut(); setHasSession(false) } else setHasSession(true)
-      } else {
-        setHasSession(false)
+      // 4) Сессия есть, но почта не привязана к профилю — привязываем
+      if (session && !bound) {
+        const em = String(session.user?.email || '')
+        if (em) {
+          await supabase.from('users').update({ email: em }).eq('id', user.id)
+          if (!cancelled) setBoundEmail(em.toLowerCase())
+        }
       }
-      setReady(true)
-    })()
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setHasSession(!!s))
-    return () => sub.subscription.unsubscribe()
-  }, [user])
 
-  // автопривязка email к текущему аккаунту при наличии сессии
-  useEffect(() => {
-    ;(async () => {
-      if (!hasSession || !user) return
-      const { data } = await supabase.auth.getUser()
-      const em = data.user?.email
-      if (!em) return
-      const { data: u } = await supabase.from('users').select('email').eq('id', user.id).maybeSingle()
-      if (u && !u.email) {
-        await supabase.from('users').update({ email: em }).eq('id', user.id)
-        setBoundEmail(em.toLowerCase())
-      }
+      if (!cancelled) { setHasSession(!!session); setReady(true) }
     })()
-  }, [hasSession, user])
+    return () => { cancelled = true }
+  }, [user?.id])
 
   async function sendCode() {
     if (!consent) { showToast('Нужно согласие на обработку данных'); return }
@@ -107,10 +105,18 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       lastErr = error
     }
     if (lastErr) { setBusy(false); showToast('Неверный код: ' + lastErr.message); return }
+
     // Первый и последний код: ставим «ключ устройства», дальше входы без писем
-    const tgId = String((window as any).Telegram?.WebApp?.initDataUnsafe?.user?.id || (user as any).telegram_id || '')
-    if (tgId) await supabase.auth.updateUser({ password: devicePassword(tgId) }).then(() => {}, () => {})
+    if (tgId) {
+      await supabase.auth.updateUser({ password: devicePassword(tgId) }).then(() => {}, () => {})
+    }
+    // Привязываем почту к профилю
+    if (user) {
+      await supabase.from('users').update({ email: email.trim().toLowerCase() }).eq('id', user.id)
+      setBoundEmail(email.trim().toLowerCase())
+    }
     setBusy(false)
+    setHasSession(true)
     showToast('✅ Вход выполнен')
   }
 
