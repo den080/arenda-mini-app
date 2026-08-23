@@ -34,6 +34,14 @@ function clampDay(y: number, m: number, d: number): number {
   return Math.min(Math.max(1, d), last)
 }
 
+// Убираем эмодзи только из строк уведомлений (в остальных местах они остаются)
+function noEmoji(s: string): string {
+  return String(s || '')
+    .replace(/[\p{Extended_Pictographic}\uFE0F\u200D]/gu, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+}
+
 const TABS = [
   { id: 'pay', l: 'Оплата' },
   { id: 'meters', l: 'Счётчики' },
@@ -124,17 +132,7 @@ export function TenantDashboard() {
       default: return type
     }
   }
-  // Сообщения хранятся в базе «как есть»; на экране арендатора
-  // переформулируем их от второго лица, чтобы не путать
-  function noteText(n: any): string {
-    const m = n?.message as string | undefined
-    if (m) {
-      if (m.startsWith('💰 Получено')) return m.replace('💰 Получено', '💰 Арендодатель получил')
-      if (m.startsWith('🟢 Оплата получена')) return m.replace('🟢 Оплата получена', '🟢 Арендодатель отметил оплату')
-      return m
-    }
-    return getNotificationText(n.type)
-  }
+
   if (userLoading || loading) return <div style={T.page}>Загрузка…</div>
 
   const current = contracts.find(c => c.id === openId) || null
@@ -144,7 +142,7 @@ export function TenantDashboard() {
       <div style={T.h2}>Уведомления</div>
       {notifications.map(n => (
         <div key={n.id} style={T.row}>
-          <span style={{ fontSize: 14 }}>{noteText(n)}</span>
+          <span style={{ fontSize: 14 }}>{noEmoji((n as any).message || getNotificationText(n.type))}</span>
         </div>
       ))}
     </div>
@@ -155,7 +153,6 @@ export function TenantDashboard() {
       <PullToRefresh onRefresh={async () => { await load() }}>
         <div style={{ ...T.page, paddingBottom: 40 }}>
           <h1 style={T.h1}>Моя аренда</h1>
-          {notifCard}
           {contracts.length === 0 ? (
             <div style={{ ...T.card, padding: '28px 20px', textAlign: 'center' }}>
               <div style={{ fontSize: 17, fontWeight: 600, color: '#1d1d1f', marginBottom: 6 }}>Пока нет активной аренды</div>
@@ -185,6 +182,7 @@ export function TenantDashboard() {
               ))}
             </>
           )}
+          {notifCard}
         </div>
       </PullToRefresh>
     )
@@ -268,7 +266,6 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
     return () => { window.removeEventListener('rentflow-refresh', on); clearInterval(iv) }
   }, [contract.id])
 
-  // Уведомления не должны ронять основной сценарий, если в базе что-то пойдёт не так
   async function notify(userId: string, type: string, relatedId: string, message?: string) {
     try {
       await supabase.from('notifications_log').insert({
@@ -506,9 +503,15 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
             {!payment?.confirmed_by_landlord && (paidPart > 0 || balance > 0) && (
               <div style={T.row}><span style={iosMuted}>К оплате</span><span style={T.total}>{toPay.toFixed(2)} ₽</span></div>
             )}
+            {deposit > 0 && (
+              <div style={T.row}><span style={iosMuted}>Депозит</span><span style={valMoney}>{depositPaid.toFixed(0)} / {deposit.toFixed(0)} ₽</span></div>
+            )}
+            {frozenTotal > 0 && (
+              <div style={T.row}><span style={iosMuted}>Заморожено из депозита</span><span style={{ ...valMoney, color: '#ff3b30' }}>{frozenTotal.toFixed(0)} ₽</span></div>
+            )}
             <div style={{ ...T.row, borderBottom: 'none' }}>
-              <span style={iosMuted}>Оплатить до</span>
-              <span style={valText}>{payment ? parseDate(payment.due_date).toLocaleDateString('ru-RU') : ''}</span>
+              <span style={iosMuted}>{firstMonth ? 'Оплата при подписании договора' : 'Оплатить до'}</span>
+              <span style={valText}>{firstMonth ? '' : payment ? parseDate(payment.due_date).toLocaleDateString('ru-RU') : ''}</span>
             </div>
             <div style={{ padding: '0 0 8px' }}><span style={statusChip}>{statusText}</span></div>
             {isOverdue && !deferralConfirmed && <div style={T.noteRed}>+{penaltyRate} руб за каждый день просрочки. Штраф удерживается из депозита или взыскивается отдельно.</div>}
@@ -526,19 +529,6 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
               )
             )}
           </div>
-
-          {(deposit > 0 || frozenTotal > 0) && (
-            <div style={T.card}>
-              <div style={T.h2}>Депозит и штрафы</div>
-              {deposit > 0 && (
-                <div style={T.row}><span style={iosMuted}>Депозит</span><span style={valMoney}>{depositPaid.toFixed(0)} / {deposit.toFixed(0)} ₽</span></div>
-              )}
-              {frozenTotal > 0 && (
-                <div style={{ ...T.row, borderBottom: 'none' }}><span style={iosMuted}>Заморожено из депозита</span><span style={{ ...valMoney, color: '#ff3b30' }}>{frozenTotal.toFixed(0)} ₽</span></div>
-              )}
-              <div style={{ ...T.tiny, margin: '6px 0 4px' }}>Замороженные штрафы удерживаются из депозита при съезде; остаток депозита возвращается арендатору.</div>
-            </div>
-          )}
 
           {contract.payment_method === 'both' && (
             <div>
