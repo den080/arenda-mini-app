@@ -16,10 +16,15 @@ const POLICY = `ПОЛИТИКА КОНФИДЕНЦИАЛЬНОСТИ (крат�
 Ваши права: запросить, изменить, удалить данные — через владельца сервиса (кнопка «Обратная связь» или по контакту в приложении).
 Согласие даётся проставлением галочки при входе и может быть отозвано письменно.`
 
+function devicePassword(tgId: string): string {
+  return `roomio-tg-${tgId}`
+}
+
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const { user } = useTelegramUser()
   const [ready, setReady] = useState(false)
   const [hasSession, setHasSession] = useState(false)
+  const [boundEmail, setBoundEmail] = useState('')
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
   const [stage, setStage] = useState<'email' | 'code'>('email')
@@ -27,32 +32,37 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const [policyOpen, setPolicyOpen] = useState(false)
   const [busy, setBusy] = useState(false)
 
+  // Однократная проверка: дальше — тихий вход без кода
   useEffect(() => {
     ;(async () => {
+      if (!user) { setReady(true); return }
+      const { data: u } = await supabase.from('users').select('email').eq('id', user.id).maybeSingle()
+      const bound = String(u?.email || '').toLowerCase()
+      setBoundEmail(bound)
+      if (bound) setEmail(bound)
+      const tgId = String((window as any).Telegram?.WebApp?.initDataUnsafe?.user?.id || (user as any).telegram_id || '')
+      const pwd = devicePassword(tgId)
+
       const { data } = await supabase.auth.getSession()
-      const s = data.session
-      if (!s) { setHasSession(false); setReady(true); return }
-      // Синхронизация личностей: e-mail сессии должен совпадать с e-mail текущего профиля.
-      // Переключили аккаунт в приложении — старая почтовая сессия сбрасывается,
-      // и приложение попросит код на правильный адрес.
-      if (user) {
-        const { data: u } = await supabase.from('users').select('email').eq('id', user.id).maybeSingle()
-        const sessionEmail = (s.user?.email || '').toLowerCase()
-        const boundEmail = (u?.email || '').toLowerCase()
-        if (boundEmail && sessionEmail && boundEmail !== sessionEmail) {
-          await supabase.auth.signOut()
-          setHasSession(false)
-          setReady(true)
-          return
-        }
-      }
-      // Серверная проверка сессии (удалённый аккаунт = выход)
-      const { error } = await supabase.auth.getUser()
-      if (error) {
+      let session = data.session
+
+      // Сессия чужой почты (переключили аккаунт) — сбрасываем
+      if (session && bound && String(session.user?.email || '').toLowerCase() !== bound) {
         await supabase.auth.signOut()
-        setHasSession(false)
+        session = null
+      }
+
+      // Нет сессии, но профиль уже верифицирован ранее — тихий вход без письма
+      if (!session && bound && tgId) {
+        const { data: ld, error } = await supabase.auth.signInWithPassword({ email: bound, password: pwd })
+        if (!error && ld.session) session = ld.session
+      }
+
+      if (session) {
+        const { error } = await supabase.auth.getUser()
+        if (error) { await supabase.auth.signOut(); setHasSession(false) } else setHasSession(true)
       } else {
-        setHasSession(true)
+        setHasSession(false)
       }
       setReady(true)
     })()
@@ -70,6 +80,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       const { data: u } = await supabase.from('users').select('email').eq('id', user.id).maybeSingle()
       if (u && !u.email) {
         await supabase.from('users').update({ email: em }).eq('id', user.id)
+        setBoundEmail(em.toLowerCase())
       }
     })()
   }, [hasSession, user])
@@ -95,8 +106,11 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       if (!error) { lastErr = null; break }
       lastErr = error
     }
+    if (lastErr) { setBusy(false); showToast('Неверный код: ' + lastErr.message); return }
+    // Первый и последний код: ставим «ключ устройства», дальше входы без писем
+    const tgId = String((window as any).Telegram?.WebApp?.initDataUnsafe?.user?.id || (user as any).telegram_id || '')
+    if (tgId) await supabase.auth.updateUser({ password: devicePassword(tgId) }).then(() => {}, () => {})
     setBusy(false)
-    if (lastErr) { showToast('Неверный код: ' + lastErr.message); return }
     showToast('✅ Вход выполнен')
   }
 
@@ -108,7 +122,11 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       <Toaster />
       <div style={T.card}>
         <div style={{ fontSize: 22, fontWeight: 800, marginBottom: 6 }}>Вход в Roomio</div>
-        <div style={{ ...T.small, margin: '0 0 14px' }}>Код придёт на e-mail. Аккаунт привяжется к вашему профилю автоматически.</div>
+        <div style={{ ...T.small, margin: '0 0 14px' }}>
+          {boundEmail
+            ? 'Подтверждение понадобится один раз — дальше входы без кода.'
+            : 'Код придёт на e-mail один раз; аккаунт привяжется к профилю, дальше входы без кода.'}
+        </div>
         {stage === 'email' ? (
           <>
             <input style={inp} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@mail.ru" inputMode="email" autoComplete="email" />
