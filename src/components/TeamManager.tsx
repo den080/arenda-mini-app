@@ -45,7 +45,7 @@ export function TeamManager() {
         const { data: t, error } = await supabase.from('teams').insert({ owner_id: user!.id, name: 'Пул аренды' }).select().single()
         if (error) { showToast('Ошибка: ' + error.message); return }
         tid = t.id
-        await supabase.from('team_members').insert({ team_id: tid, user_id: user!.id, role: 'owner' })
+        await supabase.from('team_members').insert({ team_id: tid!, user_id: user!.id, role: 'owner' })
         await supabase.from('objects').update({ team_id: tid }).eq('landlord_id', user!.id)
         selectPool(tid)
       }
