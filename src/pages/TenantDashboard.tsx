@@ -6,7 +6,7 @@ import BillUploader from '../components/BillUploader'
 import { ensureNextPayment } from '../lib/nextPayment'
 import Chat from '../components/Chat'
 import { setAnalyticsUser, trackOpen, trackScreen } from '../lib/analytics'
-import { BottomNav, Progress, showToast, SkeletonList, SkeletonCard } from '../components/ui'
+import { BottomNav, Progress, showToast, PullToRefresh } from '../components/ui'
 import { T } from '../theme'
 
 interface PayDetail { type: 'card' | 'sbp'; bank: string; number: string }
@@ -102,12 +102,7 @@ export function TenantDashboard() {
     }
   }
 
-  if (userLoading || loading) return (
-  <div style={T.page}>
-    <h1 style={T.h1}>Моя аренда</h1>
-    <SkeletonList count={3} />
-  </div>
-)
+  if (userLoading || loading) return <div style={T.page}>Загрузка…</div>
 
   const current = contracts.find(c => c.id === openId) || null
 
@@ -124,33 +119,35 @@ export function TenantDashboard() {
 
   if (!current) {
     return (
-      <div style={{ ...T.page, paddingBottom: 40 }}>
-        <h1 style={T.h1}>Моя аренда</h1>
-        {notifCard}
-        {contracts.length === 0 ? (
-          <div style={{ ...T.card, padding: '28px 20px', textAlign: 'center' }}>
-            <div style={{ fontSize: 17, fontWeight: 600, color: '#1d1d1f', marginBottom: 6 }}>Пока нет активной аренды</div>
-            <div style={{ fontSize: 14, color: '#8e8e93', lineHeight: 1.45 }}>Попросите арендодателя добавить объект и указать ваш номер телефона в договоре — аренда появится здесь автоматически.</div>
-          </div>
-        ) : (
-          <>
-            {contracts.map((c) => (
-              <div key={c.id} style={T.card}>
-                <button
-                  onClick={() => { setOpenId(c.id); setTab('pay') }}
-                  style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 56, border: 'none', background: 'transparent', cursor: 'pointer', padding: '4px 0', textAlign: 'left', boxSizing: 'border-box' }}
-                >
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 17, fontWeight: 700, color: '#1d1d1f' }}>{c._address}</div>
-                    <div style={{ fontSize: 13, color: c.status === 'terminated' ? '#ff3b30' : '#8e8e93', marginTop: 4 }}>{Number(c.rent_amount).toFixed(0)} ₽/мес{c.status === 'terminated' ? ' · договор завершён' : ''}</div>
-                  </div>
-                  <span style={{ color: '#c7c7cc', fontSize: 18 }}>›</span>
-                </button>
-              </div>
-            ))}
-          </>
-        )}
-      </div>
+      <PullToRefresh onRefresh={async () => { await load() }}>
+        <div style={{ ...T.page, paddingBottom: 40 }}>
+          <h1 style={T.h1}>Моя аренда</h1>
+          {notifCard}
+          {contracts.length === 0 ? (
+            <div style={{ ...T.card, padding: '28px 20px', textAlign: 'center' }}>
+              <div style={{ fontSize: 17, fontWeight: 600, color: '#1d1d1f', marginBottom: 6 }}>Пока нет активной аренды</div>
+              <div style={{ fontSize: 14, color: '#8e8e93', lineHeight: 1.45 }}>Попросите арендодателя добавить объект и указать ваш номер телефона в договоре — аренда появится здесь автоматически.</div>
+            </div>
+          ) : (
+            <>
+              {contracts.map((c) => (
+                <div key={c.id} style={T.card}>
+                  <button
+                    onClick={() => { setOpenId(c.id); setTab('pay') }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 56, border: 'none', background: 'transparent', cursor: 'pointer', padding: '4px 0', textAlign: 'left', boxSizing: 'border-box' }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 17, fontWeight: 700, color: '#1d1d1f' }}>{c._address}</div>
+                      <div style={{ fontSize: 13, color: c.status === 'terminated' ? '#ff3b30' : '#8e8e93', marginTop: 4 }}>{Number(c.rent_amount).toFixed(0)} ₽/мес{c.status === 'terminated' ? ' · договор завершён' : ''}</div>
+                    </div>
+                    <span style={{ color: '#c7c7cc', fontSize: 18 }}>›</span>
+                  </button>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      </PullToRefresh>
     )
   }
 
@@ -319,7 +316,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
     }
   }
 
-  if (!data) return <SkeletonCard rows={5} />
+  if (!data) return <div style={T.card}>Загрузка…</div>
 
   const { obj, landlord, payments, meters, meterTypes, penaltyRules, frozenRows, deferredReqs, readingsByMeter, contacts } = data
   const readingsMode = contract.readings_mode || 'manual'
