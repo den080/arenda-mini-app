@@ -461,7 +461,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
   // Штраф за просрочку оплаты: начисляется ежедневно, пока не заморожен отсрочкой
   const dueMidForPen = payment ? parseDate(payment.due_date) : null
   const sd = contract.start_date ? parseDate(contract.start_date) : null
-  const overdueNow = !!(payment && !payment.confirmed_by_landlord && dueMidForPen && todayMid > dueMidForPen && !firstMonth && (!sdForPen || dueMidForPen >= sdForPen))
+  const overdueNow = !!(payment && !payment.confirmed_by_landlord && dueMidForPen && todayMid > dueMidForPen && !firstMonth && (!sd || dueMidForPen >= sd))
   const daysOver = overdueNow && !deferralConfirmed ? Math.max(0, Math.round((todayMid.getTime() - dueMidForPen!.getTime()) / 86400000)) : 0
   const shownPenalty = Number(payment?.penalty_amount || 0) + daysOver * penaltyRate
   const total = payment ? Number(payment.base_amount) + shownPenalty + utilities : Number(contract.rent_amount)
