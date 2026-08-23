@@ -29,26 +29,38 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     ;(async () => {
-      // Локальная сессия может быть устаревшей (аккаунт удалили) — проверяем на сервере
       const { data } = await supabase.auth.getSession()
-      if (data.session) {
-        const { error } = await supabase.auth.getUser()
-        if (error) {
+      const s = data.session
+      if (!s) { setHasSession(false); setReady(true); return }
+      // Синхронизация личностей: e-mail сессии должен совпадать с e-mail текущего профиля.
+      // Переключили аккаунт в приложении — старая почтовая сессия сбрасывается,
+      // и приложение попросит код на правильный адрес.
+      if (user) {
+        const { data: u } = await supabase.from('users').select('email').eq('id', user.id).maybeSingle()
+        const sessionEmail = (s.user?.email || '').toLowerCase()
+        const boundEmail = (u?.email || '').toLowerCase()
+        if (boundEmail && sessionEmail && boundEmail !== sessionEmail) {
           await supabase.auth.signOut()
           setHasSession(false)
-        } else {
-          setHasSession(true)
+          setReady(true)
+          return
         }
-      } else {
+      }
+      // Серверная проверка сессии (удалённый аккаунт = выход)
+      const { error } = await supabase.auth.getUser()
+      if (error) {
+        await supabase.auth.signOut()
         setHasSession(false)
+      } else {
+        setHasSession(true)
       }
       setReady(true)
     })()
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setHasSession(!!s))
     return () => sub.subscription.unsubscribe()
-  }, [])
+  }, [user])
 
-  // автопривязка email к текущему аккаунту (по Telegram) при наличии сессии
+  // автопривязка email к текущему аккаунту при наличии сессии
   useEffect(() => {
     ;(async () => {
       if (!hasSession || !user) return
@@ -76,7 +88,6 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   async function verify() {
     if (code.trim().length < 4) { showToast('Введите код из письма'); return }
     setBusy(true)
-    // Письмо могло уйти по любому из шаблонов — пробуем все типы кода
     const types: Array<'email' | 'signup' | 'magiclink'> = ['email', 'signup', 'magiclink']
     let lastErr: any = null
     for (const t of types) {
