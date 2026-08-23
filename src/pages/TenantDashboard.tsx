@@ -62,7 +62,6 @@ export function TenantDashboard() {
       const { data: objs } = await supabase.from('objects').select('id, address').in('id', objIds)
       for (const o of objs || []) objBy[o.id] = o
     }
-    // Просрочки для красного статуса в списке — как у арендодателя
     const overBy: Record<string, { days: number; amount: number }> = {}
     const cIds = cs.map((c: any) => c.id)
     if (cIds.length) {
@@ -214,7 +213,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
       supabase.from('meter_types').select('*'),
       supabase.from('penalty_rules').select('*').eq('contract_id', contract.id),
       supabase.from('frozen_penalties').select('*').eq('contract_id', contract.id).order('period', { ascending: true }),
-      supabase.from('deferred_requests').select('*').eq('contract_id', contract.id).order('created_at', { ascending: false }).limit(1),
+      supabase.from('deferred_requests').select('*').eq('contract_id', contract.id).order('created_at', { ascending: false }),
       supabase.from('object_contacts').select('*').eq('object_id', contract.object_id).order('sort', { ascending: true }).order('created_at', { ascending: true }),
     ])
     const obj = objRes.data
@@ -278,20 +277,20 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
     load()
   }
 
-  async function requestDeferral() {
+  async function requestDeferral(currentPenalty: number) {
     if (!data?.obj?.landlord_id) return
     const open0 = (data.payments || []).filter((p: any) => !p.confirmed_by_landlord)
     const payment = open0.length ? open0[open0.length - 1] : data.payments[0]
-    if (!payment || Number(payment.penalty_amount) <= 0) return
+    if (!payment || currentPenalty <= 0) return
     const { error: e } = await supabase.from('deferred_requests').insert({
       contract_id: contract.id, payment_id: payment.id,
-      amount: Number(payment.penalty_amount), status: 'proposed',
+      amount: currentPenalty, status: 'proposed',
     })
     if (e) { showToast('Ошибка: ' + e.message); return }
     await supabase.from('notifications_log').insert({
       user_id: data.obj.landlord_id, type: 'deferred_proposed', related_id: contract.id, sent_at: new Date().toISOString(),
     })
-    showToast('✅ Заявка на отсрочку штрафа отправлена')
+    showToast('✅ Заявка на отсрочку отправлена')
     load()
   }
 
@@ -355,10 +354,8 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
   const today = new Date()
   const todayMid = new Date(today.getFullYear(), today.getMonth(), today.getDate())
   const utilities = Number(payment?.utilities_amount || 0)
-  const total = payment ? Number(payment.base_amount) + Number(payment.penalty_amount || 0) + utilities : Number(contract.rent_amount)
   const paidPart = Number(payment?.paid_amount || 0)
   const balance = Number(contract.balance || 0)
-  
   const monthLabel = payment ? new Date(payment.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : ''
   const deposit = Number(contract.deposit_amount || 0)
   const depositPaid = Number(contract.deposit_paid || 0)
@@ -455,16 +452,20 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
   const paymentOverdueRule = penaltyRules.find((r: any) => r.violation_type === 'payment_overdue')
   const penaltyRate = paymentOverdueRule ? Number(paymentOverdueRule.rate) : 500
   const readingsRule = penaltyRules.find((r: any) => r.violation_type === 'readings_overdue')
+
+  // Отсрочки по текущему счёту
   const lastDeferral = deferredReqs && deferredReqs[0] ? deferredReqs[0] : null
   const deferralPending = !!(lastDeferral && lastDeferral.status === 'proposed' && payment && String(lastDeferral.payment_id) === String(payment.id))
+  const deferralConfirmed = !!(payment && (deferredReqs || []).find((r: any) => r.status === 'confirmed' && String(r.payment_id) === String(payment.id)))
 
-  // Накопленный штраф за просрочку оплаты: растёт ежедневно, виден арендатору
+  // Штраф за просрочку оплаты: начисляется ежедневно, пока не заморожен отсрочкой
   const dueMidForPen = payment ? parseDate(payment.due_date) : null
   const sdForPen = contract.start_date ? parseDate(contract.start_date) : null
-  const daysOver = !!(payment && !payment.confirmed_by_landlord && dueMidForPen && todayMid > dueMidForPen && !firstMonth && (!sdForPen || dueMidForPen >= sdForPen))
-    ? Math.max(0, Math.round((todayMid.getTime() - dueMidForPen.getTime()) / 86400000))
-    : 0
+  const overdueNow = !!(payment && !payment.confirmed_by_landlord && dueMidForPen && todayMid > dueMidForPen && !firstMonth && (!sdForPen || dueMidForPen >= sdForPen))
+  const daysOver = overdueNow && !deferralConfirmed ? Math.max(0, Math.round((todayMid.getTime() - dueMidForPen!.getTime()) / 86400000)) : 0
   const shownPenalty = Number(payment?.penalty_amount || 0) + daysOver * penaltyRate
+  const total = payment ? Number(payment.base_amount) + shownPenalty + utilities : Number(contract.rent_amount)
+  const toPay = Math.max(0, total - paidPart - balance)
 
   const details: PayDetail[] = Array.isArray(contract.payment_details) && contract.payment_details.length > 0
     ? contract.payment_details
@@ -492,7 +493,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
             {utilities > 0 && (
               <div style={T.row}><span style={iosMuted}>Ресурсы по квитанции</span><span style={valMoney}>{utilities.toFixed(2)} ₽</span></div>
             )}
-            <div style={T.row}><span style={iosMuted}>Итого</span><span style={T.total}>{(total + daysOver * penaltyRate).toFixed(2)} ₽</span></div>
+            <div style={T.row}><span style={iosMuted}>Итого</span><span style={T.total}>{total.toFixed(2)} ₽</span></div>
             {!payment?.confirmed_by_landlord && paidPart > 0 && (
               <div style={T.row}><span style={iosMuted}>Оплачено</span><span style={{ ...valMoney, color: '#1e7e34' }}>−{paidPart.toFixed(2)} ₽</span></div>
             )}
@@ -500,13 +501,7 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
               <div style={T.row}><span style={iosMuted}>Баланс (переплата)</span><span style={{ ...valMoney, color: '#1e7e34' }}>−{balance.toFixed(2)} ₽</span></div>
             )}
             {!payment?.confirmed_by_landlord && (paidPart > 0 || balance > 0) && (
-              <div style={T.row}><span style={iosMuted}>К оплате</span><span style={T.total}>{Math.max(0, total + daysOver * penaltyRate - paidPart - balance).toFixed(2)} ₽</span></div>
-            )}
-            {deposit > 0 && (
-              <div style={T.row}><span style={iosMuted}>Депозит</span><span style={valMoney}>{depositPaid.toFixed(0)} / {deposit.toFixed(0)} ₽</span></div>
-            )}
-            {frozenTotal > 0 && (
-              <div style={T.row}><span style={iosMuted}>Заморожено из депозита</span><span style={{ ...valMoney, color: '#ff3b30' }}>{frozenTotal.toFixed(0)} ₽</span></div>
+              <div style={T.row}><span style={iosMuted}>К оплате</span><span style={T.total}>{toPay.toFixed(2)} ₽</span></div>
             )}
             <div style={{ ...T.row, borderBottom: 'none' }}>
               <span style={iosMuted}>{firstMonth ? 'Оплата при подписании договора' : 'Оплатить до'}</span>
@@ -515,19 +510,33 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
             <div style={{ padding: '0 0 8px' }}><span style={statusChip}>{statusText}</span></div>
             {isOverdue && <div style={T.noteRed}>+{penaltyRate} руб за каждый день просрочки. Штраф удерживается из депозита или взыскивается отдельно.</div>}
             {firstMonth && !payment?.confirmed_by_landlord && (
-              <div style={T.note}>Первый месяц оплачивается при подписании договора — подтверждение выставляет арендодатель.</div>
+              sd && sdForPen && sd.getTime() > todayMid.getTime()
+                ? <div style={T.note}>Договор начнётся {sd.toLocaleDateString('ru-RU')} — с этой даты пойдёт отсчёт. Первый месяц оплачивается заранее, подтверждение выставляет арендодатель.</div>
+                : <div style={T.note}>Первый месяц оплачивается при подписании договора — подтверждение выставляет арендодатель.</div>
             )}
-            {payment && !payment.confirmed_by_landlord && shownPenalty > 0 && !isOverdue && (
-              <div style={T.noteRed}>По счёту числится штраф {shownPenalty.toFixed(0)} ₽</div>
-            )}
-            {payment && !payment.confirmed_by_landlord && Number(payment.penalty_amount) > 0 && (
-              deferralPending ? (
+            {payment && !payment.confirmed_by_landlord && shownPenalty > 0 && (
+              deferralConfirmed ? (
+                <div style={T.note}>🧊 Штраф заморожен по отсрочке и будет учтён в конце договора — он больше не растёт.</div>
+              ) : deferralPending ? (
                 <div style={T.note}>Отсрочка штрафа: заявка на рассмотрении</div>
               ) : (
-                <div style={actionRow}><button onClick={requestDeferral} style={actBlue}>Попросить отсрочку штрафа</button></div>
+                <div style={actionRow}><button onClick={() => requestDeferral(shownPenalty)} style={actBlue}>Попросить отсрочку штрафа</button></div>
               )
             )}
           </div>
+
+          {(deposit > 0 || frozenTotal > 0) && (
+            <div style={T.card}>
+              <div style={T.h2}>Депозит и штрафы</div>
+              {deposit > 0 && (
+                <div style={T.row}><span style={iosMuted}>Депозит</span><span style={valMoney}>{depositPaid.toFixed(0)} / {deposit.toFixed(0)} ₽</span></div>
+              )}
+              {frozenTotal > 0 && (
+                <div style={{ ...T.row, borderBottom: 'none' }}><span style={iosMuted}>Заморожено из депозита</span><span style={{ ...valMoney, color: '#ff3b30' }}>{frozenTotal.toFixed(0)} ₽</span></div>
+              )}
+              <div style={{ ...T.tiny, margin: '6px 0 4px' }}>Замороженные штрафы удерживаются из депозита при съезде; остаток депозита возвращается арендатору.</div>
+            </div>
+          )}
 
           {contract.payment_method === 'both' && (
             <div>
