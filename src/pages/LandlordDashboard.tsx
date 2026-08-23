@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { useTelegramUser } from '../hooks/useTelegramUser'
 import { useTeam } from '../hooks/useTeam'
-import CashNegotiation from '../components/CashNegotiation'
 import MetersEditor from '../components/MetersEditor'
 import ReadingsReview from '../components/ReadingsReview'
 import Chat from '../components/Chat'
@@ -14,7 +13,7 @@ import { BottomNav, showToast } from '../components/ui'
 import { T } from '../theme'
 import type { Object as PropertyObject, Contract } from '../types/database'
 
-import { parseDate, isFirstPeriod, clampDay, toISO, OBJ_TABS, iosBlue, iosRed, secHead, getNotificationText, actBlue, actRed, iosOk, iosMuted, valText, valMoney, hair } from './landlord/helpers'
+import { parseDate, isFirstPeriod, clampDay, toISO, OBJ_TABS, iosBlue, secHead, getNotificationText } from './landlord/helpers'
 import { LandlordCtx } from './landlord/ctx'
 import { PayTab } from './landlord/PayTab'
 import { ContractTab } from './landlord/ContractTab'
@@ -251,7 +250,6 @@ export function LandlordDashboard() {
 
   useEffect(() => { if (user) { setAnalyticsUser(user); trackOpen('landlord') } }, [user])
 
-  // handlers
   function canUndo(h: any): boolean {
     return !!h.confirmed_by_landlord && !!h.confirmed_at && (Date.now() - new Date(h.confirmed_at).getTime()) < 24 * 3600 * 1000
   }
@@ -313,7 +311,7 @@ export function LandlordDashboard() {
     if (!pay) { showToast('Платёж не найден'); return }
     const total = Number(pay.base_amount || 0) + Number(pay.penalty_amount || 0) + Number(pay.utilities_amount || 0)
     let paid = Number(pay.paid_amount || 0) + amount
-    let bal = Number(contract.balance || 0)
+    let bal = Number((contract as any).balance || 0)
     let useBal = 0
     if (paid < total && bal > 0) { useBal = Math.min(bal, total - paid); paid += useBal }
     if (paid >= total) {
@@ -415,7 +413,7 @@ export function LandlordDashboard() {
     const { error } = await supabase.from('contracts').update(updateData).eq('id', contractId)
     if (!error) {
       showToast('✅ Способ оплаты обновлён')
-      setObjects(prev => prev.map(o => o.contract?.id === contractId ? { ...o, contract: { ...o.contract!, payment_method: method, cash_slots: method === 'cash' ? [] : o.contract!.cash_slots } } : o))
+      setObjects(prev => prev.map(o => o.contract?.id === contractId ? { ...o, contract: { ...o.contract!, payment_method: method, cash_slots: method === 'cash' ? [] : (o.contract as any).cash_slots } } : o))
     } else showToast('Ошибка: ' + error.message)
   }
   async function confirmChannel(paymentId: string, channel: 'card' | 'cash', close: boolean = false) {
@@ -444,19 +442,18 @@ export function LandlordDashboard() {
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
 
-  // вычисляемые значения для контекста
   const current = objects.find(o => o.id === openId) || null
   const contract: any = current?.contract
-  const deposit = Number(contract?.deposit_amount || 0)
-  const depositPaid = Number(contract?.deposit_paid || 0)
-  const contractBalance = Number(contract?.balance || 0)
-  const sd = contract?.start_date ? parseDate(contract.start_date) : null
+  const deposit = Number((contract as any)?.deposit_amount || 0)
+  const depositPaid = Number((contract as any)?.deposit_paid || 0)
+  const contractBalance = Number((contract as any)?.balance || 0)
+  const sd = (contract as any)?.start_date ? parseDate((contract as any).start_date) : null
   const firstMonthPending = !!(contract && current?.payment && !current.payment.confirmed_by_landlord && isFirstPeriod(current.payment.period, sd))
   const firstMonthCurrent = !!(contract && current?.payment && isFirstPeriod(current.payment.period, sd))
   const lastConfirmedIsFirst = !!(contract && current?.payment && current.payment.confirmed_by_landlord && isFirstPeriod(current.payment.period, sd))
   const openPay = current?.payment && !current.payment.confirmed_by_landlord ? current.payment : null
   const showUtilities = !!(contract && current?.paymentId && current.readingsMode !== 'self' && (openPay ? !firstMonthCurrent : lastConfirmedIsFirst))
-  const tenantChoseCash = contract && (contract.payment_method === 'cash' || (contract.payment_method === 'both' && contract.tenant_pay_method === 'cash'))
+  const tenantChoseCash = contract && (contract.payment_method === 'cash' || (contract.payment_method === 'both' && (contract as any).tenant_pay_method === 'cash'))
   const objHistory = history.filter(h => h.objId === current?.id).slice(0, 10)
   const pcPay = current?.payment
   const pcMonth = pcPay ? new Date(pcPay.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : ''
@@ -561,8 +558,8 @@ export function LandlordDashboard() {
                     {o.statusDetail}{o.amount > 0 ? ` · ${o.amount.toFixed(0)} ₽` : ''}
                   </div>
                 </div>
-                {Number(o.contract?.deposit_amount || 0) > 0 && (
-                  <span style={{ fontSize: 12, color: '#8e8e93', flexShrink: 0 }}>депозит {Number(o.contract?.deposit_paid || 0).toFixed(0)}/{Number(o.contract?.deposit_amount).toFixed(0)}</span>
+                {Number((o.contract as any)?.deposit_amount || 0) > 0 && (
+                  <span style={{ fontSize: 12, color: '#8e8e93', flexShrink: 0 }}>депозит {Number((o.contract as any).deposit_paid || 0).toFixed(0)}/{Number((o.contract as any).deposit_amount).toFixed(0)}</span>
                 )}
                 <span style={{ color: '#c7c7cc', fontSize: 18 }}>›</span>
               </button>
