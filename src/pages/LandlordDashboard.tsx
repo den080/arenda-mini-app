@@ -14,7 +14,7 @@ import TeamManager from '../components/TeamManager'
 import ContactsEditor from '../components/ContactsEditor'
 import { ensureNextPayment } from '../lib/nextPayment'
 import { setAnalyticsUser, trackOpen, trackScreen } from '../lib/analytics'
-import { BottomNav, Modal, PromptNumber, Progress, ConfirmDelete, showToast } from '../components/ui'
+import { BottomNav, Modal, PromptNumber, Progress, ConfirmDelete, showToast, SkeletonList } from '../components/ui'
 import { T } from '../theme'
 import type { Object as PropertyObject, Contract, NotificationLog, User } from '../types/database'
 
@@ -612,7 +612,12 @@ export function LandlordDashboard() {
   const archSd = arch?.start_date ? parseDate(arch.start_date) : null
   const archSettlement = (arch as any)?.settlement || {}
 
-  if (userLoading || loading) return <div style={T.page}>Загрузка…</div>
+  if (userLoading || loading) return (
+  <div style={T.page}>
+    <h1 style={T.h1}>Мои объекты</h1>
+    <SkeletonList count={4} />
+  </div>
+)
   if (error) return <div style={T.page}><div style={T.card}>{error}</div></div>
 
   if (arch) {
