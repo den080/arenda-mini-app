@@ -124,7 +124,17 @@ export function TenantDashboard() {
       default: return type
     }
   }
-
+  // Сообщения хранятся в базе «как есть»; на экране арендатора
+  // переформулируем их от второго лица, чтобы не путать
+  function noteText(n: any): string {
+    const m = n?.message as string | undefined
+    if (m) {
+      if (m.startsWith('💰 Получено')) return m.replace('💰 Получено', '💰 Арендодатель получил')
+      if (m.startsWith('🟢 Оплата получена')) return m.replace('🟢 Оплата получена', '🟢 Арендодатель отметил оплату')
+      return m
+    }
+    return getNotificationText(n.type)
+  }
   if (userLoading || loading) return <div style={T.page}>Загрузка…</div>
 
   const current = contracts.find(c => c.id === openId) || null
@@ -134,7 +144,7 @@ export function TenantDashboard() {
       <div style={T.h2}>Уведомления</div>
       {notifications.map(n => (
         <div key={n.id} style={T.row}>
-          <span style={{ fontSize: 14 }}>{(n as any).message || getNotificationText(n.type)}</span>
+          <span style={{ fontSize: 14 }}>{noteText(n)}</span>
         </div>
       ))}
     </div>
