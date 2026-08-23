@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
 
-
 function haptic(type: 'success' | 'error' | 'light' = 'light') {
   try {
     const tg = (window as any).Telegram?.WebApp
@@ -102,14 +101,9 @@ export function ConfirmDelete({ open, text, onClose, onConfirm }: { open: boolea
 export function BottomNav({ tabs, tab, setTab, badges }: { tabs: { id: string; l: string }[]; tab: string; setTab: (t: string) => void; badges?: Record<string, boolean> }) {
   return (
     <div style={{
-      position: 'fixed',
-      left: 0,
-      right: 0,
-      bottom: 0,
-      zIndex: 200,
+      position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 200,
       background: 'rgba(249,249,251,0.92)',
-      backdropFilter: 'blur(20px)',
-      WebkitBackdropFilter: 'blur(20px)',
+      backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
       borderTop: '1px solid rgba(60,60,67,0.12)',
       display: 'flex',
       paddingBottom: 'calc(10px + env(safe-area-inset-bottom))',
@@ -119,16 +113,8 @@ export function BottomNav({ tabs, tab, setTab, badges }: { tabs: { id: string; l
           key={t.id}
           onClick={() => { if (t.id !== tab) haptic('light'); setTab(t.id) }}
           style={{
-            flex: 1,
-            border: 'none',
-            background: 'transparent',
-            padding: '14px 0 12px',
-            minHeight: 50,
-            fontSize: 13,
-            fontWeight: 600,
-            color: tab === t.id ? '#0071e3' : '#8e8e93',
-            cursor: 'pointer',
-            position: 'relative',
+            flex: 1, border: 'none', background: 'transparent', padding: '14px 0 12px', minHeight: 50,
+            fontSize: 13, fontWeight: 600, color: tab === t.id ? '#0071e3' : '#8e8e93', cursor: 'pointer', position: 'relative',
           }}
         >
           {badges?.[t.id] && (
@@ -140,6 +126,7 @@ export function BottomNav({ tabs, tab, setTab, badges }: { tabs: { id: string; l
     </div>
   )
 }
+
 // ========== СКЕЛЕТОНЫ ==========
 export function Skeleton({ w = '100%', h = 14, r = 6 }: { w?: string | number; h?: number; r?: number }) {
   return (
@@ -147,7 +134,7 @@ export function Skeleton({ w = '100%', h = 14, r = 6 }: { w?: string | number; h
       width: typeof w === 'number' ? `${w}px` : w,
       height: `${h}px`,
       borderRadius: `${r}px`,
-      background: 'linear-gradient(90deg, rgba(120,120,128,0.08) 0%, rgba(120,120,128,0.16) 50%, rgba(120,120,128,0.08) 100%)',
+      background: 'linear-gradient(90deg, rgba(120,120,128,0.08) 0%, rgba(120,120,128,0.18) 50%, rgba(120,120,128,0.08) 100%)',
       backgroundSize: '200% 100%',
       animation: 'rf-shimmer 1.4s ease-in-out infinite',
     }} />
@@ -163,14 +150,14 @@ export function SkeletonRow({ labelW = 90, valueW = 60 }: { labelW?: number; val
   )
 }
 
-export function SkeletonCard({ rows = 4 }: { rows?: number } = {}) {
+export function SkeletonCard({ rows = 4 }: { rows?: number }) {
   return (
     <div style={{ background: '#fff', borderRadius: 14, padding: '14px 16px', marginBottom: 10 }}>
       <Skeleton w={140} h={20} />
-      <div style={{ height: 10 }} />
+      <div style={{ height: 6 }} />
       {Array.from({ length: rows }).map((_, i) => (
         <div key={i}>
-          {i > 0 && <div style={{ height: 1, background: 'rgba(60,60,67,0.12)', margin: '0' }} />}
+          {i > 0 && <div style={{ height: 1, background: 'rgba(60,60,67,0.12)' }} />}
           <SkeletonRow />
         </div>
       ))}
@@ -178,11 +165,11 @@ export function SkeletonCard({ rows = 4 }: { rows?: number } = {}) {
   )
 }
 
-export function SkeletonList({ count = 3 }: { count?: number } = {}) {
+export function SkeletonList({ count = 3 }: { count?: number }) {
   return (
     <>
       {Array.from({ length: count }).map((_, i) => (
-        <div key={i} style={{ background: '#fff', borderRadius: 14, padding: '16px', marginBottom: 10 }}>
+        <div key={i} style={{ background: '#fff', borderRadius: 14, padding: 16, marginBottom: 10 }}>
           <Skeleton w="70%" h={18} />
           <div style={{ height: 8 }} />
           <Skeleton w="45%" h={14} />
@@ -192,7 +179,7 @@ export function SkeletonList({ count = 3 }: { count?: number } = {}) {
   )
 }
 
-// ========== PULL-TO-REFRESH ==========
+// ========== PULL-TO-REFRESH (подключим следующим шагом) ==========
 export function PullToRefresh({ onRefresh, children }: { onRefresh: () => Promise<void> | void; children: React.ReactNode }) {
   const [drag, setDrag] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
@@ -205,90 +192,38 @@ export function PullToRefresh({ onRefresh, children }: { onRefresh: () => Promis
     if (!el || el.scrollTop > 0) return
     startY.current = e.touches[0].clientY
   }
-
   function onTouchMove(e: React.TouchEvent) {
     if (startY.current === null || refreshing) return
     const dy = Math.max(0, e.touches[0].clientY - startY.current)
-    const dampened = Math.min(MAX, dy * 0.5)
-    setDrag(dampened)
+    setDrag(Math.min(MAX, dy * 0.5))
   }
-
   async function onTouchEnd() {
     if (startY.current === null) return
     startY.current = null
     if (drag >= THRESHOLD && !refreshing) {
       setRefreshing(true)
-      try { await onRefresh() } finally {
-        setTimeout(() => { setRefreshing(false); setDrag(0) }, 400)
-      }
-    } else {
-      setDrag(0)
-    }
+      try { await onRefresh() } finally { setTimeout(() => { setRefreshing(false); setDrag(0) }, 400) }
+    } else setDrag(0)
   }
-
-  const showIndicator = drag > 20 || refreshing
-  const rotation = refreshing ? 0 : Math.min(180, drag * 2)
-
+  const show = drag > 20 || refreshing
   return (
-    <div
-      style={{ position: 'relative' }}
-      onTouchStart={onTouchStart}
-      onTouchMove={onTouchMove}
-      onTouchEnd={onTouchEnd}
-      onTouchCancel={onTouchEnd}
-    >
-      {showIndicator && (
-        <div style={{
-          position: 'absolute',
-          top: drag - 40,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          width: 28,
-          height: 28,
-          borderRadius: 14,
-          background: 'rgba(255,255,255,0.95)',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 10,
-          transition: refreshing ? 'none' : 'top 0.1s ease-out',
-        }}>
-          <div style={{
-            width: 14,
-            height: 14,
-            border: '2px solid rgba(120,120,128,0.2)',
-            borderTopColor: '#0071e3',
-            borderRadius: '50%',
-            transform: `rotate(${rotation}deg)`,
-            animation: refreshing ? 'rf-spin 0.8s linear infinite' : 'none',
-          }} />
+    <div style={{ position: 'relative' }} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onTouchCancel={onTouchEnd}>
+      {show && (
+        <div style={{ position: 'absolute', top: drag - 40, left: '50%', transform: 'translateX(-50%)', width: 28, height: 28, borderRadius: 14, background: 'rgba(255,255,255,0.95)', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
+          <div style={{ width: 14, height: 14, border: '2px solid rgba(120,120,128,0.2)', borderTopColor: '#0071e3', borderRadius: '50%', animation: refreshing ? 'rf-spin 0.8s linear infinite' : 'none' }} />
         </div>
       )}
-      <div style={{
-        transform: `translateY(${drag}px)`,
-        transition: drag === 0 ? 'transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)' : 'none',
-      }}>
-        {children}
-      </div>
+      <div style={{ transform: `translateY(${drag}px)`, transition: drag === 0 ? 'transform 0.3s ease' : 'none' }}>{children}</div>
     </div>
   )
 }
 
-// CSS анимации — добавить один раз при монтировании
-if (typeof document !== 'undefined' && !document.getElementById('rf-shimmer-css')) {
+if (typeof document !== 'undefined' && !document.getElementById('rf-anim-css')) {
   const style = document.createElement('style')
-  style.id = 'rf-shimmer-css'
+  style.id = 'rf-anim-css'
   style.textContent = `
-    @keyframes rf-shimmer {
-      0% { background-position: 200% 0; }
-      100% { background-position: -200% 0; }
-    }
-    @keyframes rf-spin {
-      from { transform: rotate(0deg); }
-      to { transform: rotate(360deg); }
-    }
+    @keyframes rf-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+    @keyframes rf-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
   `
   document.head.appendChild(style)
 }
-
