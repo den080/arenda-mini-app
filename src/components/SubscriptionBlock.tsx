@@ -138,7 +138,7 @@ export function SubscriptionBlock() {
         </div>
         {manualOpen && (
           <div style={{ marginTop: 10 }}>
-            <div style={{ fontSize: 14, marginBottom: 8 }}>Перевод по СБП: <b>{SBP_PHONE}</b> (Роман)</div>
+            <div style={{ fontSize: 14, marginBottom: 8 }}>Перевод по СБП: <b>{SBP_PHONE}</b></div>
             <label style={{ display: 'block', textAlign: 'center', padding: 12, borderRadius: 10, background: '#e8e8ed', fontWeight: 600, fontSize: 15, cursor: 'pointer' }}>
               {busy ? 'Отправка…' : 'Приложить чек'}
               <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) sendCheck(f); e.target.value = '' }} />
