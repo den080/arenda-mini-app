@@ -22,7 +22,7 @@ const valMoney: React.CSSProperties = { fontSize: 16, fontWeight: 600, color: '#
 const secHead: React.CSSProperties = { fontSize: 13, color: '#8e8e93', margin: '14px 16px 6px', textTransform: 'uppercase', letterSpacing: 0.3 }
 const blue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 14, fontWeight: 600, cursor: 'pointer', padding: 4, flexShrink: 0 }
 const red: React.CSSProperties = { border: 'none', background: 'transparent', color: '#ff3b30', fontSize: 14, cursor: 'pointer', padding: 4, flexShrink: 0 }
-const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProperties
+
 const inp: React.CSSProperties = { flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'rgba(120,120,128,0.08)', borderRadius: 8, padding: '9px 10px', fontSize: 14, color: '#1d1d1f', boxSizing: 'border-box' }
 
 function Row({ label, value, color, lastRow }: { label: string; value: React.ReactNode; color?: string; lastRow?: boolean }) {
