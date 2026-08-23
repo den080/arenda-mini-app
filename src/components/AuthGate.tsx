@@ -34,19 +34,17 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
   const tgId = String((window as any).Telegram?.WebApp?.initDataUnsafe?.user?.id || (user as any)?.telegram_id || '')
 
-  // Вход: проверка сессии → тихий вход по ключу устройства → иначе ворота с кодом
+  // Вход: проверка сессии → тихий вход по ключу устройства → иначе ворота с кодом.
+  // Поле почты НЕ пре заполняется — всегда пустое.
   useEffect(() => {
     let cancelled = false
     ;(async () => {
       if (!user) { setHasSession(false); setReady(true); return }
 
-      // 1) Почта, привязанная к профилю
+      // 1) Почта, привязанная к профилю (нужна только для тихого входа)
       const { data: u } = await supabase.from('users').select('email').eq('id', user.id).maybeSingle()
       const bound = String(u?.email || '').toLowerCase()
-      if (!cancelled) {
-        setBoundEmail(bound)
-        setEmail(prev => prev || bound)
-      }
+      if (!cancelled) setBoundEmail(bound)
 
       // 2) Текущая сессия + серверная валидация
       const { data: s } = await supabase.auth.getSession()
@@ -63,7 +61,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // 3) Сессии нет, но профиль уже верифицирован — тихий вход БЕЗ кода
+      // 3) Сессии нет, но профиль уже верифицирован — тихий вход БЕЗ кода и без подстановки в поле
       if (!session && bound && tgId) {
         const { data: ld, error } = await supabase.auth.signInWithPassword({ email: bound, password: devicePassword(tgId) })
         if (!error && ld.session) session = ld.session
@@ -135,7 +133,14 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         </div>
         {stage === 'email' ? (
           <>
-            <input style={inp} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@mail.ru" inputMode="email" autoComplete="email" />
+            <input
+              style={inp}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@mail.ru"
+              inputMode="email"
+              autoComplete="off"
+            />
             <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 13, margin: '12px 0', color: '#1d1d1f' }}>
               <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} style={{ marginTop: 2 }} />
               <span>Согласен на обработку персональных данных согласно <button style={{ border: 'none', background: 'transparent', color: '#0071e3', fontSize: 13, cursor: 'pointer', padding: 0 }} onClick={() => setPolicyOpen(true)}>политике конфиденциальности</button></span>
@@ -146,7 +151,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
           </>
         ) : (
           <>
-            <input style={inp} value={code} onChange={(e) => setCode(e.target.value)} placeholder="Код из письма" inputMode="numeric" />
+            <input style={inp} value={code} onChange={(e) => setCode(e.target.value)} placeholder="Код из письма" inputMode="numeric" autoComplete="off" />
             <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
               <button disabled={busy} onClick={verify} style={{ flex: 1, padding: 13, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 16, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>
                 {busy ? 'Проверка…' : 'Войти'}
