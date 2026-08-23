@@ -64,7 +64,7 @@ const OBJ_TABS = [
 
 export function LandlordDashboard() {
   const { user, loading: userLoading } = useTelegramUser()
-  const { teamId } = useTeam()
+  const { teamId, pool, pools, selectPool, role: teamRole } = useTeam()
   const [objects, setObjects] = useState<ObjectWithStatus[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -145,7 +145,7 @@ export function LandlordDashboard() {
         if (!objectsData || objectsData.length === 0) { setObjects([]); setHistory([]); setLoading(false); return }
         const objIds = objectsData.map((o: any) => o.id)
         const { data: contractsData } = await supabase
-                    .from('contracts').select('*, tenant:users!tenant_id(full_name, phone, email)')
+          .from('contracts').select('*, tenant:users!tenant_id(full_name, phone, email)')
           .in('object_id', objIds).eq('status', 'active')
         const contractByObj: Record<string, any> = {}
         for (const c of contractsData || []) contractByObj[c.object_id] = c
@@ -291,7 +291,7 @@ export function LandlordDashboard() {
     window.addEventListener('rentflow-refresh', onRefresh)
     const interval = setInterval(() => fetchData(), 30000)
     return () => { window.removeEventListener('rentflow-refresh', onRefresh); clearInterval(interval) }
-  }, [user, teamId])
+  }, [user, teamId, pool])
 
   useEffect(() => {
     if (user) { setAnalyticsUser(user); trackOpen('landlord') }
@@ -725,6 +725,17 @@ export function LandlordDashboard() {
     return (
       <div style={{ ...T.page, paddingBottom: 40 }}>
         <h1 style={T.h1}>Мои объекты</h1>
+        {pools.length > 1 && (
+          <div style={{ display: 'flex', gap: 6, overflowX: 'auto', padding: '0 0 10px' }}>
+            {pools.map(p => (
+              <button
+                key={p.id}
+                onClick={() => selectPool(p.id)}
+                style={{ flexShrink: 0, border: 'none', borderRadius: 10, padding: '8px 14px', fontSize: 14, fontWeight: 600, cursor: 'pointer', background: pool === p.id ? '#0071e3' : 'rgba(120,120,128,0.12)', color: pool === p.id ? '#fff' : '#1d1d1f' }}
+              >{p.name}</button>
+            ))}
+          </div>
+        )}
         {notifications.length > 0 && (
           <div style={T.card}>
             <div style={T.h2}>Уведомления</div>
@@ -759,7 +770,9 @@ export function LandlordDashboard() {
           </div>
         ))}
         <div style={T.card}>
-          <ObjectAdd />
+          {teamRole === 'viewer'
+            ? <div style={{ ...T.small, margin: '8px 0' }}>Режим наблюдателя: добавление объектов недоступно.</div>
+            : <ObjectAdd />}
         </div>
         {showTeam && <TeamManager />}
         {archived.length > 0 && (
@@ -796,7 +809,7 @@ export function LandlordDashboard() {
           )}
           {contract && current.paymentId && !current.payment?.confirmed_by_landlord && !firstMonthPending && (
             <div style={T.card}>
-             <div style={T.h2}>Подтверждение оплаты · {pcMonth}</div>
+              <div style={T.h2}>Подтверждение оплаты · {pcMonth}</div>
               {pcPaid > 0 && (
                 <div style={T.row}>
                   <span style={iosMuted}>Получено</span>
@@ -835,7 +848,7 @@ export function LandlordDashboard() {
               {!current.payment?.card_claimed && !current.hasConfirmedCashMeeting && (
                 <>
                   <div style={{ ...T.tiny, margin: '10px 0 6px' }}>Арендатор не отмечал оплату в приложении? Если деньги получены наличными или переводом напрямую — подтвердите здесь, заявка арендатора не нужна.</div>
-                                     <button style={T.btn} onClick={() => { setPayConfirmOk(false); setPayConfirm({ kind: 'full' }) }}>{pcPaid > 0 ? `Подтвердить получение остатка за ${pcMonth} (${Math.max(0, pcSum - pcPaid).toFixed(0)} ₽)` : `Получил оплату за ${pcMonth} вне приложения`}</button>
+                  <button style={T.btn} onClick={() => { setPayConfirmOk(false); setPayConfirm({ kind: 'full' }) }}>{pcPaid > 0 ? `Подтвердить получение остатка за ${pcMonth} (${Math.max(0, pcSum - pcPaid).toFixed(0)} ₽)` : `Получил оплату за ${pcMonth} вне приложения`}</button>
                 </>
               )}
               <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 4px' }}>
@@ -954,7 +967,6 @@ export function LandlordDashboard() {
             <div style={T.row}><span style={iosMuted}>Арендатор</span><span style={valText}>{(contract as any).tenant?.full_name || '—'}</span></div>
             {(contract as any).tenant?.phone && <div style={T.row}><span style={iosMuted}>Телефон</span><span style={valText}>{(contract as any).tenant.phone}</span></div>}
             {(contract as any).tenant?.email && <div style={T.row}><span style={iosMuted}>E-mail</span><span style={valText}>{(contract as any).tenant.email}</span></div>}
-
             {(contract as any).start_date && (contract as any).end_date && (
               <div style={T.row}><span style={iosMuted}>Срок</span><span style={valText}>{parseDate((contract as any).start_date).toLocaleDateString('ru-RU')} — {parseDate((contract as any).end_date).toLocaleDateString('ru-RU')}</span></div>
             )}
