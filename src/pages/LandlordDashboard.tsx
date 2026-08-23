@@ -14,7 +14,7 @@ import TeamManager from '../components/TeamManager'
 import ContactsEditor from '../components/ContactsEditor'
 import { ensureNextPayment } from '../lib/nextPayment'
 import { setAnalyticsUser, trackOpen, trackScreen } from '../lib/analytics'
-import { BottomNav, Modal, PromptNumber, Progress, ConfirmDelete, showToast, SkeletonList, PullToRefresh } from '../components/ui'
+import { BottomNav, Modal, PromptNumber, Progress, ConfirmDelete, showToast } from '../components/ui'
 import { T } from '../theme'
 import type { Object as PropertyObject, Contract, NotificationLog, User } from '../types/database'
 
@@ -70,14 +70,7 @@ const OBJ_TABS = [
 
 export function LandlordDashboard() {
   const { user, loading: userLoading } = useTelegramUser()
-  // Совместимо и со старой, и с мульти-пульной версией useTeam
-  const teamHook: any = useTeam()
-  const teamId: string | null = teamHook.teamId ?? null
-  const pools: any[] = teamHook.pools || []
-  const pool: string = teamHook.pool || 'own'
-  const selectPool: (id: string) => void = teamHook.selectPool || (() => {})
-  const teamRole: string | null = teamHook.role ?? null
-
+  const { teamId, pool, pools, selectPool, role: teamRole } = useTeam()
   const [objects, setObjects] = useState<ObjectWithStatus[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -102,6 +95,9 @@ export function LandlordDashboard() {
   const [archivePays, setArchivePays] = useState<any[]>([])
   const [archiveFrozen, setArchiveFrozen] = useState<any[]>([])
   const [showTeam, setShowTeam] = useState(false)
+  const [earlyPayOpen, setEarlyPayOpen] = useState(false)
+
+  useEffect(() => { setEarlyPayOpen(false) }, [openId])
 
   // Совместный доступ: виден при активном Pro ИЛИ если номер в списке «Доступ» (admin/tester)
   useEffect(() => {
@@ -208,14 +204,10 @@ export function LandlordDashboard() {
           if (!contract) { objectsWithStatus.push({ ...obj, status: 'no_contract', amount: 0, paymentId: null, statusColor: '#888', statusDetail: 'Нет договора' }); continue }
           const readingsMode = contract.readings_mode || 'manual'
           const reminder = contract.reminder_days_before || 3
-          const sd0 = contract.start_date ? parseDate(contract.start_date) : null
-          const startMonthISO = contract.start_date ? `${String(contract.start_date).slice(0, 7)}-01` : null
-          const contractStarted = !sd0 || todayMid.getTime() >= sd0.getTime()
           const allPays = paysBy[contract.id] || []
           for (const p of allPays) allHistory.push({ ...p, objId: obj.id, address: obj.address })
           const fRows = fRowsBy[contract.id] || []
-          // ===== Штраф за просрочку показаний: только для месяцев НЕ раньше начала договора =====
-          if (readingsMode === 'manual' && contract.meter_deadline_day && contractStarted && (!startMonthISO || periodISO >= startMonthISO)) {
+          if (readingsMode === 'manual' && contract.meter_deadline_day) {
             const rr = (rulesBy[contract.id] || []).find((r: any) => r.violation_type === 'readings_overdue')
             const rRate = rr ? Number(rr.rate) || 0 : 0
             if (rRate > 0) {
@@ -246,7 +238,6 @@ export function LandlordDashboard() {
               }
             }
           }
-          // ===== конец блока =====
           const frozenTotal = fRows.reduce((s2: number, d: any) => s2 + Number(d.amount || 0), 0)
           const openPays = allPays.filter((p: any) => !p.confirmed_by_landlord)
           const payment = openPays.length ? openPays[openPays.length - 1] : allPays[0]
@@ -262,7 +253,7 @@ export function LandlordDashboard() {
           const utilitiesAmount = Number(payment.utilities_amount || 0)
           const paymentId = String(payment.id)
           let waitingForReadings = false
-          if (readingsMode === 'manual' && contract.meter_deadline_day && contractStarted && today.getDate() > contract.meter_deadline_day) {
+          if (readingsMode === 'manual' && contract.meter_deadline_day && today.getDate() > contract.meter_deadline_day) {
             if (!(readCountBy[contract.id] > 0)) waitingForReadings = true
           }
           const needUtilitiesReminder = !payment.confirmed_by_landlord && readingsMode !== 'self' && daysUntilDue >= 0 && daysUntilDue <= reminder && utilitiesAmount === 0
@@ -271,13 +262,7 @@ export function LandlordDashboard() {
           let statusColor = '#a80'
           if (!payment.confirmed_by_landlord) {
             const paidPart = Number(payment.paid_amount || 0)
-            if (firstMonth) {
-              const startFuture = sd && sd.getTime() > todayMid.getTime()
-              statusDetail = startFuture
-                ? `Начало договора ${sd!.toLocaleDateString('ru-RU')} · первый месяц к оплате · ${Math.round((sd!.getTime() - todayMid.getTime()) / 86400000)} дн.`
-                : 'Первый месяц — ждёт оплаты'
-              statusColor = '#a80'
-            }
+            if (firstMonth) { statusDetail = 'Первый месяц — ждёт оплаты'; statusColor = '#a80' }
             else if (isOverdue) { status = 'overdue'; statusDetail = `Просрочка ${Math.round((todayMid.getTime() - dueMid.getTime()) / 86400000)} дн.`; statusColor = '#c00' }
             else if (waitingForReadings) { statusDetail = 'Ждём показания'; statusColor = '#a80' }
             else if (paidPart > 0) { statusDetail = `Оплачено частично · до оплаты ${daysUntilDue} дн. (${dueMid.toLocaleDateString('ru-RU')})`; statusColor = '#a80' }
@@ -318,6 +303,14 @@ export function LandlordDashboard() {
   useEffect(() => {
     if (user) { setAnalyticsUser(user); trackOpen('landlord') }
   }, [user])
+
+  const arch = archived.find(a => a.id === archiveId) || null
+  const current = objects.find(o => o.id === openId) || null
+
+  useEffect(() => {
+    const screen = arch ? 'archive_item' : archiveListOpen ? 'archive_list' : current ? `object_${tab}` : 'objects_list'
+    trackScreen(screen)
+  }, [tab, openId, archiveListOpen, archiveId, arch, current])
 
   function canUndo(h: any): boolean {
     return !!h.confirmed_by_landlord && !!h.confirmed_at && (Date.now() - new Date(h.confirmed_at).getTime()) < 24 * 3600 * 1000
@@ -600,7 +593,6 @@ export function LandlordDashboard() {
   const secHead: React.CSSProperties = { fontSize: 13, color: '#8e8e93', margin: '14px 16px 6px', textTransform: 'uppercase', letterSpacing: 0.3 }
   const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProperties
 
-  const current = objects.find(o => o.id === openId) || null
   const contract = current?.contract
   const deposit = Number((contract as any)?.deposit_amount || 0)
   const depositPaid = Number((contract as any)?.deposit_paid || 0)
@@ -617,23 +609,19 @@ export function LandlordDashboard() {
   const pcMonth = pcPay ? new Date(pcPay.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : ''
   const pcSum = pcPay ? Number(pcPay.base_amount || 0) + Number(pcPay.penalty_amount || 0) + Number(pcPay.utilities_amount || 0) : 0
   const pcPaid = Number(pcPay?.paid_amount || 0)
+
+  // Сколько дней до срока текущего счёта — от этого зависит вид кнопки «вне приложения»
+  const nowD = new Date()
+  const todayMidRender = new Date(nowD.getFullYear(), nowD.getMonth(), nowD.getDate())
+  const daysToPay = openPay ? Math.round((parseDate(openPay.due_date).getTime() - todayMidRender.getTime()) / 86400000) : 0
+  const earlyPayUrgent = daysToPay <= 7 || pcPaid > 0
+
   const payBadge = !!((current?.payment && !current.payment.confirmed_by_landlord) || firstMonthPending)
   const metersBadge = !!current?.waitingForReadings
-  const arch = archived.find(a => a.id === archiveId) || null
   const archSd = arch?.start_date ? parseDate(arch.start_date) : null
   const archSettlement = (arch as any)?.settlement || {}
 
-  useEffect(() => {
-    const screen = arch ? 'archive_item' : archiveListOpen ? 'archive_list' : current ? `object_${tab}` : 'objects_list'
-    trackScreen(screen)
-  }, [tab, openId, archiveListOpen, archiveId, arch, current])
-
-  if (userLoading || loading) return (
-    <div style={T.page}>
-      <h1 style={T.h1}>Мои объекты</h1>
-      <SkeletonList count={4} />
-    </div>
-  )
+  if (userLoading || loading) return <div style={T.page}>Загрузка…</div>
   if (error) return <div style={T.page}><div style={T.card}>{error}</div></div>
 
   if (arch) {
@@ -744,75 +732,73 @@ export function LandlordDashboard() {
 
   if (!current) {
     return (
-      <PullToRefresh onRefresh={async () => { window.dispatchEvent(new Event('rentflow-refresh')); await new Promise(r => setTimeout(r, 600)) }}>
-        <div style={{ ...T.page, paddingBottom: 40 }}>
-          <h1 style={T.h1}>Мои объекты</h1>
-          {pools.length > 1 && (
-            <div style={{ display: 'flex', gap: 6, overflowX: 'auto', padding: '0 0 10px' }}>
-              {pools.map((p: any) => (
-                <button
-                  key={p.id}
-                  onClick={() => selectPool(p.id)}
-                  style={{ flexShrink: 0, border: 'none', borderRadius: 10, padding: '8px 14px', fontSize: 14, fontWeight: 600, cursor: 'pointer', background: pool === p.id ? '#0071e3' : 'rgba(120,120,128,0.12)', color: pool === p.id ? '#fff' : '#1d1d1f' }}
-                >{p.name}</button>
-              ))}
-            </div>
-          )}
-          {notifications.length > 0 && (
-            <div style={T.card}>
-              <div style={T.h2}>Уведомления</div>
-              {notifications.map(n => (
-                <div key={n.id} style={T.row}>
-                  <span style={{ fontSize: 14 }}>{(n as any).message || getNotificationText(n.type)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-          <div style={secHead}>Объекты</div>
-          {objects.length === 0 && (
-            <div style={T.card}><div style={{ ...T.small, margin: '8px 0' }}>Пока нет объектов — добавьте первый.</div></div>
-          )}
-          {objects.map((o) => (
-            <div key={o.id} style={T.card}>
+      <div style={{ ...T.page, paddingBottom: 40 }}>
+        <h1 style={T.h1}>Мои объекты</h1>
+        {pools.length > 1 && (
+          <div style={{ display: 'flex', gap: 6, overflowX: 'auto', padding: '0 0 10px' }}>
+            {pools.map((p: any) => (
               <button
-                onClick={() => { setOpenId(o.id); setTab('pay') }}
-                style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 56, border: 'none', background: 'transparent', cursor: 'pointer', padding: '4px 0', textAlign: 'left', boxSizing: 'border-box' }}
-              >
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 17, fontWeight: 700, color: '#1d1d1f' }}>{o.address}</div>
-                  <div style={{ fontSize: 13, color: o.statusColor || '#8e8e93', marginTop: 4 }}>
-                    {o.statusDetail}{o.amount > 0 ? ` · ${o.amount.toFixed(0)} ₽` : ''}
-                  </div>
-                </div>
-                {Number((o.contract as any)?.deposit_amount || 0) > 0 && (
-                  <span style={{ fontSize: 12, color: '#8e8e93', flexShrink: 0 }}>депозит {Number((o.contract as any).deposit_paid || 0).toFixed(0)}/{Number((o.contract as any).deposit_amount).toFixed(0)}</span>
-                )}
-                <span style={{ color: '#c7c7cc', fontSize: 18 }}>›</span>
-              </button>
-            </div>
-          ))}
-          <div style={T.card}>
-            {teamRole === 'viewer'
-              ? <div style={{ ...T.small, margin: '8px 0' }}>Режим наблюдателя: добавление объектов недоступно.</div>
-              : <ObjectAdd />}
+                key={p.id}
+                onClick={() => selectPool(p.id)}
+                style={{ flexShrink: 0, border: 'none', borderRadius: 10, padding: '8px 14px', fontSize: 14, fontWeight: 600, cursor: 'pointer', background: pool === p.id ? '#0071e3' : 'rgba(120,120,128,0.12)', color: pool === p.id ? '#fff' : '#1d1d1f' }}
+              >{p.name}</button>
+            ))}
           </div>
-          {showTeam && <TeamManager />}
-          {archived.length > 0 && (
-            <div style={T.card}>
-              <button
-                onClick={() => setArchiveListOpen(true)}
-                style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 56, border: 'none', background: 'transparent', cursor: 'pointer', padding: '4px 0', textAlign: 'left', boxSizing: 'border-box' }}
-              >
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 17, fontWeight: 700, color: '#1d1d1f' }}>Архив договоров</div>
-                  <div style={{ fontSize: 13, color: '#8e8e93', marginTop: 4 }}>завершённых: {archived.length}</div>
+        )}
+        {notifications.length > 0 && (
+          <div style={T.card}>
+            <div style={T.h2}>Уведомления</div>
+            {notifications.map(n => (
+              <div key={n.id} style={T.row}>
+                <span style={{ fontSize: 14 }}>{(n as any).message || getNotificationText(n.type)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        <div style={secHead}>Объекты</div>
+        {objects.length === 0 && (
+          <div style={T.card}><div style={{ ...T.small, margin: '8px 0' }}>Пока нет объектов — добавьте первый.</div></div>
+        )}
+        {objects.map((o) => (
+          <div key={o.id} style={T.card}>
+            <button
+              onClick={() => { setOpenId(o.id); setTab('pay') }}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 56, border: 'none', background: 'transparent', cursor: 'pointer', padding: '4px 0', textAlign: 'left', boxSizing: 'border-box' }}
+            >
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 17, fontWeight: 700, color: '#1d1d1f' }}>{o.address}</div>
+                <div style={{ fontSize: 13, color: o.statusColor || '#8e8e93', marginTop: 4 }}>
+                  {o.statusDetail}{o.amount > 0 ? ` · ${o.amount.toFixed(0)} ₽` : ''}
                 </div>
-                <span style={{ color: '#c7c7cc', fontSize: 18 }}>›</span>
-              </button>
-            </div>
-          )}
+              </div>
+              {Number((o.contract as any)?.deposit_amount || 0) > 0 && (
+                <span style={{ fontSize: 12, color: '#8e8e93', flexShrink: 0 }}>депозит {Number((o.contract as any).deposit_paid || 0).toFixed(0)}/{Number((o.contract as any).deposit_amount).toFixed(0)}</span>
+              )}
+              <span style={{ color: '#c7c7cc', fontSize: 18 }}>›</span>
+            </button>
+          </div>
+        ))}
+        <div style={T.card}>
+          {teamRole === 'viewer'
+            ? <div style={{ ...T.small, margin: '8px 0' }}>Режим наблюдателя: добавление объектов недоступно.</div>
+            : <ObjectAdd />}
         </div>
-      </PullToRefresh>
+        {showTeam && <TeamManager />}
+        {archived.length > 0 && (
+          <div style={T.card}>
+            <button
+              onClick={() => setArchiveListOpen(true)}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 56, border: 'none', background: 'transparent', cursor: 'pointer', padding: '4px 0', textAlign: 'left', boxSizing: 'border-box' }}
+            >
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 17, fontWeight: 700, color: '#1d1d1f' }}>Архив договоров</div>
+                <div style={{ fontSize: 13, color: '#8e8e93', marginTop: 4 }}>завершённых: {archived.length}</div>
+              </div>
+              <span style={{ color: '#c7c7cc', fontSize: 18 }}>›</span>
+            </button>
+          </div>
+        )}
+      </div>
     )
   }
 
@@ -869,10 +855,23 @@ export function LandlordDashboard() {
                       : <span style={iosMuted}>не заявлена</span>}
               </div>
               {!current.payment?.card_claimed && !current.hasConfirmedCashMeeting && (
-                <>
-                  <div style={{ ...T.tiny, margin: '10px 0 6px' }}>Арендатор не отмечал оплату в приложении? Если деньги получены наличными или переводом напрямую — подтвердите здесь, заявка арендатора не нужна.</div>
-                  <button style={T.btn} onClick={() => { setPayConfirmOk(false); setPayConfirm({ kind: 'full' }) }}>{pcPaid > 0 ? `Подтвердить получение остатка за ${pcMonth} (${Math.max(0, pcSum - pcPaid).toFixed(0)} ₽)` : `Получил оплату за ${pcMonth} вне приложения`}</button>
-                </>
+                earlyPayUrgent ? (
+                  <>
+                    <div style={{ ...T.tiny, margin: '10px 0 6px' }}>Арендатор не отмечал оплату в приложении? Если деньги получены наличными или переводом напрямую — подтвердите здесь, заявка арендатора не нужна.</div>
+                    <button style={T.btn} onClick={() => { setPayConfirmOk(false); setPayConfirm({ kind: 'full' }) }}>{pcPaid > 0 ? `Подтвердить получение остатка за ${pcMonth} (${Math.max(0, pcSum - pcPaid).toFixed(0)} ₽)` : `Получил оплату за ${pcMonth} вне приложения`}</button>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ ...T.tiny, margin: '10px 0 6px' }}>До оплаты ещё {daysToPay} дн. Если деньги уже получены досрочно — отметьте это здесь.</div>
+                    {!earlyPayOpen ? (
+                      <div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0' }}>
+                        <button style={actBlue} onClick={() => setEarlyPayOpen(true)}>Отметить оплату вне приложения (досрочно)</button>
+                      </div>
+                    ) : (
+                      <button style={T.btn} onClick={() => { setPayConfirmOk(false); setPayConfirm({ kind: 'full' }) }}>Получил оплату за {pcMonth} вне приложения</button>
+                    )}
+                  </>
+                )
               )}
               <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 4px' }}>
                 <button style={actBlue} onClick={() => setReceiptOpen(true)}>Учесть частичную оплату</button>
