@@ -70,7 +70,14 @@ const OBJ_TABS = [
 
 export function LandlordDashboard() {
   const { user, loading: userLoading } = useTelegramUser()
-  const { teamId, pool, pools, selectPool, role: teamRole } = useTeam()
+  // Совместимо и со старой, и с мульти-пульной версией useTeam
+  const teamHook: any = useTeam()
+  const teamId: string | null = teamHook.teamId ?? null
+  const pools: any[] = teamHook.pools || []
+  const pool: string = teamHook.pool || 'own'
+  const selectPool: (id: string) => void = teamHook.selectPool || (() => {})
+  const teamRole: string | null = teamHook.role ?? null
+
   const [objects, setObjects] = useState<ObjectWithStatus[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -201,11 +208,14 @@ export function LandlordDashboard() {
           if (!contract) { objectsWithStatus.push({ ...obj, status: 'no_contract', amount: 0, paymentId: null, statusColor: '#888', statusDetail: 'Нет договора' }); continue }
           const readingsMode = contract.readings_mode || 'manual'
           const reminder = contract.reminder_days_before || 3
+          const sd0 = contract.start_date ? parseDate(contract.start_date) : null
+          const startMonthISO = contract.start_date ? `${String(contract.start_date).slice(0, 7)}-01` : null
+          const contractStarted = !sd0 || todayMid.getTime() >= sd0.getTime()
           const allPays = paysBy[contract.id] || []
           for (const p of allPays) allHistory.push({ ...p, objId: obj.id, address: obj.address })
           const fRows = fRowsBy[contract.id] || []
-          // ===== Штраф за просрочку показаний: начисление в замороженные (уменьшает депозит) =====
-          if (readingsMode === 'manual' && contract.meter_deadline_day) {
+          // ===== Штраф за просрочку показаний: только для месяцев НЕ раньше начала договора =====
+          if (readingsMode === 'manual' && contract.meter_deadline_day && contractStarted && (!startMonthISO || periodISO >= startMonthISO)) {
             const rr = (rulesBy[contract.id] || []).find((r: any) => r.violation_type === 'readings_overdue')
             const rRate = rr ? Number(rr.rate) || 0 : 0
             if (rRate > 0) {
@@ -252,7 +262,7 @@ export function LandlordDashboard() {
           const utilitiesAmount = Number(payment.utilities_amount || 0)
           const paymentId = String(payment.id)
           let waitingForReadings = false
-          if (readingsMode === 'manual' && contract.meter_deadline_day && today.getDate() > contract.meter_deadline_day) {
+          if (readingsMode === 'manual' && contract.meter_deadline_day && contractStarted && today.getDate() > contract.meter_deadline_day) {
             if (!(readCountBy[contract.id] > 0)) waitingForReadings = true
           }
           const needUtilitiesReminder = !payment.confirmed_by_landlord && readingsMode !== 'self' && daysUntilDue >= 0 && daysUntilDue <= reminder && utilitiesAmount === 0
@@ -261,7 +271,13 @@ export function LandlordDashboard() {
           let statusColor = '#a80'
           if (!payment.confirmed_by_landlord) {
             const paidPart = Number(payment.paid_amount || 0)
-            if (firstMonth) { statusDetail = 'Первый месяц — ждёт оплаты'; statusColor = '#a80' }
+            if (firstMonth) {
+              const startFuture = sd && sd.getTime() > todayMid.getTime()
+              statusDetail = startFuture
+                ? `Начало договора ${sd!.toLocaleDateString('ru-RU')} · первый месяц к оплате · ${Math.round((sd!.getTime() - todayMid.getTime()) / 86400000)} дн.`
+                : 'Первый месяц — ждёт оплаты'
+              statusColor = '#a80'
+            }
             else if (isOverdue) { status = 'overdue'; statusDetail = `Просрочка ${Math.round((todayMid.getTime() - dueMid.getTime()) / 86400000)} дн.`; statusColor = '#c00' }
             else if (waitingForReadings) { statusDetail = 'Ждём показания'; statusColor = '#a80' }
             else if (paidPart > 0) { statusDetail = `Оплачено частично · до оплаты ${daysUntilDue} дн. (${dueMid.toLocaleDateString('ru-RU')})`; statusColor = '#a80' }
@@ -733,7 +749,7 @@ export function LandlordDashboard() {
           <h1 style={T.h1}>Мои объекты</h1>
           {pools.length > 1 && (
             <div style={{ display: 'flex', gap: 6, overflowX: 'auto', padding: '0 0 10px' }}>
-              {pools.map(p => (
+              {pools.map((p: any) => (
                 <button
                   key={p.id}
                   onClick={() => selectPool(p.id)}
