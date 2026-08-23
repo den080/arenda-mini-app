@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+
 
 function haptic(type: 'success' | 'error' | 'light' = 'light') {
   try {
