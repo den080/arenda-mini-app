@@ -145,7 +145,7 @@ export function LandlordDashboard() {
         if (!objectsData || objectsData.length === 0) { setObjects([]); setHistory([]); setLoading(false); return }
         const objIds = objectsData.map((o: any) => o.id)
         const { data: contractsData } = await supabase
-          .from('contracts').select('*, tenant:users!tenant_id(full_name, phone)')
+                    .from('contracts').select('*, tenant:users!tenant_id(full_name, phone, email)')
           .in('object_id', objIds).eq('status', 'active')
         const contractByObj: Record<string, any> = {}
         for (const c of contractsData || []) contractByObj[c.object_id] = c
@@ -953,6 +953,8 @@ export function LandlordDashboard() {
             <div style={T.h2}>Договор</div>
             <div style={T.row}><span style={iosMuted}>Арендатор</span><span style={valText}>{(contract as any).tenant?.full_name || '—'}</span></div>
             {(contract as any).tenant?.phone && <div style={T.row}><span style={iosMuted}>Телефон</span><span style={valText}>{(contract as any).tenant.phone}</span></div>}
+            {(contract as any).tenant?.email && <div style={T.row}><span style={iosMuted}>E-mail</span><span style={valText}>{(contract as any).tenant.email}</span></div>}
+
             {(contract as any).start_date && (contract as any).end_date && (
               <div style={T.row}><span style={iosMuted}>Срок</span><span style={valText}>{parseDate((contract as any).start_date).toLocaleDateString('ru-RU')} — {parseDate((contract as any).end_date).toLocaleDateString('ru-RU')}</span></div>
             )}
