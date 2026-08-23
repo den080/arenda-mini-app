@@ -34,7 +34,7 @@ function clampDay(y: number, m: number, d: number): number {
   return Math.min(Math.max(1, d), last)
 }
 
-// Убираем эмодзи только из строк уведомлений (в остальных местах они остаются)
+// Убираем эмодзи только из строк уведомлений
 function noEmoji(s: string): string {
   return String(s || '')
     .replace(/[\p{Extended_Pictographic}\uFE0F\u200D]/gu, '')
@@ -133,6 +133,16 @@ export function TenantDashboard() {
     }
   }
 
+  // Переформулируем «чужие» формулировки под взгляд арендатора
+  const tenantNoteText = (n: any): string => {
+    let s: string = (n as any).message || getNotificationText(n.type)
+    if (s.startsWith('💰 Получено')) s = s.replace('💰 Получено', '💰 Арендодатель получил')
+    else if (s.startsWith('Получено')) s = 'Арендодатель получил' + s.slice('Получено'.length)
+    if (s.startsWith('🟢 Оплата получена')) s = s.replace('🟢 Оплата получена', '🟢 Арендодатель отметил оплату')
+    if (n.type === 'payment_claimed') s = 'Вы отметили оплату — арендодатель уведомлён'
+    return noEmoji(s)
+  }
+
   if (userLoading || loading) return <div style={T.page}>Загрузка…</div>
 
   const current = contracts.find(c => c.id === openId) || null
@@ -142,7 +152,7 @@ export function TenantDashboard() {
       <div style={T.h2}>Уведомления</div>
       {notifications.map(n => (
         <div key={n.id} style={T.row}>
-          <span style={{ fontSize: 14 }}>{noEmoji((n as any).message || getNotificationText(n.type))}</span>
+          <span style={{ fontSize: 14 }}>{tenantNoteText(n)}</span>
         </div>
       ))}
     </div>
