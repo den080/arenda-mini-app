@@ -121,7 +121,7 @@ export function ArchiveListView({ archived, onBack, onOpen }: { archived: any[];
   return (
     <div style={{ ...T.page, paddingBottom: 40 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 0 8px' }}>
-        <button style={iosBlue} onBack={undefined as any} onClick={onBack}>← Мои объекты</button>
+        <button style={iosBlue} onClick={onBack}>← Мои объекты</button>
       </div>
       <h1 style={T.h1}>Архив договоров</h1>
       {archived.length === 0 && (
@@ -146,3 +146,5 @@ export function ArchiveListView({ archived, onBack, onOpen }: { archived: any[];
     </div>
   )
 }
+
+export default ArchiveItemView
