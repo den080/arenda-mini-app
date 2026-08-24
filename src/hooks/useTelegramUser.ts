@@ -1,136 +1,102 @@
-import { useEffect, useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { LOCKDOWN, isAllowed, normPhone } from '../App'
-import type { User } from '../types/database'
 
-let cachedUser: User | null = null
-
-function getAutoId(): string | undefined {
-  try {
-    const w = window as any
-    const id = w?.Telegram?.WebApp?.initDataUnsafe?.user?.id?.toString()
-    if (id) return id
-  } catch {}
-  try {
-    const s = new URLSearchParams(window.location.search)
-    const d = s.get('tgWebAppData')
-    if (d) {
-      const u = JSON.parse(new URLSearchParams(d).get('user') || 'null')
-      if (u?.id) return String(u.id)
-    }
-  } catch {}
-  return undefined
-}
-
-async function isTeamUser(userId: string): Promise<boolean> {
-  const { data: m } = await supabase.from('team_members').select('id').eq('user_id', userId).limit(1)
-  if (m && m.length) return true
-  const { data: t } = await supabase.from('teams').select('id').eq('owner_id', userId).limit(1)
-  return !!(t && t.length)
+interface DbUser {
+  id: string
+  full_name: string | null
+  phone: string | null
+  email: string | null
+  role: 'tenant' | 'landlord' | null
+  telegram_id: number | null
+  created_at: string
+  last_seen_at: string | null
 }
 
 export function useTelegramUser() {
-  const [user, setUser] = useState<User | null>(cachedUser)
-  const [loading, setLoading] = useState<boolean>(!cachedUser)
-  const [error, setError] = useState<string | null>(null)
-  const [accessDenied, setAccessDenied] = useState<boolean>(false)
-
-  async function loginWithId(input: string) {
-    setLoading(true)
-    setError(null)
-    setAccessDenied(false)
-
-    const isPhone = /\d/.test(input) && input.length >= 10
-    const searchValue = isPhone ? normPhone(input) : input
-    const digits = input.replace(/\D/g, '')
-
-    try {
-      localStorage.setItem('rentflow_tg_id', input)
-    } catch {}
-    try {
-      const orCond = digits.length >= 10
-        ? `telegram_id.eq."${searchValue}",phone.like."%${digits.slice(-10)}%"`
-        : `telegram_id.eq."${searchValue}"`
-      const { data, error: dbError } = await supabase
-        .from('users')
-        .select('*')
-        .or(orCond)
-        .limit(1)
-      const found = data && data[0]
-      if (dbError) setError('Ошибка базы: ' + dbError.message)
-      else if (!found) setError(LOCKDOWN ? 'Доступ к приложению сейчас закрыт.' : 'Пользователь с таким ID или телефоном не найден.')
-      else {
-        const allowed = !LOCKDOWN
-          || isAllowed(input)
-          || isAllowed(String(found.telegram_id || ''))
-          || isAllowed(found.phone || '')
-          || (await isTeamUser(found.id))
-        if (!allowed) { setAccessDenied(true); setLoading(false); return }
-                      const autoId = getAutoId()
-        if (autoId && !found.telegram_id) {
-          await supabase.from('users').update({ telegram_id: autoId }).eq('id', found.id)
-          found.telegram_id = autoId
-        }
-        supabase.from('users').update({ last_seen: new Date().toISOString() }).eq('id', found.id).then(() => {})
-        found.last_seen = new Date().toISOString()
-        cachedUser = found as User
-        setUser(cachedUser)
-      }
-    } catch (e) {
-      setError('Ошибка подключения: ' + String(e))
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  function logout() {
-    try {
-      localStorage.removeItem('rentflow_tg_id')
-    } catch {}
-    cachedUser = null
-    setUser(null)
-    setAccessDenied(false)
-    setError(null)
-    setLoading(false)
-  }
+  const [user, setUser] = useState<DbUser | null>(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (cachedUser) return
-    const autoId = getAutoId()
-    ;(async () => {
-      if (autoId && isAllowed(autoId)) {
-        loginWithId(autoId)
-        return
-      }
-      if (autoId) {
-        const { data } = await supabase.from('users').select('*').eq('telegram_id', autoId).limit(1)
-        const found = data && data[0]
-        if (found) {
-          const allowed = !LOCKDOWN || isAllowed(found.phone || '') || (await isTeamUser(found.id))
-          if (allowed) {
-            supabase.from('users').update({ last_seen: new Date().toISOString() }).eq('id', found.id).then(() => {})
-            found.last_seen = new Date().toISOString()
-            cachedUser = found as User
-            setUser(cachedUser)
-            setLoading(false)
-            return
-          }
-          setAccessDenied(true)
+    let cancelled = false
+
+    async function resolve() {
+      try {
+        const { data: authData } = await supabase.auth.getUser()
+        if (cancelled) return
+        const email = authData.user?.email || null
+
+        if (!email) {
+          setUser(null)
           setLoading(false)
           return
         }
-      }
-      try {
-        const saved = localStorage.getItem('rentflow_tg_id') || undefined
-        if (saved && (!LOCKDOWN || isAllowed(saved))) {
-          loginWithId(saved)
+
+        // Ищем пользователя по email
+        const { data: byEmail } = await supabase
+          .from('users')
+          .select('*')
+          .eq('email', email)
+          .maybeSingle()
+
+        if (cancelled) return
+
+        if (byEmail) {
+          // Обновим last_seen_at тихо
+          supabase.from('users').update({ last_seen_at: new Date().toISOString() }).eq('id', byEmail.id)
+          setUser(byEmail as DbUser)
+          setLoading(false)
           return
         }
-      } catch {}
-      setError('Введите номер телефона, указанный в договоре.')
-      setLoading(false)
-    })()
+
+        // Если в Telegram WebApp есть данные — создаём запись
+        const tg = (window as any).Telegram?.WebApp
+        const tgUser = tg?.initDataUnsafe?.user
+        if (tgUser) {
+          const fullName = `${tgUser.first_name || ''} ${tgUser.last_name || ''}`.trim()
+          const { data: inserted, error } = await supabase
+            .from('users')
+            .insert({
+              email,
+              full_name: fullName,
+              telegram_id: tgUser.id,
+              last_seen_at: new Date().toISOString(),
+            })
+            .select('*')
+            .maybeSingle()
+          if (!cancelled && !error && inserted) {
+            setUser(inserted as DbUser)
+            setLoading(false)
+            return
+          }
+        }
+
+        // Фоллбэк — создаём запись без Telegram-данных
+        const { data: fallback } = await supabase
+          .from('users')
+          .insert({
+            email,
+            full_name: email.split('@')[0],
+            last_seen_at: new Date().toISOString(),
+          })
+          .select('*')
+          .maybeSingle()
+        if (!cancelled) {
+          setUser((fallback as DbUser) || null)
+          setLoading(false)
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setUser(null)
+          setLoading(false)
+        }
+      }
+    }
+
+    resolve()
+    return () => { cancelled = true }
   }, [])
 
-  return { user, loading, error, loginWithId, logout, accessDenied }
+  return { user, loading }
 }
+
+export default useTelegramUser
