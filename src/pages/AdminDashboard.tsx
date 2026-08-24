@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { T } from '../theme'
-import { showToast, ConfirmDelete } from '../components/ui'
+import { showToast, ConfirmDelete, Modal } from '../components/ui'
 import FamilyDetector from '../components/FamilyDetector'
 
 const TABS = [
@@ -9,6 +9,7 @@ const TABS = [
   { id: 'feedback', l: 'Обращения' },
   { id: 'errors', l: 'Ошибки' },
   { id: 'users', l: 'Пользователи' },
+  { id: 'pro', l: 'Pro' },
   { id: 'summary', l: 'Сводка' },
   { id: 'objects', l: 'Объекты' },
   { id: 'payments', l: 'Платежи' },
@@ -25,13 +26,7 @@ const valMoney: React.CSSProperties = { fontSize: 16, fontWeight: 600, color: '#
 const secHead: React.CSSProperties = { fontSize: 13, color: '#8e8e93', margin: '14px 16px 6px', textTransform: 'uppercase', letterSpacing: 0.3 }
 const blue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 14, fontWeight: 600, cursor: 'pointer', padding: 4 }
 const red: React.CSSProperties = { border: 'none', background: 'transparent', color: '#ff3b30', fontSize: 14, cursor: 'pointer', padding: 4 }
-
-function chipStyle(sev: number): React.CSSProperties {
-  const base: React.CSSProperties = { fontSize: 12, fontWeight: 600, borderRadius: 8, padding: '4px 10px', flexShrink: 0 }
-  if (sev === 0) return { ...base, background: 'rgba(255,59,48,0.12)', color: '#ff3b30' }
-  if (sev === 1) return { ...base, background: 'rgba(255,149,0,0.12)', color: '#b25000' }
-  return { ...base, background: 'rgba(255,204,0,0.15)', color: '#8a6d00' }
-}
+const inp: React.CSSProperties = { flex: 1, minWidth: 0, padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 15, boxSizing: 'border-box', outline: 'none' }
 
 function fmtDur(sec: number): string {
   if (sec < 60) return `${sec} с`
@@ -54,6 +49,18 @@ function deviceLabel(meta: any): string {
   return `${platform} · ${dev}`
 }
 
+function iso(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function addMonthsISO(base: Date, m: number): string {
+  const d = new Date(base.getFullYear(), base.getMonth() + m, base.getDate())
+  return iso(d)
+}
+
+const norm10 = (s: string) => (s || '').replace(/\D/g, '').slice(-10)
+const isInf = (d: any) => String(d || '').slice(0, 4) >= '2099'
+
 export function AdminDashboard() {
   const [tab, setTab] = useState('alarms')
   const [users, setUsers] = useState<any[]>([])
@@ -67,17 +74,22 @@ export function AdminDashboard() {
   const [analytics, setAnalytics] = useState<any[]>([])
   const [accessList, setAccessList] = useState<any[]>([])
   const [deferreds, setDeferreds] = useState<any[]>([])
+  const [subs, setSubs] = useState<any[]>([])
   const [openLogins, setOpenLogins] = useState<Record<string, boolean>>({})
   const [newPhone, setNewPhone] = useState('')
   const [newRole, setNewRole] = useState<'tester' | 'admin'>('tester')
   const [loading, setLoading] = useState(true)
   const [delFeedback, setDelFeedback] = useState<string | null>(null)
   const [delAccess, setDelAccess] = useState<string | null>(null)
+  const [proPhone, setProPhone] = useState('')
+  const [proTerm, setProTerm] = useState<'1' | '3' | '6' | '12' | 'inf'>('1')
+  const [proEdit, setProEdit] = useState<{ id: string; date: string } | null>(null)
+  const [proRevoke, setProRevoke] = useState<string | null>(null)
 
   async function load() {
     const now = new Date()
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
-    const [u, o, c, p, r, m, f, e, a, ac, dr] = await Promise.all([
+    const [u, o, c, p, r, m, f, e, a, ac, dr, sb] = await Promise.all([
       supabase.from('users').select('*').order('created_at', { ascending: false }),
       supabase.from('objects').select('*'),
       supabase.from('contracts').select('*'),
@@ -89,6 +101,7 @@ export function AdminDashboard() {
       supabase.from('analytics_events').select('*').order('created_at', { ascending: false }).limit(1000),
       supabase.from('access_control').select('*').order('created_at', { ascending: false }),
       supabase.from('deferred_requests').select('*').eq('status', 'proposed'),
+      supabase.from('subscriptions').select('*'),
     ])
     setUsers(u.data || [])
     setObjects(o.data || [])
@@ -101,6 +114,7 @@ export function AdminDashboard() {
     setAnalytics(a.data || [])
     setAccessList(ac.data || [])
     setDeferreds(dr.data || [])
+    setSubs(sb.data || [])
     setLoading(false)
   }
 
@@ -114,7 +128,6 @@ export function AdminDashboard() {
 
   const now = new Date()
   const todayMid = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const periodISO = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
   const activeContracts = contracts.filter(c => c.status === 'active')
   const objWithContract = new Set(activeContracts.map(c => c.object_id))
   const noContract = objects.filter(o => !objWithContract.has(o.id)).length
@@ -150,6 +163,7 @@ export function AdminDashboard() {
       if (days > 0) alarms.push({ sev: days >= 60 ? 0 : days >= 7 ? 1 : 2, title: addr, sub: `${who} · просрочка ${days} дн. · ${sum.toFixed(0)} ₽`, chip: days >= 60 ? 'критично' : 'просрочка' })
     }
     if ((c.readings_mode || 'manual') === 'manual' && c.meter_deadline_day && now.getDate() > Number(c.meter_deadline_day)) {
+      const periodISO = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
       const has = readings.some(r => r.contract_id === c.id && r.period === periodISO)
       if (!has) alarms.push({ sev: 2, title: addr, sub: `${who} · показания за этот месяц не переданы`, chip: 'показания' })
     }
@@ -225,6 +239,64 @@ export function AdminDashboard() {
     load()
   }
 
+  // ===== Pro =====
+  async function insertSub(ownerId: string, until: string) {
+    const base: any = { owner_id: ownerId, until_date: until }
+    const { error } = await supabase.from('subscriptions').insert(base)
+    if (error) {
+      const retry = await supabase.from('subscriptions').insert({ ...base, plan: 'pro', status: 'active' })
+      if (retry.error) { showToast('Ошибка: ' + retry.error.message); return false }
+    }
+    return true
+  }
+
+  async function grantPro() {
+    const digits = norm10(proPhone)
+    if (digits.length < 10) { showToast('Введите телефон полностью'); return }
+    const u = users.find(x => norm10(x.phone || '') === digits)
+    if (!u) { showToast('Пользователь с таким телефоном не найден'); return }
+    const todayS = iso(now)
+    const existing = subs.filter(s => s.owner_id === u.id).sort((a, b) => String(a.until_date).localeCompare(String(b.until_date))).pop()
+    const base = existing && String(existing.until_date).slice(0, 10) > todayS ? new Date(String(existing.until_date).slice(0, 10) + 'T00:00:00') : now
+    const until = proTerm === 'inf' ? '2099-12-31' : addMonthsISO(base, Number(proTerm))
+    const ok = await insertSub(u.id, until)
+    if (!ok) return
+    showToast(`✅ Pro выдан: ${u.full_name || u.phone} · до ${isInf(until) ? 'бессрочно' : until}`)
+    setProPhone('')
+    load()
+  }
+
+  async function extendPro(s: any, months: number | 'inf') {
+    const todayS = iso(now)
+    const curS = String(s.until_date || '').slice(0, 10)
+    const base = curS > todayS ? new Date(curS + 'T00:00:00') : now
+    const until = months === 'inf' ? '2099-12-31' : addMonthsISO(base, months)
+    const { error } = await supabase.from('subscriptions').update({ until_date: until }).eq('id', s.id)
+    if (error) { showToast('Ошибка: ' + error.message); return }
+    showToast(`✅ Срок обновлён: ${months === 'inf' ? 'бессрочно' : until}`)
+    load()
+  }
+
+  async function saveProDate() {
+    if (!proEdit) return
+    const d = String(proEdit.date || '').slice(0, 10)
+    if (!d) { showToast('Выберите дату'); return }
+    const { error } = await supabase.from('subscriptions').update({ until_date: d }).eq('id', proEdit.id)
+    if (error) { showToast('Ошибка: ' + error.message); return }
+    showToast('✅ Дата исправлена: ' + d)
+    setProEdit(null)
+    load()
+  }
+
+  async function revokePro(id: string) {
+    const { error } = await supabase.from('subscriptions').delete().eq('id', id)
+    if (error) { showToast('Ошибка: ' + error.message); return }
+    showToast('Подписка отозвана')
+    load()
+  }
+
+  const subsSorted = subs.slice().sort((a, b) => String(b.until_date || '').localeCompare(String(a.until_date || '')))
+
   return (
     <div style={{ ...T.page, paddingBottom: 60 }}>
       <h1 style={T.h1}>Админка</h1>
@@ -252,7 +324,11 @@ export function AdminDashboard() {
                 <div style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f' }}>{a.title}</div>
                 <div style={muted}>{a.sub}</div>
               </div>
-              <span style={chipStyle(a.sev)}>{a.chip}</span>
+              <span style={{
+                fontSize: 12, fontWeight: 600, borderRadius: 8, padding: '4px 10px', flexShrink: 0,
+                background: a.sev === 0 ? 'rgba(255,59,48,0.12)' : a.sev === 1 ? 'rgba(255,149,0,0.12)' : 'rgba(255,204,0,0.15)',
+                color: a.sev === 0 ? '#ff3b30' : a.sev === 1 ? '#b25000' : '#8a6d00',
+              }}>{a.chip}</span>
             </div>
           ))}
         </div>
@@ -306,6 +382,68 @@ export function AdminDashboard() {
             </div>
           ))}
         </div>
+      )}
+
+      {tab === 'pro' && (
+        <>
+          <div style={T.card}>
+            <div style={T.h2}>Выдать Pro по телефону</div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+              <input
+                value={proPhone}
+                onChange={(e) => setProPhone(e.target.value)}
+                placeholder="+7 900 000-00-00"
+                style={inp}
+                inputMode="tel"
+              />
+            </div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+              {([['1', '1 мес'], ['3', '3 мес'], ['6', '6 мес'], ['12', '12 мес'], ['inf', 'бессрочно']] as const).map(([v, l]) => (
+                <button
+                  key={v}
+                  onClick={() => setProTerm(v)}
+                  style={{
+                    padding: '7px 12px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                    background: proTerm === v ? '#0071e3' : 'rgba(120,120,128,0.12)',
+                    color: proTerm === v ? '#fff' : '#1d1d1f',
+                  }}
+                >{l}</button>
+              ))}
+            </div>
+            <button
+              onClick={grantPro}
+              style={{ width: '100%', padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}
+            >Выдать Pro</button>
+            <div style={{ ...T.tiny, margin: '8px 0 0' }}>Если у пользователя уже есть активная подписка, новый срок прибавится к её концу, а не сгорит.</div>
+          </div>
+
+          <div style={T.card}>
+            <div style={T.h2}>Подписки ({subsSorted.length})</div>
+            {subsSorted.length === 0 && <div style={{ ...muted, padding: '8px 0' }}>Подписок пока нет.</div>}
+            {subsSorted.map((s, i) => {
+              const owner = users.find(u => u.id === s.owner_id)
+              const untilS = String(s.until_date || '').slice(0, 10)
+              const expired = !isInf(untilS) && untilS < iso(now)
+              return (
+                <div key={s.id} style={i === subsSorted.length - 1 ? last : row}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f' }}>{owner?.full_name || '—'} · {owner?.phone || '—'}</div>
+                    <div style={{ ...muted, color: expired ? '#ff3b30' : undefined }}>
+                      {isInf(untilS) ? 'бессрочно' : `до ${untilS}`}{expired ? ' · истекла' : ''}
+                    </div>
+                    <div style={{ display: 'flex', gap: 10, marginTop: 4, flexWrap: 'wrap' }}>
+                      <button style={blue} onClick={() => extendPro(s, 1)}>+1 мес</button>
+                      <button style={blue} onClick={() => extendPro(s, 3)}>+3 мес</button>
+                      <button style={blue} onClick={() => extendPro(s, 'inf')}>бессрочно</button>
+                      <button style={blue} onClick={() => setProEdit({ id: s.id, date: untilS })}>дата</button>
+                      <button style={red} onClick={() => setProRevoke(s.id)}>отозвать</button>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </>
       )}
 
       {tab === 'summary' && (
@@ -460,12 +598,12 @@ export function AdminDashboard() {
               value={newPhone}
               onChange={(e) => setNewPhone(e.target.value)}
               placeholder="+7 900 000-00-00"
-              style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }}
+              style={inp}
             />
             <select
               value={newRole}
               onChange={(e) => setNewRole(e.target.value as any)}
-              style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }}
+              style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box', outline: 'none' }}
             >
               <option value="tester">tester</option>
               <option value="admin">admin</option>
@@ -497,6 +635,25 @@ export function AdminDashboard() {
         onClose={() => setDelAccess(null)}
         onConfirm={() => { if (delAccess) removeAccess(delAccess) }}
       />
+      <ConfirmDelete
+        open={!!proRevoke}
+        text="Подписка будет отозвана немедленно. Пользователь потеряет Pro-доступ."
+        onClose={() => setProRevoke(null)}
+        onConfirm={() => { if (proRevoke) revokePro(proRevoke) }}
+      />
+      <Modal open={!!proEdit} title="Исправить дату окончания" onClose={() => setProEdit(null)}>
+        <div style={{ fontSize: 14, color: '#555', marginBottom: 10 }}>Новая дата окончания (ГГГГ-ММ-ДД). Для «бессрочно» используйте 2099-12-31.</div>
+        <input
+          type="date"
+          value={proEdit?.date || ''}
+          onChange={(e) => setProEdit(proEdit ? { ...proEdit, date: e.target.value } : null)}
+          style={{ ...inp, marginBottom: 14 }}
+        />
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }} onClick={saveProDate}>Сохранить</button>
+          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 15, cursor: 'pointer' }} onClick={() => setProEdit(null)}>Отмена</button>
+        </div>
+      </Modal>
     </div>
   )
 }
