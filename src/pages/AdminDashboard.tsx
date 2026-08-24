@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { T } from '../theme'
-import { showToast } from '../components/ui'
+import { showToast, ConfirmDelete } from '../components/ui'
 import FamilyDetector from '../components/FamilyDetector'
 
 const TABS = [
@@ -26,6 +26,13 @@ const secHead: React.CSSProperties = { fontSize: 13, color: '#8e8e93', margin: '
 const blue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 14, fontWeight: 600, cursor: 'pointer', padding: 4 }
 const red: React.CSSProperties = { border: 'none', background: 'transparent', color: '#ff3b30', fontSize: 14, cursor: 'pointer', padding: 4 }
 
+function chipStyle(sev: number): React.CSSProperties {
+  const base: React.CSSProperties = { fontSize: 12, fontWeight: 600, borderRadius: 8, padding: '4px 10px', flexShrink: 0 }
+  if (sev === 0) return { ...base, background: 'rgba(255,59,48,0.12)', color: '#ff3b30' }
+  if (sev === 1) return { ...base, background: 'rgba(255,149,0,0.12)', color: '#b25000' }
+  return { ...base, background: 'rgba(255,204,0,0.15)', color: '#8a6d00' }
+}
+
 function fmtDur(sec: number): string {
   if (sec < 60) return `${sec} с`
   return `${Math.floor(sec / 60)} мин ${sec % 60} с`
@@ -33,11 +40,6 @@ function fmtDur(sec: number): string {
 
 function fmtDate(s: string): string {
   return new Date(s).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
-}
-
-function parseDate(d: any): Date {
-  const [y, m, dd] = String(d).slice(0, 10).split('-').map(Number)
-  return new Date(y, (m || 1) - 1, dd || 1)
 }
 
 function deviceLabel(meta: any): string {
@@ -50,13 +52,6 @@ function deviceLabel(meta: any): string {
   else if (/Windows/.test(ua)) dev = 'Windows'
   else dev = ua.slice(0, 18)
   return `${platform} · ${dev}`
-}
-
-function chipStyle(sev: number): React.CSSProperties {
-  const base: React.CSSProperties = { fontSize: 12, fontWeight: 600, borderRadius: 8, padding: '4px 10px', flexShrink: 0 }
-  if (sev === 0) return { ...base, background: 'rgba(255,59,48,0.12)', color: '#ff3b30' }
-  if (sev === 1) return { ...base, background: 'rgba(255,149,0,0.12)', color: '#b25000' }
-  return { ...base, background: 'rgba(255,204,0,0.15)', color: '#8a6d00' }
 }
 
 export function AdminDashboard() {
@@ -76,6 +71,8 @@ export function AdminDashboard() {
   const [newPhone, setNewPhone] = useState('')
   const [newRole, setNewRole] = useState<'tester' | 'admin'>('tester')
   const [loading, setLoading] = useState(true)
+  const [delFeedback, setDelFeedback] = useState<string | null>(null)
+  const [delAccess, setDelAccess] = useState<string | null>(null)
 
   async function load() {
     const now = new Date()
@@ -132,7 +129,7 @@ export function AdminDashboard() {
   const sumPrev = confirmed.filter(p => p.confirmed_at && inMonth(p.confirmed_at, -1)).reduce((s, p) => s + Number(p.base_amount || 0) + Number(p.penalty_amount || 0) + Number(p.utilities_amount || 0), 0)
   const open = payments.filter(p => !p.confirmed_by_landlord)
   const openSum = open.reduce((s, p) => s + Number(p.base_amount || 0) + Number(p.penalty_amount || 0) + Number(p.utilities_amount || 0), 0)
-  const overdue = open.filter(p => parseDate(p.due_date) < todayMid)
+  const overdue = open.filter(p => new Date(p.due_date) < todayMid)
   const overdueSum = overdue.reduce((s, p) => s + Number(p.base_amount || 0) + Number(p.penalty_amount || 0) + Number(p.utilities_amount || 0), 0)
   const depPaid = activeContracts.reduce((s, c) => s + Number(c.deposit_paid || 0), 0)
   const depNeed = activeContracts.reduce((s, c) => s + Number(c.deposit_amount || 0), 0)
@@ -145,10 +142,10 @@ export function AdminDashboard() {
   for (const c of activeContracts) {
     const addr = objects.find(o => o.id === c.object_id)?.address || '—'
     const who = users.find(u => u.id === c.tenant_id)?.full_name || '—'
-    const openPays = payments.filter(p => p.contract_id === c.id && !p.confirmed_by_landlord).sort((a: any, b: any) => String(a.period).localeCompare(String(b.period)))
-    const firstOpen = openPays[0]
+    const openPays = payments.filter(p => p.contract_id === c.id && !p.confirmed_by_landlord)
+    const firstOpen = openPays.slice().sort((a: any, b: any) => String(a.period).localeCompare(String(b.period)))[0]
     if (firstOpen) {
-      const days = Math.round((todayMid.getTime() - parseDate(firstOpen.due_date).getTime()) / 86400000)
+      const days = Math.round((todayMid.getTime() - new Date(String(firstOpen.due_date).slice(0, 10) + 'T00:00:00').getTime()) / 86400000)
       const sum = Number(firstOpen.base_amount || 0) + Number(firstOpen.penalty_amount || 0) + Number(firstOpen.utilities_amount || 0)
       if (days > 0) alarms.push({ sev: days >= 60 ? 0 : days >= 7 ? 1 : 2, title: addr, sub: `${who} · просрочка ${days} дн. · ${sum.toFixed(0)} ₽`, chip: days >= 60 ? 'критично' : 'просрочка' })
     }
@@ -159,7 +156,7 @@ export function AdminDashboard() {
     const def = deferreds.find(d => d.contract_id === c.id)
     if (def) alarms.push({ sev: 1, title: addr, sub: `${who} · ждёт решения по отсрочке ${Number(def.amount || 0).toFixed(0)} ₽`, chip: 'отсрочка' })
     if (c.end_date) {
-      const left = Math.round((parseDate(c.end_date).getTime() - todayMid.getTime()) / 86400000)
+      const left = Math.round((new Date(String(c.end_date).slice(0, 10) + 'T00:00:00').getTime() - todayMid.getTime()) / 86400000)
       if (left >= 0 && left <= 30) alarms.push({ sev: 2, title: addr, sub: `${who} · договор заканчивается через ${left} дн.`, chip: 'срок' })
     }
   }
@@ -277,7 +274,7 @@ export function AdminDashboard() {
                 {f.status === 'new'
                   ? <button style={blue} onClick={() => setFeedbackStatus(f.id, 'done')}>обработано</button>
                   : <button style={blue} onClick={() => setFeedbackStatus(f.id, 'new')}>в новые</button>}
-                <button style={red} onClick={() => deleteFeedback(f.id)}>удалить</button>
+                <button style={red} onClick={() => setDelFeedback(f.id)}>удалить</button>
               </div>
             </div>
           ))}
@@ -304,7 +301,7 @@ export function AdminDashboard() {
             <div key={u.id} style={i === users.length - 1 ? last : row}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f' }}>{u.full_name || '—'}</div>
-                <div style={muted}>{u.phone || 'без телефона'} · роль: {u.role || '—'} · с {new Date(u.created_at).toLocaleDateString('ru-RU')}{u.last_seen_at ? ` · был(а) ${new Date(u.last_seen_at).toLocaleDateString('ru-RU')}` : ''}</div>
+                <div style={muted}>{u.phone || 'без телефона'} · роль: {u.role || '—'} · с {new Date(u.created_at).toLocaleDateString('ru-RU')}</div>
               </div>
             </div>
           ))}
@@ -476,17 +473,30 @@ export function AdminDashboard() {
             <button style={blue} onClick={addAccess}>+</button>
           </div>
           {accessList.length === 0 && <div style={{ ...muted, padding: '8px 0' }}>Список пуст.</div>}
-          {accessList.map((a: any) => (
-            <div key={a.id} style={row}>
+          {accessList.map((a: any, i) => (
+            <div key={a.id} style={i === accessList.length - 1 ? last : row}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f' }}>{a.phone}</div>
                 <div style={muted}>{a.role}</div>
               </div>
-              <button style={red} onClick={() => removeAccess(a.id)}>удалить</button>
+              <button style={red} onClick={() => setDelAccess(a.id)}>удалить</button>
             </div>
           ))}
         </div>
       )}
+
+      <ConfirmDelete
+        open={!!delFeedback}
+        text="Обращение будет удалено безвозвратно. Действие нельзя отменить."
+        onClose={() => setDelFeedback(null)}
+        onConfirm={() => { if (delFeedback) deleteFeedback(delFeedback) }}
+      />
+      <ConfirmDelete
+        open={!!delAccess}
+        text="Номер потеряет права tester/admin. Действие нельзя отменить."
+        onClose={() => setDelAccess(null)}
+        onConfirm={() => { if (delAccess) removeAccess(delAccess) }}
+      />
     </div>
   )
 }
