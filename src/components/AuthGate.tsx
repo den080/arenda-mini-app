@@ -21,10 +21,9 @@ function devicePassword(tgId: string): string {
 }
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
-  const { user } = useTelegramUser()
+  const { user, loading: userLoading } = useTelegramUser()
   const [ready, setReady] = useState(false)
   const [hasSession, setHasSession] = useState(false)
-  const [boundEmail, setBoundEmail] = useState('')
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
   const [stage, setStage] = useState<'email' | 'code'>('email')
@@ -34,17 +33,21 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
   const tgId = String((window as any).Telegram?.WebApp?.initDataUnsafe?.user?.id || (user as any)?.telegram_id || '')
 
-  // Вход: проверка сессии → тихий вход по ключу устройства → иначе ворота с кодом.
-  // Поле почты НЕ пре заполняется — всегда пустое.
+  // Главное: НЕ показываем форму входа, пока не закончилась тихая авторизация.
+  // Пока профиль грузится или идёт signInWithPassword — нейтральная «Загрузка…».
   useEffect(() => {
     let cancelled = false
+    if (userLoading) return
     ;(async () => {
-      if (!user) { setHasSession(false); setReady(true); return }
+      // Профиля ещё нет (совсем новый пользователь) — покажем форму
+      if (!user) {
+        if (!cancelled) { setHasSession(false); setReady(true) }
+        return
+      }
 
-      // 1) Почта, привязанная к профилю (нужна только для тихого входа)
+      // 1) Почта, привязанная к профилю
       const { data: u } = await supabase.from('users').select('email').eq('id', user.id).maybeSingle()
       const bound = String(u?.email || '').toLowerCase()
-      if (!cancelled) setBoundEmail(bound)
 
       // 2) Текущая сессия + серверная валидация
       const { data: s } = await supabase.auth.getSession()
@@ -61,7 +64,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // 3) Сессии нет, но профиль уже верифицирован — тихий вход БЕЗ кода и без подстановки в поле
+      // 3) Сессии нет, но профиль верифицирован — тихий вход БЕЗ кода и без мигания формой
       if (!session && bound && tgId) {
         const { data: ld, error } = await supabase.auth.signInWithPassword({ email: bound, password: devicePassword(tgId) })
         if (!error && ld.session) session = ld.session
@@ -70,16 +73,13 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       // 4) Сессия есть, но почта не привязана к профилю — привязываем
       if (session && !bound) {
         const em = String(session.user?.email || '')
-        if (em) {
-          await supabase.from('users').update({ email: em }).eq('id', user.id)
-          if (!cancelled) setBoundEmail(em.toLowerCase())
-        }
+        if (em) await supabase.from('users').update({ email: em }).eq('id', user.id)
       }
 
       if (!cancelled) { setHasSession(!!session); setReady(true) }
     })()
     return () => { cancelled = true }
-  }, [user?.id])
+  }, [user?.id, userLoading])
 
   async function sendCode() {
     if (!consent) { showToast('Нужно согласие на обработку данных'); return }
@@ -111,13 +111,13 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     // Привязываем почту к профилю
     if (user) {
       await supabase.from('users').update({ email: email.trim().toLowerCase() }).eq('id', user.id)
-      setBoundEmail(email.trim().toLowerCase())
     }
     setBusy(false)
     setHasSession(true)
     showToast('✅ Вход выполнен')
   }
 
+  // Пока не решили вопрос с сессией — нейтральный экран, форма НЕ мигает
   if (!ready) return <div style={T.page}>Загрузка…</div>
   if (hasSession) return <>{children}</>
 
@@ -127,9 +127,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       <div style={T.card}>
         <div style={{ fontSize: 22, fontWeight: 800, marginBottom: 6 }}>Вход в Roomio</div>
         <div style={{ ...T.small, margin: '0 0 14px' }}>
-          {boundEmail
-            ? 'Подтверждение понадобится один раз — дальше входы без кода.'
-            : 'Код придёт на e-mail один раз; аккаунт привяжется к профилю, дальше входы без кода.'}
+          Код придёт на e-mail один раз; аккаунт привяжется к профилю, дальше входы без кода.
         </div>
         {stage === 'email' ? (
           <>
