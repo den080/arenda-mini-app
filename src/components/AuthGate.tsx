@@ -8,13 +8,12 @@ const inp: React.CSSProperties = { width: '100%', padding: '12px', borderRadius:
 
 const POLICY = `ПОЛИТИКА КОНФИДЕНЦИАЛЬНОСТИ (кратко)
 Оператор: владелец сервиса Roomio (самозанятый, РФ).
-Состав данных: имя, номер телефона, e-mail, адреса арендуемых/сдаваемых объектов, суммы аренды и депозитов, показания счётчиков, история платежей и действий в приложении.
-Цели: организация расчётов между арендодателем и арендатором, уведомления, поддержка работы сервиса.
-Хранение: защищённая облачная база данных; доступ имеют только вы и ваш контрагент по договору, а также владелец сервиса для технической поддержки.
+Состав данных: имя, номер телефона, e-mail, адреса объектов, суммы аренды и депозитов, показания счётчиков, история платежей и действий.
+Цели: организация расчётов, уведомления, поддержка работы сервиса.
+Хранение: защищённая облачная база; доступ — только вы, ваш контрагент по договору и владелец сервиса для поддержки.
 Передача третьим лицам: не осуществляется, кроме случаев, требуемых законом.
-Срок: до удаления аккаунта или договора из системы.
-Ваши права: запросить, изменить, удалить данные — через владельца сервиса (кнопка «Обратная связь» или по контакту в приложении).
-Согласие даётся проставлением галочки при входе и может быть отозвано письменно.`
+Срок: до удаления аккаунта или договора.
+Ваши права: запросить, изменить, удалить данные — через владельца сервиса.`
 
 function devicePassword(tgId: string): string {
   return `roomio-tg-${tgId}`
@@ -33,47 +32,23 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
   const tgId = String((window as any).Telegram?.WebApp?.initDataUnsafe?.user?.id || (user as any)?.telegram_id || '')
 
-  // Главное: НЕ показываем форму входа, пока не закончилась тихая авторизация.
-  // Пока профиль грузится или идёт signInWithPassword — нейтральная «Загрузка…».
   useEffect(() => {
     let cancelled = false
     if (userLoading) return
     ;(async () => {
-      // Профиля ещё нет (совсем новый пользователь) — покажем форму
-      if (!user) {
-        if (!cancelled) { setHasSession(false); setReady(true) }
-        return
-      }
-
-      // 1) Почта, привязанная к профилю
-      const { data: u } = await supabase.from('users').select('email').eq('id', user.id).maybeSingle()
-      const bound = String(u?.email || '').toLowerCase()
-
-      // 2) Текущая сессия + серверная валидация
+      // 1) Есть живая сессия — сразу пускаем
       const { data: s } = await supabase.auth.getSession()
       let session = s.session
       if (session) {
         const { error } = await supabase.auth.getUser()
-        if (error) {
-          await supabase.auth.signOut()
-          session = null
-        } else if (bound && String(session.user?.email || '').toLowerCase() !== bound) {
-          // Сессия от другого аккаунта (переключились в приложении) — сбрасываем
-          await supabase.auth.signOut()
-          session = null
-        }
+        if (error) { session = null }
       }
 
-      // 3) Сессии нет, но профиль верифицирован — тихий вход БЕЗ кода и без мигания формой
+      // 2) Сессии нет — пробуем ТИХИЙ вход по ключу устройства
+      const bound = String(user?.email || '').toLowerCase()
       if (!session && bound && tgId) {
         const { data: ld, error } = await supabase.auth.signInWithPassword({ email: bound, password: devicePassword(tgId) })
         if (!error && ld.session) session = ld.session
-      }
-
-      // 4) Сессия есть, но почта не привязана к профилю — привязываем
-      if (session && !bound) {
-        const em = String(session.user?.email || '')
-        if (em) await supabase.from('users').update({ email: em }).eq('id', user.id)
       }
 
       if (!cancelled) { setHasSession(!!session); setReady(true) }
@@ -81,13 +56,30 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     return () => { cancelled = true }
   }, [user?.id, userLoading])
 
+  // Ключ устройства: ставим один раз; 422 «уже такой» — это нормально, игнорируем
+  async function ensureDeviceKey() {
+    if (!tgId) return
+    try { await supabase.auth.updateUser({ password: devicePassword(tgId) }) } catch {}
+  }
+
+  // Привязываем почту к СУЩЕСТВУЮЩЕЙ строке пользователя. НИКОГДА не создаём новую.
+  async function bindEmail(em: string) {
+    try {
+      if (user?.id) {
+        await supabase.from('users').update({ email: em.toLowerCase() }).eq('id', user.id)
+      } else if (tgId) {
+        await supabase.from('users').update({ email: em.toLowerCase() }).eq('telegram_id', tgId)
+      }
+    } catch {}
+  }
+
   async function sendCode() {
     if (!consent) { showToast('Нужно согласие на обработку данных'); return }
     if (!/^\S+@\S+\.\S+$/.test(email.trim())) { showToast('Проверьте e-mail'); return }
     setBusy(true)
     const { error } = await supabase.auth.signInWithOtp({ email: email.trim() })
     setBusy(false)
-    if (error) { showToast(`Ошибка ${error.status ?? ''} ${error.code ?? ''}: ${error.message || 'без сообщения'}`); return }
+    if (error) { showToast(`Ошибка ${error.status ?? ''}: ${error.message || 'без сообщения'}`); return }
     setStage('code')
     showToast('Код отправлен на ' + email.trim())
   }
@@ -104,20 +96,14 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     }
     if (lastErr) { setBusy(false); showToast('Неверный код: ' + lastErr.message); return }
 
-    // Первый и последний код: ставим «ключ устройства», дальше входы без писем
-    if (tgId) {
-      await supabase.auth.updateUser({ password: devicePassword(tgId) }).then(() => {}, () => {})
-    }
-    // Привязываем почту к профилю
-    if (user) {
-      await supabase.from('users').update({ email: email.trim().toLowerCase() }).eq('id', user.id)
-    }
+    await bindEmail(email.trim())
+    await ensureDeviceKey()
+
     setBusy(false)
     setHasSession(true)
     showToast('✅ Вход выполнен')
   }
 
-  // Пока не решили вопрос с сессией — нейтральный экран, форма НЕ мигает
   if (!ready) return <div style={T.page}>Загрузка…</div>
   if (hasSession) return <>{children}</>
 
