@@ -12,27 +12,28 @@ const norm10 = (s: string) => (s || '').replace(/\D/g, '').slice(-10)
 export function App() {
   const { user } = useTelegramUser()
   const [priv, setPriv] = useState<null | 'tester' | 'admin'>(null)
-  const [view, setView] = useState<'tenant' | 'landlord' | 'admin'>('tenant')
-  const [homeView, setHomeView] = useState<'tenant' | 'landlord'>('tenant')
+  const [view, setView] = useState<string>('')
   const [fbOpen, setFbOpen] = useState(false)
   const [fbMsg, setFbMsg] = useState('')
   const [fbFile, setFbFile] = useState<File | null>(null)
   const [fbBusy, setFbBusy] = useState(false)
 
-  // Никаких «списков допуска»: priv влияет только на ДОП. кнопки (тестер/админ).
   useEffect(() => {
     if (!user) return
-    setHomeView(user.role === 'landlord' ? 'landlord' : 'tenant')
-    setView(user.role === 'landlord' ? 'landlord' : 'tenant')
+    const def = user.role === 'landlord' ? 'landlord' : 'tenant'
+    setView(v => v || def)
     ;(async () => {
-      const { data } = await supabase.from('access_control').select('phone, role')
-      const hit = (data || []).find((r: any) => norm10(r.phone || '') === norm10(user.phone || '') && norm10(user.phone || '').length === 10)
-      setPriv(hit ? (hit.role as any) : null)
+      try {
+        const { data } = await supabase.from('access_control').select('phone, role')
+        const me = norm10(user.phone || '')
+        const hit = (data || []).find((r: any) => me.length === 10 && norm10(r.phone || '') === me)
+        setPriv(hit ? (hit.role as any) : null)
+      } catch { setPriv(null) }
     })()
   }, [user?.id])
 
   async function logout() {
-    await supabase.auth.signOut()
+    try { await supabase.auth.signOut() } catch {}
     window.location.reload()
   }
 
@@ -57,15 +58,11 @@ export function App() {
       })
       if (error) { showToast('Ошибка: ' + error.message); return }
       showToast('✅ Отправлено. Спасибо!')
-      setFbOpen(false)
-      setFbMsg('')
-      setFbFile(null)
-    } finally {
-      setFbBusy(false)
-    }
+      setFbOpen(false); setFbMsg(''); setFbFile(null)
+    } finally { setFbBusy(false) }
   }
 
-  const segBtn = (active: boolean): React.CSSProperties => ({
+  const seg = (active: boolean): React.CSSProperties => ({
     flexShrink: 0, padding: '10px 14px', borderRadius: 12, border: 'none', cursor: 'pointer',
     fontSize: 15, fontWeight: 600,
     background: active ? '#fff' : 'transparent',
@@ -77,19 +74,23 @@ export function App() {
     <AuthGate>
       <Toaster />
       <div style={{ maxWidth: 760, margin: '0 auto', padding: '10px 10px 0' }}>
-        {priv && (
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center', background: 'rgba(120,120,128,0.12)', borderRadius: 14, padding: 6, margin: '0 0 10px', overflowX: 'auto' }}>
-            <button onClick={() => { setHomeView('tenant'); setView('tenant') }} style={segBtn(view === 'tenant')}>Арендатор</button>
-            <button onClick={() => { setHomeView('landlord'); setView('landlord') }} style={segBtn(view === 'landlord')}>Арендодатель</button>
-            <button onClick={logout} style={segBtn(false)}>Выйти</button>
-            <button onClick={() => setFbOpen(true)} style={segBtn(false)}>✉️</button>
-            {priv === 'admin' && (
-              view === 'admin'
-                ? <button onClick={() => setView(homeView)} style={segBtn(true)}>В приложение</button>
-                : <button onClick={() => setView('admin')} style={segBtn(false)}>Админка</button>
-            )}
-          </div>
-        )}
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', background: 'rgba(120,120,128,0.12)', borderRadius: 14, padding: 6, margin: '0 0 10px', overflowX: 'auto' }}>
+          {priv ? (
+            <>
+              <button style={seg(view === 'tenant')} onClick={() => setView('tenant')}>Арендатор</button>
+              <button style={seg(view === 'landlord')} onClick={() => setView('landlord')}>Арендодатель</button>
+              <button style={seg(false)} onClick={logout}>Выйти</button>
+            </>
+          ) : (
+            <span style={{ padding: '8px 12px', fontSize: 14, color: '#8e8e93' }}>Roomio</span>
+          )}
+          <button style={seg(false)} onClick={() => setFbOpen(true)}>✉️</button>
+          {priv === 'admin' && (
+            view === 'admin'
+              ? <button style={seg(true)} onClick={() => setView(user?.role === 'landlord' ? 'landlord' : 'tenant')}>В приложение</button>
+              : <button style={seg(false)} onClick={() => setView('admin')}>Админка</button>
+          )}
+        </div>
 
         {view === 'tenant' && <TenantDashboard />}
         {view === 'landlord' && <LandlordDashboard />}
