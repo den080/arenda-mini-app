@@ -268,13 +268,15 @@ function TenantRental({ contract, tab, setTab }: { contract: any; tab: string; s
     setData(d)
   }
 
+  // ВАЖНО: зависим и от contract.id, и от user?.id — иначе карточка объекта
+  // начинала загрузку до появления пользователя и висела на «Загрузка…»
   useEffect(() => {
     load()
     const on = () => load()
     window.addEventListener('rentflow-refresh', on)
     const iv = setInterval(() => load(), 30000)
     return () => { window.removeEventListener('rentflow-refresh', on); clearInterval(iv) }
-  }, [contract.id])
+  }, [contract.id, user?.id])
 
   async function notify(userId: string, type: string, relatedId: string, message?: string) {
     try {
