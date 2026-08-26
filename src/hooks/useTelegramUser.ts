@@ -1,102 +1,79 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 
-interface DbUser {
+export interface DbUser {
   id: string
   full_name: string | null
   phone: string | null
   email: string | null
-  role: 'tenant' | 'landlord' | null
-  telegram_id: number | null
-  created_at: string
-  last_seen_at: string | null
+  role: string | null
+  telegram_id: string | null
+  landlord_doc_name?: string | null
+  created_at?: string
+  last_seen_at?: string | null
 }
 
 export function useTelegramUser() {
   const [user, setUser] = useState<DbUser | null>(null)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    let cancelled = false
-
-    async function resolve() {
+  const resolve = useCallback(async () => {
+    setLoading(true)
+    try {
+      const tg = (window as any)?.Telegram?.WebApp
+      const tgId = tg?.initDataUnsafe?.user?.id ? String(tg.initDataUnsafe.user.id) : ''
+      let email = ''
       try {
         const { data: authData } = await supabase.auth.getUser()
-        if (cancelled) return
-        const email = authData.user?.email || null
+        email = String(authData?.user?.email || '').toLowerCase()
+      } catch {}
 
-        if (!email) {
-          setUser(null)
-          setLoading(false)
-          return
-        }
+      let row: any = null
 
-        // Ищем пользователя по email
-        const { data: byEmail } = await supabase
-          .from('users')
-          .select('*')
-          .eq('email', email)
-          .maybeSingle()
-
-        if (cancelled) return
-
-        if (byEmail) {
-          // Обновим last_seen_at тихо
-          supabase.from('users').update({ last_seen_at: new Date().toISOString() }).eq('id', byEmail.id)
-          setUser(byEmail as DbUser)
-          setLoading(false)
-          return
-        }
-
-        // Если в Telegram WebApp есть данные — создаём запись
-        const tg = (window as any).Telegram?.WebApp
-        const tgUser = tg?.initDataUnsafe?.user
-        if (tgUser) {
-          const fullName = `${tgUser.first_name || ''} ${tgUser.last_name || ''}`.trim()
-          const { data: inserted, error } = await supabase
-            .from('users')
-            .insert({
-              email,
-              full_name: fullName,
-              telegram_id: tgUser.id,
-              last_seen_at: new Date().toISOString(),
-            })
-            .select('*')
-            .maybeSingle()
-          if (!cancelled && !error && inserted) {
-            setUser(inserted as DbUser)
-            setLoading(false)
-            return
-          }
-        }
-
-        // Фоллбэк — создаём запись без Telegram-данных
-        const { data: fallback } = await supabase
-          .from('users')
-          .insert({
-            email,
-            full_name: email.split('@')[0],
-            last_seen_at: new Date().toISOString(),
-          })
-          .select('*')
-          .maybeSingle()
-        if (!cancelled) {
-          setUser((fallback as DbUser) || null)
-          setLoading(false)
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setUser(null)
-          setLoading(false)
-        }
+      // 1) по почте сессии
+      if (email && !row) {
+        const r = await supabase.from('users').select('*').eq('email', email).limit(1).maybeSingle()
+        row = r.data || null
       }
-    }
+      // 2) по telegram_id
+      if (!row && tgId) {
+        const r = await supabase.from('users').select('*').eq('telegram_id', tgId).limit(1).maybeSingle()
+        row = r.data || null
+      }
+      // 3) создать профиль, если совсем нет
+      if (!row && tgId) {
+        const tgUser = tg?.initDataUnsafe?.user
+        const name = `${tgUser?.first_name || ''} ${tgUser?.last_name || ''}`.trim()
+        const ins = await supabase
+          .from('users')
+          .insert({ telegram_id: tgId, full_name: name || null, email: email || null, role: 'tenant' })
+          .select('*')
+          .maybeSingle()
+        row = ins.data || null
+      }
 
-    resolve()
-    return () => { cancelled = true }
+      if (row) {
+        // связываем почту и telegram_id между собой + отмечаем активность
+        const upd: any = { last_seen_at: new Date().toISOString() }
+        if (email && String(row.email || '').toLowerCase() !== email) upd.email = email
+        if (tgId && String(row.telegram_id || '') !== tgId) upd.telegram_id = tgId
+        await supabase.from('users').update(upd).eq('id', row.id).then(() => {}, () => {})
+        setUser({ ...row, ...upd } as DbUser)
+      } else {
+        setUser(null)
+      }
+    } catch {
+      setUser(null)
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
-  return { user, loading }
+  useEffect(() => {
+    resolve()
+  }, [resolve])
+
+  return { user, loading, refresh: resolve }
 }
 
 export default useTelegramUser
