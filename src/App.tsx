@@ -11,9 +11,20 @@ const norm10 = (s: string) => (s || '').replace(/\D/g, '').slice(-10)
 
 export function App() {
   const { user } = useTelegramUser() as any
-  const [priv, setPriv] = useState<null | 'tester' | 'admin'>(null)
-  const [privReady, setPrivReady] = useState(false)
-  const [view, setView] = useState<'tenant' | 'landlord' | 'admin'>('tenant')
+
+  // Служебные права (tester/admin). Обычным пользователям НИЧЕГО не добавляем.
+  // Кеш в localStorage — чтобы при повторном входе панель рисовалась сразу, без мигания.
+  const [priv, setPriv] = useState<null | 'tester' | 'admin'>(() => {
+    try {
+      const v = localStorage.getItem('roomio_priv')
+      return v === 'tester' || v === 'admin' ? (v as any) : null
+    } catch { return null }
+  })
+  const [privReady, setPrivReady] = useState<boolean>(() => {
+    try { return localStorage.getItem('roomio_priv_ready') === '1' } catch { return false }
+  })
+  const [roleOverride, setRoleOverride] = useState<null | 'tenant' | 'landlord'>(null)
+  const [adminView, setAdminView] = useState(false)
   const [fbOpen, setFbOpen] = useState(false)
   const [fbMsg, setFbMsg] = useState('')
   const [fbFile, setFbFile] = useState<File | null>(null)
@@ -22,22 +33,43 @@ export function App() {
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      if (!user) { if (!cancelled) { setPriv(null); setPrivReady(true); } return }
-      const def = user.role === 'landlord' ? 'landlord' : 'tenant'
-      setView(v => (v === 'admin' ? v : def))
+      if (!user) {
+        if (!cancelled) {
+          setPriv(null)
+          setPrivReady(true)
+          try { localStorage.setItem('roomio_priv_ready', '1'); localStorage.removeItem('roomio_priv') } catch {}
+        }
+        return
+      }
       try {
         const { data } = await supabase.from('access_control').select('phone, role')
         const me = norm10(user.phone || '')
         const hit = (data || []).find((r: any) => me.length === 10 && norm10(r.phone || '') === me)
-        if (!cancelled) setPriv(hit ? (hit.role as any) : null)
-      } catch { if (!cancelled) setPriv(null) }
-      if (!cancelled) setPrivReady(true)
+        const role = hit ? (hit.role as any) : null
+        if (!cancelled) {
+          setPriv(role)
+          setPrivReady(true)
+          try {
+            if (role) localStorage.setItem('roomio_priv', role)
+            else localStorage.removeItem('roomio_priv')
+            localStorage.setItem('roomio_priv_ready', '1')
+          } catch {}
+        }
+      } catch {
+        if (!cancelled) setPrivReady(true)
+      }
     })()
     return () => { cancelled = true }
   }, [user?.id])
 
+  // Роль выводится СИНХРОННО из профиля — никакого переключения «арендатор→арендодатель» после загрузки
+  const baseRole: 'tenant' | 'landlord' = user?.role === 'landlord' ? 'landlord' : 'tenant'
+  const role: 'tenant' | 'landlord' = priv ? (roleOverride || baseRole) : baseRole
+  const view: 'tenant' | 'landlord' | 'admin' = adminView && priv === 'admin' ? 'admin' : role
+
   async function logout() {
     try { await supabase.auth.signOut() } catch {}
+    try { localStorage.removeItem('roomio_priv'); localStorage.removeItem('roomio_priv_ready') } catch {}
     window.location.reload()
   }
 
@@ -80,21 +112,22 @@ export function App() {
       <div style={{ maxWidth: 760, margin: '0 auto', padding: '10px 10px 0' }}>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', background: 'rgba(120,120,128,0.12)', borderRadius: 14, padding: 6, margin: '0 0 10px', overflowX: 'auto', minHeight: 46 }}>
           {!privReady ? (
-            // Пока права не дочитались — пустая полоска той же высоты: ничего не мигает
+            // Пока права не известны (первый вход) — пустая заглушка той же высоты, ничего не мигает
             <span style={{ padding: '8px 12px', fontSize: 14, color: 'transparent', userSelect: 'none' }}>Roomio</span>
           ) : priv ? (
             <>
-              <button style={seg(view === 'tenant')} onClick={() => setView('tenant')}>Арендатор</button>
-              <button style={seg(view === 'landlord')} onClick={() => setView('landlord')}>Арендодатель</button>
+              <button style={seg(role === 'tenant')} onClick={() => { setRoleOverride('tenant'); setAdminView(false) }}>Арендатор</button>
+              <button style={seg(role === 'landlord')} onClick={() => { setRoleOverride('landlord'); setAdminView(false) }}>Арендодатель</button>
               <button style={seg(false)} onClick={logout}>Выйти</button>
               <button style={seg(false)} onClick={() => setFbOpen(true)}>✉️</button>
               {priv === 'admin' && (
-                view === 'admin'
-                  ? <button style={seg(true)} onClick={() => setView(user?.role === 'landlord' ? 'landlord' : 'tenant')}>В приложение</button>
-                  : <button style={seg(false)} onClick={() => setView('admin')}>Админка</button>
+                adminView
+                  ? <button style={seg(true)} onClick={() => setAdminView(false)}>В приложение</button>
+                  : <button style={seg(false)} onClick={() => setAdminView(true)}>Админка</button>
               )}
             </>
           ) : (
+            // Обычный пользователь: без списков и тестов — сразу свой дашборд
             <>
               <span style={{ padding: '8px 12px', fontSize: 14, color: '#8e8e93' }}>Roomio</span>
               <button style={seg(false)} onClick={() => setFbOpen(true)}>✉️</button>
@@ -102,9 +135,15 @@ export function App() {
           )}
         </div>
 
-        {view === 'tenant' && <TenantDashboard />}
-        {view === 'landlord' && <LandlordDashboard />}
-        {view === 'admin' && priv === 'admin' && <AdminDashboard />}
+        {!user ? (
+          <div style={{ padding: 20, textAlign: 'center', color: '#8e8e93', fontSize: 15 }}>Загрузка…</div>
+        ) : view === 'tenant' ? (
+          <TenantDashboard />
+        ) : view === 'landlord' ? (
+          <LandlordDashboard />
+        ) : (
+          <AdminDashboard />
+        )}
       </div>
 
       <Modal open={fbOpen} title="Обратная связь" onClose={() => setFbOpen(false)}>
