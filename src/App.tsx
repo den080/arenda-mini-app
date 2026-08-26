@@ -10,9 +10,9 @@ import { Toaster, Modal, showToast } from './components/ui'
 const norm10 = (s: string) => (s || '').replace(/\D/g, '').slice(-10)
 
 export function App() {
-  const { user } = useTelegramUser()
+  const { user, loading, refresh } = useTelegramUser() as any
   const [priv, setPriv] = useState<null | 'tester' | 'admin'>(null)
-  const [view, setView] = useState<string>('')
+  const [view, setView] = useState<'tenant' | 'landlord' | 'admin'>('tenant')
   const [fbOpen, setFbOpen] = useState(false)
   const [fbMsg, setFbMsg] = useState('')
   const [fbFile, setFbFile] = useState<File | null>(null)
@@ -21,7 +21,7 @@ export function App() {
   useEffect(() => {
     if (!user) return
     const def = user.role === 'landlord' ? 'landlord' : 'tenant'
-    setView(v => v || def)
+    setView(v => (v === 'admin' ? 'admin' : def))
     ;(async () => {
       try {
         const { data } = await supabase.from('access_control').select('phone, role')
@@ -92,9 +92,24 @@ export function App() {
           )}
         </div>
 
-        {view === 'tenant' && <TenantDashboard />}
-        {view === 'landlord' && <LandlordDashboard />}
-        {view === 'admin' && priv === 'admin' && <AdminDashboard />}
+        {loading && (
+          <div style={{ padding: 24, textAlign: 'center', color: '#8e8e93', fontSize: 15 }}>Загрузка профиля…</div>
+        )}
+
+        {!loading && !user && (
+          <div style={{ background: '#fff', borderRadius: 14, padding: 20, marginTop: 10, textAlign: 'center' }}>
+            <div style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f', marginBottom: 8 }}>Не удалось загрузить профиль</div>
+            <div style={{ fontSize: 14, color: '#8e8e93', marginBottom: 14 }}>Проверьте связь и попробуйте ещё раз.</div>
+            <button
+              onClick={refresh}
+              style={{ padding: '10px 22px', borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}
+            >Повторить</button>
+          </div>
+        )}
+
+        {!!user && view === 'tenant' && <TenantDashboard />}
+        {!!user && view === 'landlord' && <LandlordDashboard />}
+        {!!user && view === 'admin' && priv === 'admin' && <AdminDashboard />}
       </div>
 
       <Modal open={fbOpen} title="Обратная связь" onClose={() => setFbOpen(false)}>
