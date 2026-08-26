@@ -10,8 +10,9 @@ import { Toaster, Modal, showToast } from './components/ui'
 const norm10 = (s: string) => (s || '').replace(/\D/g, '').slice(-10)
 
 export function App() {
-  const { user, loading, refresh } = useTelegramUser() as any
+  const { user } = useTelegramUser() as any
   const [priv, setPriv] = useState<null | 'tester' | 'admin'>(null)
+  const [privReady, setPrivReady] = useState(false)
   const [view, setView] = useState<'tenant' | 'landlord' | 'admin'>('tenant')
   const [fbOpen, setFbOpen] = useState(false)
   const [fbMsg, setFbMsg] = useState('')
@@ -19,17 +20,20 @@ export function App() {
   const [fbBusy, setFbBusy] = useState(false)
 
   useEffect(() => {
-    if (!user) return
-    const def = user.role === 'landlord' ? 'landlord' : 'tenant'
-    setView(v => (v === 'admin' ? 'admin' : def))
+    let cancelled = false
     ;(async () => {
+      if (!user) { if (!cancelled) { setPriv(null); setPrivReady(true); } return }
+      const def = user.role === 'landlord' ? 'landlord' : 'tenant'
+      setView(v => (v === 'admin' ? v : def))
       try {
         const { data } = await supabase.from('access_control').select('phone, role')
         const me = norm10(user.phone || '')
         const hit = (data || []).find((r: any) => me.length === 10 && norm10(r.phone || '') === me)
-        setPriv(hit ? (hit.role as any) : null)
-      } catch { setPriv(null) }
+        if (!cancelled) setPriv(hit ? (hit.role as any) : null)
+      } catch { if (!cancelled) setPriv(null) }
+      if (!cancelled) setPrivReady(true)
     })()
+    return () => { cancelled = true }
   }, [user?.id])
 
   async function logout() {
@@ -74,42 +78,33 @@ export function App() {
     <AuthGate>
       <Toaster />
       <div style={{ maxWidth: 760, margin: '0 auto', padding: '10px 10px 0' }}>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center', background: 'rgba(120,120,128,0.12)', borderRadius: 14, padding: 6, margin: '0 0 10px', overflowX: 'auto' }}>
-          {priv ? (
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', background: 'rgba(120,120,128,0.12)', borderRadius: 14, padding: 6, margin: '0 0 10px', overflowX: 'auto', minHeight: 46 }}>
+          {!privReady ? (
+            // Пока права не дочитались — пустая полоска той же высоты: ничего не мигает
+            <span style={{ padding: '8px 12px', fontSize: 14, color: 'transparent', userSelect: 'none' }}>Roomio</span>
+          ) : priv ? (
             <>
               <button style={seg(view === 'tenant')} onClick={() => setView('tenant')}>Арендатор</button>
               <button style={seg(view === 'landlord')} onClick={() => setView('landlord')}>Арендодатель</button>
               <button style={seg(false)} onClick={logout}>Выйти</button>
+              <button style={seg(false)} onClick={() => setFbOpen(true)}>✉️</button>
+              {priv === 'admin' && (
+                view === 'admin'
+                  ? <button style={seg(true)} onClick={() => setView(user?.role === 'landlord' ? 'landlord' : 'tenant')}>В приложение</button>
+                  : <button style={seg(false)} onClick={() => setView('admin')}>Админка</button>
+              )}
             </>
           ) : (
-            <span style={{ padding: '8px 12px', fontSize: 14, color: '#8e8e93' }}>Roomio</span>
-          )}
-          <button style={seg(false)} onClick={() => setFbOpen(true)}>✉️</button>
-          {priv === 'admin' && (
-            view === 'admin'
-              ? <button style={seg(true)} onClick={() => setView(user?.role === 'landlord' ? 'landlord' : 'tenant')}>В приложение</button>
-              : <button style={seg(false)} onClick={() => setView('admin')}>Админка</button>
+            <>
+              <span style={{ padding: '8px 12px', fontSize: 14, color: '#8e8e93' }}>Roomio</span>
+              <button style={seg(false)} onClick={() => setFbOpen(true)}>✉️</button>
+            </>
           )}
         </div>
 
-        {loading && (
-          <div style={{ padding: 24, textAlign: 'center', color: '#8e8e93', fontSize: 15 }}>Загрузка профиля…</div>
-        )}
-
-        {!loading && !user && (
-          <div style={{ background: '#fff', borderRadius: 14, padding: 20, marginTop: 10, textAlign: 'center' }}>
-            <div style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f', marginBottom: 8 }}>Не удалось загрузить профиль</div>
-            <div style={{ fontSize: 14, color: '#8e8e93', marginBottom: 14 }}>Проверьте связь и попробуйте ещё раз.</div>
-            <button
-              onClick={refresh}
-              style={{ padding: '10px 22px', borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}
-            >Повторить</button>
-          </div>
-        )}
-
-        {!!user && view === 'tenant' && <TenantDashboard />}
-        {!!user && view === 'landlord' && <LandlordDashboard />}
-        {!!user && view === 'admin' && priv === 'admin' && <AdminDashboard />}
+        {view === 'tenant' && <TenantDashboard />}
+        {view === 'landlord' && <LandlordDashboard />}
+        {view === 'admin' && priv === 'admin' && <AdminDashboard />}
       </div>
 
       <Modal open={fbOpen} title="Обратная связь" onClose={() => setFbOpen(false)}>
