@@ -11,11 +11,13 @@ const norm10 = (s: string) => (s || '').replace(/\D/g, '').slice(-10)
 
 export function App() {
   const { user } = useTelegramUser() as any
+
+  // Кеш с НОВЫМ ключом — старый неправильный кеш ('roomio_admin') игнорируется
   const [isAdmin, setIsAdmin] = useState<boolean>(() => {
-    try { return localStorage.getItem('roomio_admin') === '1' } catch { return false }
+    try { return localStorage.getItem('roomio_admin_v2') === '1' } catch { return false }
   })
   const [adminReady, setAdminReady] = useState<boolean>(() => {
-    try { return localStorage.getItem('roomio_admin_ready') === '1' } catch { return false }
+    try { return localStorage.getItem('roomio_admin_v2_ready') === '1' } catch { return false }
   })
   const [roleOverride, setRoleOverride] = useState<null | 'tenant' | 'landlord'>(null)
   const [adminView, setAdminView] = useState(false)
@@ -24,26 +26,31 @@ export function App() {
   const [fbFile, setFbFile] = useState<File | null>(null)
   const [fbBusy, setFbBusy] = useState(false)
 
-  // Админка — только у владельца. Проверяем по списку admin_emails (и на всякий
-  // случай по access_control с ролью admin). У обычных пользователей — пусто.
+  // Админ — только если СВОЙ e-mail или СВОЙ телефон найден в списках админов.
+  // Не зависит от того, открыта база или нет: сверяем на устройстве.
   useEffect(() => {
     let cancelled = false
     ;(async () => {
       try {
         let admin = false
+        let meEmail = String(user?.email || '').toLowerCase()
+        const mePhone = norm10(user?.phone || '')
+        if (!meEmail) {
+          const { data: au } = await supabase.auth.getUser()
+          meEmail = String(au?.user?.email || '').toLowerCase()
+        }
         const { data: ae } = await supabase.from('admin_emails').select('email')
-        if (ae && ae.length > 0) admin = true
-        if (!admin && user) {
+        admin = (ae || []).some((r: any) => !!meEmail && String(r.email || '').toLowerCase() === meEmail)
+        if (!admin) {
           const { data: ac } = await supabase.from('access_control').select('phone, role')
-          const me = norm10(user.phone || '')
-          admin = !!(ac || []).find((r: any) => r.role === 'admin' && me.length === 10 && norm10(r.phone || '') === me)
+          admin = (ac || []).some((r: any) => r.role === 'admin' && mePhone.length === 10 && norm10(r.phone || '') === mePhone)
         }
         if (!cancelled) {
           setIsAdmin(admin)
           setAdminReady(true)
           try {
-            localStorage.setItem('roomio_admin', admin ? '1' : '0')
-            localStorage.setItem('roomio_admin_ready', '1')
+            localStorage.setItem('roomio_admin_v2', admin ? '1' : '0')
+            localStorage.setItem('roomio_admin_v2_ready', '1')
           } catch {}
         }
       } catch {
@@ -53,7 +60,7 @@ export function App() {
     return () => { cancelled = true }
   }, [user?.id])
 
-  // Переключатель ролей — у ВСЕХ пользователей
+  // Переключатель «Арендатор / Арендодатель» — у ВСЕХ пользователей
   const baseRole: 'tenant' | 'landlord' = user?.role === 'landlord' ? 'landlord' : 'tenant'
   const role: 'tenant' | 'landlord' = roleOverride || baseRole
   const view: 'tenant' | 'landlord' | 'admin' = adminView && isAdmin ? 'admin' : role
@@ -97,6 +104,7 @@ export function App() {
       <div style={{ maxWidth: 760, margin: '0 auto', padding: '10px 10px 0' }}>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', background: 'rgba(120,120,128,0.12)', borderRadius: 14, padding: 6, margin: '0 0 10px', overflowX: 'auto', minHeight: 46 }}>
           {!adminReady ? (
+            // пока проверка идёт — пустая полоска той же высоты, ничего не мигает
             <span style={{ padding: '8px 12px', fontSize: 14, color: 'transparent', userSelect: 'none' }}>Roomio</span>
           ) : (
             <>
