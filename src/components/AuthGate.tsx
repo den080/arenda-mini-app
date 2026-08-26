@@ -32,76 +32,80 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
   const tgId = String((window as any).Telegram?.WebApp?.initDataUnsafe?.user?.id || (user as any)?.telegram_id || '')
 
+  // Главное: любой путь завершается setReady(true) — гейт НЕ может зависнуть
   useEffect(() => {
     let cancelled = false
-    if (userLoading) return
     ;(async () => {
-      // 1) Есть живая сессия — сразу пускаем
-      const { data: s } = await supabase.auth.getSession()
-      let session = s.session
-      if (session) {
-        const { error } = await supabase.auth.getUser()
-        if (error) { session = null }
+      try {
+        // 1) живая сессия?
+        const { data: s } = await supabase.auth.getSession()
+        let session = s?.session || null
+        if (session) {
+          const { error } = await supabase.auth.getUser()
+          if (error) session = null
+        }
+        // 2) тихий вход: сохранённая почта + ключ устройства (без кода)
+        const saved = (localStorage.getItem('roomio_bound_email') || '').toLowerCase()
+        if (!session && saved && tgId) {
+          const { data: ld } = await supabase.auth.signInWithPassword({ email: saved, password: devicePassword(tgId) })
+          session = ld?.session || null
+        }
+        // 3) сессия есть → фиксируем почту и ставим ключ на будущее
+        if (session) {
+          const em = String(session.user?.email || '').toLowerCase()
+          if (em) {
+            localStorage.setItem('roomio_bound_email', em)
+            if (user?.id) {
+              supabase.from('users').update({ email: em }).eq('id', user.id).then(() => {}, () => {})
+            }
+            if (tgId) {
+              supabase.auth.updateUser({ password: devicePassword(tgId) }).then(() => {}, () => {})
+            }
+          }
+        }
+        if (!cancelled) { setHasSession(!!session); setReady(true) }
+      } catch {
+        if (!cancelled) { setHasSession(false); setReady(true) }
       }
-
-      // 2) Сессии нет — пробуем ТИХИЙ вход по ключу устройства
-      const bound = String(user?.email || '').toLowerCase()
-      if (!session && bound && tgId) {
-        const { data: ld, error } = await supabase.auth.signInWithPassword({ email: bound, password: devicePassword(tgId) })
-        if (!error && ld.session) session = ld.session
-      }
-
-      if (!cancelled) { setHasSession(!!session); setReady(true) }
     })()
     return () => { cancelled = true }
   }, [user?.id, userLoading])
-
-  // Ключ устройства: ставим один раз; 422 «уже такой» — это нормально, игнорируем
-  async function ensureDeviceKey() {
-    if (!tgId) return
-    try { await supabase.auth.updateUser({ password: devicePassword(tgId) }) } catch {}
-  }
-
-  // Привязываем почту к СУЩЕСТВУЮЩЕЙ строке пользователя. НИКОГДА не создаём новую.
-  async function bindEmail(em: string) {
-    try {
-      if (user?.id) {
-        await supabase.from('users').update({ email: em.toLowerCase() }).eq('id', user.id)
-      } else if (tgId) {
-        await supabase.from('users').update({ email: em.toLowerCase() }).eq('telegram_id', tgId)
-      }
-    } catch {}
-  }
 
   async function sendCode() {
     if (!consent) { showToast('Нужно согласие на обработку данных'); return }
     if (!/^\S+@\S+\.\S+$/.test(email.trim())) { showToast('Проверьте e-mail'); return }
     setBusy(true)
-    const { error } = await supabase.auth.signInWithOtp({ email: email.trim() })
-    setBusy(false)
-    if (error) { showToast(`Ошибка ${error.status ?? ''}: ${error.message || 'без сообщения'}`); return }
-    setStage('code')
-    showToast('Код отправлен на ' + email.trim())
+    try {
+      const { error } = await supabase.auth.signInWithOtp({ email: email.trim() })
+      if (error) { showToast(`Ошибка ${error.status ?? ''}: ${error.message || 'без сообщения'}`); return }
+      setStage('code')
+      showToast('Код отправлен на ' + email.trim())
+    } finally { setBusy(false) }
   }
 
   async function verify() {
     if (code.trim().length < 4) { showToast('Введите код из письма'); return }
     setBusy(true)
-    const types: Array<'email' | 'signup' | 'magiclink'> = ['email', 'signup', 'magiclink']
-    let lastErr: any = null
-    for (const t of types) {
-      const { error } = await supabase.auth.verifyOtp({ email: email.trim(), token: code.trim(), type: t })
-      if (!error) { lastErr = null; break }
-      lastErr = error
-    }
-    if (lastErr) { setBusy(false); showToast('Неверный код: ' + lastErr.message); return }
-
-    await bindEmail(email.trim())
-    await ensureDeviceKey()
-
-    setBusy(false)
-    setHasSession(true)
-    showToast('✅ Вход выполнен')
+    try {
+      const types: Array<'email' | 'signup' | 'magiclink'> = ['email', 'signup', 'magiclink']
+      let lastErr: any = null
+      for (const t of types) {
+        const { error } = await supabase.auth.verifyOtp({ email: email.trim(), token: code.trim(), type: t })
+        if (!error) { lastErr = null; break }
+        lastErr = error
+      }
+      if (lastErr) { showToast('Неверный код: ' + lastErr.message); return }
+      const em = email.trim().toLowerCase()
+      localStorage.setItem('roomio_bound_email', em)
+      if (user?.id) {
+        await supabase.from('users').update({ email: em }).eq('id', user.id).then(() => {}, () => {})
+      }
+      if (tgId) {
+        await supabase.auth.updateUser({ password: devicePassword(tgId) }).then(() => {}, () => {})
+      }
+      setHasSession(true)
+      showToast('✅ Вход выполнен')
+    } finally { setBusy(false) }
   }
 
   if (!ready) return <div style={T.page}>Загрузка…</div>
