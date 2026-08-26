@@ -11,9 +11,6 @@ const norm10 = (s: string) => (s || '').replace(/\D/g, '').slice(-10)
 
 export function App() {
   const { user } = useTelegramUser() as any
-
-  // Служебные права (tester/admin). Обычным пользователям НИЧЕГО не добавляем.
-  // Кеш в localStorage — чтобы при повторном входе панель рисовалась сразу, без мигания.
   const [priv, setPriv] = useState<null | 'tester' | 'admin'>(() => {
     try {
       const v = localStorage.getItem('roomio_priv')
@@ -30,15 +27,13 @@ export function App() {
   const [fbFile, setFbFile] = useState<File | null>(null)
   const [fbBusy, setFbBusy] = useState(false)
 
+  // Служебные права (tester/admin) — по телефону из access_control.
+  // Обычным пользователям ничего добавлять не нужно.
   useEffect(() => {
     let cancelled = false
     ;(async () => {
       if (!user) {
-        if (!cancelled) {
-          setPriv(null)
-          setPrivReady(true)
-          try { localStorage.setItem('roomio_priv_ready', '1'); localStorage.removeItem('roomio_priv') } catch {}
-        }
+        if (!cancelled) { setPriv(null); setPrivReady(true); try { localStorage.setItem('roomio_priv_ready', '1'); localStorage.removeItem('roomio_priv') } catch {} }
         return
       }
       try {
@@ -55,14 +50,11 @@ export function App() {
             localStorage.setItem('roomio_priv_ready', '1')
           } catch {}
         }
-      } catch {
-        if (!cancelled) setPrivReady(true)
-      }
+      } catch { if (!cancelled) setPrivReady(true) }
     })()
     return () => { cancelled = true }
   }, [user?.id])
 
-  // Роль выводится СИНХРОННО из профиля — никакого переключения «арендатор→арендодатель» после загрузки
   const baseRole: 'tenant' | 'landlord' = user?.role === 'landlord' ? 'landlord' : 'tenant'
   const role: 'tenant' | 'landlord' = priv ? (roleOverride || baseRole) : baseRole
   const view: 'tenant' | 'landlord' | 'admin' = adminView && priv === 'admin' ? 'admin' : role
@@ -112,12 +104,19 @@ export function App() {
       <div style={{ maxWidth: 760, margin: '0 auto', padding: '10px 10px 0' }}>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', background: 'rgba(120,120,128,0.12)', borderRadius: 14, padding: 6, margin: '0 0 10px', overflowX: 'auto', minHeight: 46 }}>
           {!privReady ? (
-            // Пока права не известны (первый вход) — пустая заглушка той же высоты, ничего не мигает
+            // пока права не известны — пустая заглушка той же высоты, ничего не мигает
             <span style={{ padding: '8px 12px', fontSize: 14, color: 'transparent', userSelect: 'none' }}>Roomio</span>
-          ) : priv ? (
+          ) : (
             <>
-              <button style={seg(role === 'tenant')} onClick={() => { setRoleOverride('tenant'); setAdminView(false) }}>Арендатор</button>
-              <button style={seg(role === 'landlord')} onClick={() => { setRoleOverride('landlord'); setAdminView(false) }}>Арендодатель</button>
+              {priv ? (
+                <>
+                  <button style={seg(role === 'tenant')} onClick={() => { setRoleOverride('tenant'); setAdminView(false) }}>Арендатор</button>
+                  <button style={seg(role === 'landlord')} onClick={() => { setRoleOverride('landlord'); setAdminView(false) }}>Арендодатель</button>
+                </>
+              ) : (
+                <span style={{ padding: '8px 12px', fontSize: 14, color: '#8e8e93' }}>Roomio</span>
+              )}
+              {/* Меню есть у ВСЕХ: выйти и обратная связь */}
               <button style={seg(false)} onClick={logout}>Выйти</button>
               <button style={seg(false)} onClick={() => setFbOpen(true)}>✉️</button>
               {priv === 'admin' && (
@@ -125,12 +124,6 @@ export function App() {
                   ? <button style={seg(true)} onClick={() => setAdminView(false)}>В приложение</button>
                   : <button style={seg(false)} onClick={() => setAdminView(true)}>Админка</button>
               )}
-            </>
-          ) : (
-            // Обычный пользователь: без списков и тестов — сразу свой дашборд
-            <>
-              <span style={{ padding: '8px 12px', fontSize: 14, color: '#8e8e93' }}>Roomio</span>
-              <button style={seg(false)} onClick={() => setFbOpen(true)}>✉️</button>
             </>
           )}
         </div>
