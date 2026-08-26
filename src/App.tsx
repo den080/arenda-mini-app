@@ -11,14 +11,11 @@ const norm10 = (s: string) => (s || '').replace(/\D/g, '').slice(-10)
 
 export function App() {
   const { user } = useTelegramUser() as any
-  const [priv, setPriv] = useState<null | 'tester' | 'admin'>(() => {
-    try {
-      const v = localStorage.getItem('roomio_priv')
-      return v === 'tester' || v === 'admin' ? (v as any) : null
-    } catch { return null }
+  const [isAdmin, setIsAdmin] = useState<boolean>(() => {
+    try { return localStorage.getItem('roomio_admin') === '1' } catch { return false }
   })
-  const [privReady, setPrivReady] = useState<boolean>(() => {
-    try { return localStorage.getItem('roomio_priv_ready') === '1' } catch { return false }
+  const [adminReady, setAdminReady] = useState<boolean>(() => {
+    try { return localStorage.getItem('roomio_admin_ready') === '1' } catch { return false }
   })
   const [roleOverride, setRoleOverride] = useState<null | 'tenant' | 'landlord'>(null)
   const [adminView, setAdminView] = useState(false)
@@ -27,43 +24,39 @@ export function App() {
   const [fbFile, setFbFile] = useState<File | null>(null)
   const [fbBusy, setFbBusy] = useState(false)
 
-  // Служебные права (tester/admin) — по телефону из access_control.
-  // Обычным пользователям ничего добавлять не нужно.
+  // Админка — только у владельца. Проверяем по списку admin_emails (и на всякий
+  // случай по access_control с ролью admin). У обычных пользователей — пусто.
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      if (!user) {
-        if (!cancelled) { setPriv(null); setPrivReady(true); try { localStorage.setItem('roomio_priv_ready', '1'); localStorage.removeItem('roomio_priv') } catch {} }
-        return
-      }
       try {
-        const { data } = await supabase.from('access_control').select('phone, role')
-        const me = norm10(user.phone || '')
-        const hit = (data || []).find((r: any) => me.length === 10 && norm10(r.phone || '') === me)
-        const role = hit ? (hit.role as any) : null
+        let admin = false
+        const { data: ae } = await supabase.from('admin_emails').select('email')
+        if (ae && ae.length > 0) admin = true
+        if (!admin && user) {
+          const { data: ac } = await supabase.from('access_control').select('phone, role')
+          const me = norm10(user.phone || '')
+          admin = !!(ac || []).find((r: any) => r.role === 'admin' && me.length === 10 && norm10(r.phone || '') === me)
+        }
         if (!cancelled) {
-          setPriv(role)
-          setPrivReady(true)
+          setIsAdmin(admin)
+          setAdminReady(true)
           try {
-            if (role) localStorage.setItem('roomio_priv', role)
-            else localStorage.removeItem('roomio_priv')
-            localStorage.setItem('roomio_priv_ready', '1')
+            localStorage.setItem('roomio_admin', admin ? '1' : '0')
+            localStorage.setItem('roomio_admin_ready', '1')
           } catch {}
         }
-      } catch { if (!cancelled) setPrivReady(true) }
+      } catch {
+        if (!cancelled) setAdminReady(true)
+      }
     })()
     return () => { cancelled = true }
   }, [user?.id])
 
+  // Переключатель ролей — у ВСЕХ пользователей
   const baseRole: 'tenant' | 'landlord' = user?.role === 'landlord' ? 'landlord' : 'tenant'
-  const role: 'tenant' | 'landlord' = priv ? (roleOverride || baseRole) : baseRole
-  const view: 'tenant' | 'landlord' | 'admin' = adminView && priv === 'admin' ? 'admin' : role
-
-  async function logout() {
-    try { await supabase.auth.signOut() } catch {}
-    try { localStorage.removeItem('roomio_priv'); localStorage.removeItem('roomio_priv_ready') } catch {}
-    window.location.reload()
-  }
+  const role: 'tenant' | 'landlord' = roleOverride || baseRole
+  const view: 'tenant' | 'landlord' | 'admin' = adminView && isAdmin ? 'admin' : role
 
   async function sendFeedback() {
     if (!user) return
@@ -103,23 +96,14 @@ export function App() {
       <Toaster />
       <div style={{ maxWidth: 760, margin: '0 auto', padding: '10px 10px 0' }}>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', background: 'rgba(120,120,128,0.12)', borderRadius: 14, padding: 6, margin: '0 0 10px', overflowX: 'auto', minHeight: 46 }}>
-          {!privReady ? (
-            // пока права не известны — пустая заглушка той же высоты, ничего не мигает
+          {!adminReady ? (
             <span style={{ padding: '8px 12px', fontSize: 14, color: 'transparent', userSelect: 'none' }}>Roomio</span>
           ) : (
             <>
-              {priv ? (
-                <>
-                  <button style={seg(role === 'tenant')} onClick={() => { setRoleOverride('tenant'); setAdminView(false) }}>Арендатор</button>
-                  <button style={seg(role === 'landlord')} onClick={() => { setRoleOverride('landlord'); setAdminView(false) }}>Арендодатель</button>
-                </>
-              ) : (
-                <span style={{ padding: '8px 12px', fontSize: 14, color: '#8e8e93' }}>Roomio</span>
-              )}
-              {/* Меню есть у ВСЕХ: выйти и обратная связь */}
-              <button style={seg(false)} onClick={logout}>Выйти</button>
+              <button style={seg(role === 'tenant' && !adminView)} onClick={() => { setRoleOverride('tenant'); setAdminView(false) }}>Арендатор</button>
+              <button style={seg(role === 'landlord' && !adminView)} onClick={() => { setRoleOverride('landlord'); setAdminView(false) }}>Арендодатель</button>
               <button style={seg(false)} onClick={() => setFbOpen(true)}>✉️</button>
-              {priv === 'admin' && (
+              {isAdmin && (
                 adminView
                   ? <button style={seg(true)} onClick={() => setAdminView(false)}>В приложение</button>
                   : <button style={seg(false)} onClick={() => setAdminView(true)}>Админка</button>
