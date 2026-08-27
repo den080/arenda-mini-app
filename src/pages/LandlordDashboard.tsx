@@ -178,6 +178,11 @@ export function LandlordDashboard() {
           .in('object_id', objIds).eq('status', 'terminated')
           .order('terminated_at', { ascending: false })
         setArchived(archData || [])
+// объекты, у которых все договоры завершены, живут только в архиве —
+// на главном экране «пустой каркас» не показываем
+const terminatedByObj: Record<string, boolean> = {}
+for (const a of archData || []) terminatedByObj[a.object_id] = true
+
         if (contractIds.length) {
           await Promise.all(contractIds.map((id: string) => ensureNextPayment(id).catch(() => {})))
         }
@@ -215,7 +220,10 @@ export function LandlordDashboard() {
         const allHistory: any[] = []
         for (const obj of objectsData) {
           const contract = contractByObj[obj.id]
-          if (!contract) { objectsWithStatus.push({ ...obj, status: 'no_contract', amount: 0, paymentId: null, statusColor: '#888', statusDetail: 'Нет договора' }); continue }
+          if (!contract) {
+  if (terminatedByObj[obj.id]) continue
+  objectsWithStatus.push({ ...obj, status: 'no_contract', amount: 0, paymentId: null, statusColor: '#888', statusDetail: 'Нет договора' }); continue
+          }
           const readingsMode = contract.readings_mode || 'manual'
           const reminder = contract.reminder_days_before || 3
           const sd0 = contract.start_date ? parseDate(contract.start_date) : null
