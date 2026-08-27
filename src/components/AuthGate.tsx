@@ -15,8 +15,16 @@ const POLICY = `ПОЛИТИКА КОНФИДЕНЦИАЛЬНОСТИ (крат�
 Срок: до удаления аккаунта или договора.
 Ваши права: запросить, изменить, удалить данные — через владельца сервиса.`
 
-function devicePassword(tgId: string): string {
-  return `roomio-tg-${tgId}`
+// СЛУЧАЙНЫЙ ключ устройства (64 hex-символа). В отличие от «roomio-tg-…»,
+// его невозможно угадать или перебрать снаружи.
+function randKey(): string {
+  try {
+    const a = new Uint8Array(32)
+    crypto.getRandomValues(a)
+    return Array.from(a, (b) => b.toString(16).padStart(2, '0')).join('')
+  } catch {
+    return Math.random().toString(36).slice(2) + Date.now().toString(36) + Math.random().toString(36).slice(2)
+  }
 }
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
@@ -30,27 +38,30 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const [policyOpen, setPolicyOpen] = useState(false)
   const [busy, setBusy] = useState(false)
 
-  const tgId = String((window as any).Telegram?.WebApp?.initDataUnsafe?.user?.id || (user as any)?.telegram_id || '')
+  const tg = (window as any)?.Telegram?.WebApp
+  const tgId = String(tg?.initDataUnsafe?.user?.id || (user as any)?.telegram_id || '')
+  const tgPhone = String(tg?.initDataUnsafe?.user?.phone_number || '')
 
-  // Главное: любой путь завершается setReady(true) — гейт НЕ может зависнуть
+  // Вход: живая сессия → тихий вход (сохранённая почта + ключ устройства) → иначе форма
   useEffect(() => {
     let cancelled = false
+    if (userLoading) return
     ;(async () => {
       try {
-        // 1) живая сессия?
         const { data: s } = await supabase.auth.getSession()
         let session = s?.session || null
         if (session) {
           const { error } = await supabase.auth.getUser()
           if (error) session = null
         }
-        // 2) тихий вход: сохранённая почта + ключ устройства (без кода)
         const saved = (localStorage.getItem('roomio_bound_email') || '').toLowerCase()
-        if (!session && saved && tgId) {
-          const { data: ld } = await supabase.auth.signInWithPassword({ email: saved, password: devicePassword(tgId) })
-          session = ld?.session || null
+        if (!session && saved) {
+          const key = localStorage.getItem('roomio_key:' + saved) || ''
+          if (key) {
+            const { data: ld } = await supabase.auth.signInWithPassword({ email: saved, password: key })
+            session = ld?.session || null
+          }
         }
-        // 3) сессия есть → фиксируем почту и ставим ключ на будущее
         if (session) {
           const em = String(session.user?.email || '').toLowerCase()
           if (em) {
@@ -58,8 +69,9 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
             if (user?.id) {
               supabase.from('users').update({ email: em }).eq('id', user.id).then(() => {}, () => {})
             }
-            if (tgId) {
-              supabase.auth.updateUser({ password: devicePassword(tgId) }).then(() => {}, () => {})
+            // запоминаем телефон/telegram в профиле auth — пригодится для политик «свой»
+            if (tgId || tgPhone) {
+              supabase.auth.updateUser({ data: { telegram_id: tgId || undefined, phone: tgPhone || undefined } }).then(() => {}, () => {})
             }
           }
         }
@@ -95,13 +107,18 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         lastErr = error
       }
       if (lastErr) { showToast('Неверный код: ' + lastErr.message); return }
+
       const em = email.trim().toLowerCase()
       localStorage.setItem('roomio_bound_email', em)
+      // Новый случайный ключ устройства; старый предсказуемый пароль больше не используется
+      const key = randKey()
+      localStorage.setItem('roomio_key:' + em, key)
+      try { await supabase.auth.updateUser({ password: key }) } catch {}
+      if (tgId || tgPhone) {
+        try { await supabase.auth.updateUser({ data: { telegram_id: tgId || undefined, phone: tgPhone || undefined } }) } catch {}
+      }
       if (user?.id) {
         await supabase.from('users').update({ email: em }).eq('id', user.id).then(() => {}, () => {})
-      }
-      if (tgId) {
-        await supabase.auth.updateUser({ password: devicePassword(tgId) }).then(() => {}, () => {})
       }
       setHasSession(true)
       showToast('✅ Вход выполнен')
