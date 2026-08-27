@@ -10,7 +10,7 @@ import { Toaster, Modal, showToast } from './components/ui'
 const norm10 = (s: string) => (s || '').replace(/\D/g, '').slice(-10)
 
 export function App() {
-  const { user } = useTelegramUser() as any
+  const { user, refresh } = useTelegramUser() as any
   const [isAdmin, setIsAdmin] = useState<boolean>(() => {
     try { return localStorage.getItem('roomio_admin_v2') === '1' } catch { return false }
   })
@@ -85,7 +85,6 @@ export function App() {
     } finally { setFbBusy(false) }
   }
 
-  // Переключатель ролей: две равные доли на всю ширину — без «дыр»
   const segFlex = (active: boolean): React.CSSProperties => ({
     flex: 1, minWidth: 0, padding: '10px 8px', borderRadius: 12, border: 'none', cursor: 'pointer',
     fontSize: 15, fontWeight: 600, textAlign: 'center', whiteSpace: 'nowrap',
@@ -94,14 +93,12 @@ export function App() {
     boxShadow: active ? '0 1px 4px rgba(0,0,0,0.12)' : 'none',
   })
 
-  // Квадратная кнопка-иконка (конверт) — фиксированная, справа
   const iconBtn: React.CSSProperties = {
     flexShrink: 0, width: 42, height: 42, borderRadius: 12, border: 'none', cursor: 'pointer',
     background: 'transparent', fontSize: 18,
     display: 'flex', alignItems: 'center', justifyContent: 'center',
   }
 
-  // Компактная фиксированная кнопка («Админка» / «В приложение»)
   const fixedBtn = (active: boolean): React.CSSProperties => ({
     flexShrink: 0, padding: '10px 14px', borderRadius: 12, border: 'none', cursor: 'pointer',
     fontSize: 15, fontWeight: 600, whiteSpace: 'nowrap',
@@ -116,7 +113,6 @@ export function App() {
       <div style={{ maxWidth: 760, margin: '0 auto', padding: '10px 10px 0' }}>
         <div style={{ display: 'flex', gap: 6, alignItems: 'stretch', background: 'rgba(120,120,128,0.12)', borderRadius: 14, padding: 6, margin: '0 0 10px' }}>
           {!adminReady ? (
-            // заглушка той же высоты, пока идёт проверка прав — ничего не мигает
             <div style={{ flex: 1, display: 'flex', alignItems: 'center', padding: '0 12px', color: 'transparent', userSelect: 'none', fontSize: 15, fontWeight: 600 }}>Roomio</div>
           ) : (
             <>
@@ -133,7 +129,14 @@ export function App() {
         </div>
 
         {!user ? (
-          <div style={{ padding: 20, textAlign: 'center', color: '#8e8e93', fontSize: 15 }}>Загрузка…</div>
+          <div style={{ background: '#fff', borderRadius: 14, padding: 20, marginTop: 10, textAlign: 'center' }}>
+            <div style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f', marginBottom: 8 }}>Профиль не загрузился</div>
+            <div style={{ fontSize: 14, color: '#8e8e93', marginBottom: 14 }}>Проверьте связь и нажмите кнопку — данные подтянутся.</div>
+            <button
+              onClick={refresh}
+              style={{ padding: '10px 22px', borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}
+            >Повторить</button>
+          </div>
         ) : view === 'tenant' ? (
           <TenantDashboard />
         ) : view === 'landlord' ? (
