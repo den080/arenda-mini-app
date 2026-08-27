@@ -28,9 +28,14 @@ export function useTelegramUser() {
         email = String(authData?.user?.email || '').toLowerCase()
       } catch {}
 
+      // сообщаем базе «кто я»: telegram_id в сессию (работает на любом устройстве)
+      if (tgId) {
+        await supabase.auth.updateUser({ data: { telegram_id: tgId } }).then(() => {}, () => {})
+      }
+
       let row: any = null
 
-      // 0) ГЛАВНОЕ: серверный поиск в обход правил доступа — работает на любом устройстве
+      // 0) серверный поиск по почте ИЛИ по telegram, в обход правил доступа
       try {
         const { data: prof } = await supabase.rpc('profile_resolve', { p_email: email, p_tg: tgId })
         if (prof && (prof as any).id) row = prof as any
@@ -58,7 +63,18 @@ export function useTelegramUser() {
         row = ins.data || null
       }
 
-      setUser(row ? (row as DbUser) : null)
+      if (row) {
+        const upd: any = { last_seen_at: new Date().toISOString() }
+        // почту привязываем ТОЛЬКО если у профиля её ещё нет — чужую не трогаем
+        if (email && !row.email) upd.email = email
+        if (tgId && !row.telegram_id) upd.telegram_id = tgId
+        if (Object.keys(upd).length > 1) {
+          await supabase.from('users').update(upd).eq('id', row.id).then(() => {}, () => {})
+        }
+        setUser({ ...row, ...upd } as DbUser)
+      } else {
+        setUser(null)
+      }
     } catch {
       setUser(null)
     } finally {
