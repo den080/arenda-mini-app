@@ -81,6 +81,7 @@ export function AdminDashboard() {
   const [loading, setLoading] = useState(true)
   const [delFeedback, setDelFeedback] = useState<string | null>(null)
   const [delAccess, setDelAccess] = useState<string | null>(null)
+  const [delUser, setDelUser] = useState<string | null>(null)
   const [proPhone, setProPhone] = useState('')
   const [proTerm, setProTerm] = useState<'1' | '3' | '6' | '12' | 'inf'>('1')
   const [proEdit, setProEdit] = useState<{ id: string; date: string } | null>(null)
@@ -124,6 +125,61 @@ export function AdminDashboard() {
     return () => clearInterval(t)
   }, [])
 
+  // ===== CSV для налоговой =====
+  function downloadTaxCsv() {
+    const rows: string[][] = [['Дата подтверждения', 'Период', 'Объект', 'Арендатор', 'Аренда', 'Штрафы', 'Ресурсы', 'Итого']]
+    let total = 0
+    for (const p of payments) {
+      if (!p.confirmed_by_landlord) continue
+      const c = contracts.find(x => x.id === p.contract_id)
+      const o = objects.find(x => x.id === c?.object_id)
+      const t = users.find(x => x.id === c?.tenant_id)
+      const sum = Number(p.base_amount || 0) + Number(p.penalty_amount || 0) + Number(p.utilities_amount || 0)
+      total += sum
+      rows.push([
+        p.confirmed_at ? new Date(p.confirmed_at).toLocaleDateString('ru-RU') : '',
+        new Date(p.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }),
+        o?.address || '',
+        t?.full_name || '',
+        Number(p.base_amount || 0).toFixed(2),
+        Number(p.penalty_amount || 0).toFixed(2),
+        Number(p.utilities_amount || 0).toFixed(2),
+        sum.toFixed(2),
+      ])
+    }
+    rows.push(['', '', '', 'ИТОГО', '', '', '', total.toFixed(2)])
+    const csv = '\uFEFF' + rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(';')).join('\r\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `roomio-nalog-${iso(new Date())}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+    showToast('✅ CSV скачан')
+  }
+
+  // ===== Удаление персональных данных по запросу (152-ФЗ) =====
+  // Стираем личное; финансовая история остаётся (требование налогового учёта).
+  async function eraseUserData(id: string) {
+    await supabase.from('notifications_log').delete().eq('user_id', id)
+    await supabase.from('analytics_events').delete().eq('user_id', id)
+    await supabase.from('team_members').delete().eq('user_id', id)
+    await supabase.from('subscriptions').delete().eq('owner_id', id)
+    const { data: owned } = await supabase.from('teams').select('id').eq('owner_id', id)
+    for (const t of owned || []) {
+      await supabase.from('team_members').delete().eq('team_id', t.id)
+      await supabase.from('objects').update({ team_id: null }).eq('team_id', t.id)
+      await supabase.from('teams').delete().eq('id', t.id)
+    }
+    const { error } = await supabase.from('users').update({
+      full_name: 'Удалённый пользователь', phone: null, email: null, telegram_id: null,
+    }).eq('id', id)
+    if (error) { showToast('Ошибка: ' + error.message); return }
+    showToast('✅ Данные удалены, профиль обезличен')
+    load()
+  }
+
   if (loading) return <div style={T.page}>Загрузка…</div>
 
   const now = new Date()
@@ -150,7 +206,6 @@ export function AdminDashboard() {
   const activeUsers = users.filter(u => u.last_seen_at && u.last_seen_at >= weekAgo).length
   const newFeedback = feedbacks.filter(f => f.status === 'new').length
 
-  // ===== Тревоги =====
   const alarms: { sev: number; title: string; sub: string; chip: string }[] = []
   for (const c of activeContracts) {
     const addr = objects.find(o => o.id === c.object_id)?.address || '—'
@@ -239,7 +294,6 @@ export function AdminDashboard() {
     load()
   }
 
-  // ===== Pro =====
   async function insertSub(ownerId: string, until: string) {
     const base: any = { owner_id: ownerId, until_date: until }
     const { error } = await supabase.from('subscriptions').insert(base)
@@ -373,12 +427,17 @@ export function AdminDashboard() {
       {tab === 'users' && (
         <div style={T.card}>
           <div style={T.h2}>Пользователи</div>
+          <div style={{ ...T.tiny, margin: '0 0 10px' }}>
+            «Удалить данные» — стирает личное (уведомления, аналитику, команды, подписку) и обезличивает профиль.
+            История платежей и договоров остаётся — её требует налоговый учёт.
+          </div>
           {users.map((u, i) => (
             <div key={u.id} style={i === users.length - 1 ? last : row}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f' }}>{u.full_name || '—'}</div>
                 <div style={muted}>{u.phone || 'без телефона'} · роль: {u.role || '—'} · с {new Date(u.created_at).toLocaleDateString('ru-RU')}</div>
               </div>
+              <button style={red} onClick={() => setDelUser(u.id)}>удалить данные</button>
             </div>
           ))}
         </div>
@@ -389,34 +448,19 @@ export function AdminDashboard() {
           <div style={T.card}>
             <div style={T.h2}>Выдать Pro по телефону</div>
             <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-              <input
-                value={proPhone}
-                onChange={(e) => setProPhone(e.target.value)}
-                placeholder="+7 900 000-00-00"
-                style={inp}
-                inputMode="tel"
-              />
+              <input value={proPhone} onChange={(e) => setProPhone(e.target.value)} placeholder="+7 900 000-00-00" style={inp} inputMode="tel" />
             </div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
               {([['1', '1 мес'], ['3', '3 мес'], ['6', '6 мес'], ['12', '12 мес'], ['inf', 'бессрочно']] as const).map(([v, l]) => (
-                <button
-                  key={v}
-                  onClick={() => setProTerm(v)}
-                  style={{
-                    padding: '7px 12px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600,
-                    background: proTerm === v ? '#0071e3' : 'rgba(120,120,128,0.12)',
-                    color: proTerm === v ? '#fff' : '#1d1d1f',
-                  }}
-                >{l}</button>
+                <button key={v} onClick={() => setProTerm(v)} style={{
+                  padding: '7px 12px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                  background: proTerm === v ? '#0071e3' : 'rgba(120,120,128,0.12)', color: proTerm === v ? '#fff' : '#1d1d1f',
+                }}>{l}</button>
               ))}
             </div>
-            <button
-              onClick={grantPro}
-              style={{ width: '100%', padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}
-            >Выдать Pro</button>
-            <div style={{ ...T.tiny, margin: '8px 0 0' }}>Если у пользователя уже есть активная подписка, новый срок прибавится к её концу, а не сгорит.</div>
+            <button onClick={grantPro} style={{ width: '100%', padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>Выдать Pro</button>
+            <div style={{ ...T.tiny, margin: '8px 0 0' }}>Если уже есть активная подписка — новый срок прибавится к её концу.</div>
           </div>
-
           <div style={T.card}>
             <div style={T.h2}>Подписки ({subsSorted.length})</div>
             {subsSorted.length === 0 && <div style={{ ...muted, padding: '8px 0' }}>Подписок пока нет.</div>}
@@ -428,9 +472,7 @@ export function AdminDashboard() {
                 <div key={s.id} style={i === subsSorted.length - 1 ? last : row}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f' }}>{owner?.full_name || '—'} · {owner?.phone || '—'}</div>
-                    <div style={{ ...muted, color: expired ? '#ff3b30' : undefined }}>
-                      {isInf(untilS) ? 'бессрочно' : `до ${untilS}`}{expired ? ' · истекла' : ''}
-                    </div>
+                    <div style={{ ...muted, color: expired ? '#ff3b30' : undefined }}>{isInf(untilS) ? 'бессрочно' : `до ${untilS}`}{expired ? ' · истекла' : ''}</div>
                     <div style={{ display: 'flex', gap: 10, marginTop: 4, flexWrap: 'wrap' }}>
                       <button style={blue} onClick={() => extendPro(s, 1)}>+1 мес</button>
                       <button style={blue} onClick={() => extendPro(s, 3)}>+3 мес</button>
@@ -489,9 +531,7 @@ export function AdminDashboard() {
               <div key={o.id} style={i === objects.length - 1 ? last : row}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f' }}>{o.address}</div>
-                  <div style={muted}>
-                    {c ? `договор активен · ${userName(c.tenant_id)} · ${Number(c.rent_amount).toFixed(0)} ₽` : 'нет активного договора'}
-                  </div>
+                  <div style={muted}>{c ? `договор активен · ${userName(c.tenant_id)} · ${Number(c.rent_amount).toFixed(0)} ₽` : 'нет активного договора'}</div>
                 </div>
               </div>
             )
@@ -501,7 +541,10 @@ export function AdminDashboard() {
 
       {tab === 'payments' && (
         <div style={T.card}>
-          <div style={T.h2}>Платежи</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+            <div style={T.h2}>Платежи</div>
+            <button onClick={downloadTaxCsv} style={{ ...blue, flexShrink: 0 }}>CSV для налоговой</button>
+          </div>
           {payments.slice(0, 50).map((p, i) => (
             <div key={p.id} style={i === Math.min(payments.length, 50) - 1 ? last : row}>
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -594,17 +637,8 @@ export function AdminDashboard() {
             <b>admin</b> — дополнительно видит кнопку «Админка».
           </div>
           <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-            <input
-              value={newPhone}
-              onChange={(e) => setNewPhone(e.target.value)}
-              placeholder="+7 900 000-00-00"
-              style={inp}
-            />
-            <select
-              value={newRole}
-              onChange={(e) => setNewRole(e.target.value as any)}
-              style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box', outline: 'none' }}
-            >
+            <input value={newPhone} onChange={(e) => setNewPhone(e.target.value)} placeholder="+7 900 000-00-00" style={inp} />
+            <select value={newRole} onChange={(e) => setNewRole(e.target.value as any)} style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box', outline: 'none' }}>
               <option value="tester">tester</option>
               <option value="admin">admin</option>
             </select>
@@ -636,6 +670,12 @@ export function AdminDashboard() {
         onConfirm={() => { if (delAccess) removeAccess(delAccess) }}
       />
       <ConfirmDelete
+        open={!!delUser}
+        text="Личные данные пользователя будут удалены, профиль станет «Удалённый пользователь». История платежей и договоров останется (требование налогового учёта)."
+        onClose={() => setDelUser(null)}
+        onConfirm={() => { if (delUser) eraseUserData(delUser) }}
+      />
+      <ConfirmDelete
         open={!!proRevoke}
         text="Подписка будет отозвана немедленно. Пользователь потеряет Pro-доступ."
         onClose={() => setProRevoke(null)}
@@ -643,12 +683,7 @@ export function AdminDashboard() {
       />
       <Modal open={!!proEdit} title="Исправить дату окончания" onClose={() => setProEdit(null)}>
         <div style={{ fontSize: 14, color: '#555', marginBottom: 10 }}>Новая дата окончания (ГГГГ-ММ-ДД). Для «бессрочно» используйте 2099-12-31.</div>
-        <input
-          type="date"
-          value={proEdit?.date || ''}
-          onChange={(e) => setProEdit(proEdit ? { ...proEdit, date: e.target.value } : null)}
-          style={{ ...inp, marginBottom: 14 }}
-        />
+        <input type="date" value={proEdit?.date || ''} onChange={(e) => setProEdit(proEdit ? { ...proEdit, date: e.target.value } : null)} style={{ ...inp, marginBottom: 14 }} />
         <div style={{ display: 'flex', gap: 8 }}>
           <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }} onClick={saveProDate}>Сохранить</button>
           <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 15, cursor: 'pointer' }} onClick={() => setProEdit(null)}>Отмена</button>
