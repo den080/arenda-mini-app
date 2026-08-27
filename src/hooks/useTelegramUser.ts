@@ -29,7 +29,7 @@ export function useTelegramUser() {
         email = String(authData?.user?.email || '').toLowerCase()
       } catch {}
 
-      // ГЛАВНОЕ: сообщаем базе «кто я» — пишем telegram_id в сессию,
+      // ГЛАВНОЕ: прописываем telegram_id в сессию ДО поиска,
       // иначе на новом устройстве база не сопоставит профиль и спрячет его
       if (tgId) {
         await supabase.auth
