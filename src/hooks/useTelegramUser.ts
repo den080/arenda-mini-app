@@ -22,11 +22,20 @@ export function useTelegramUser() {
     try {
       const tg = (window as any)?.Telegram?.WebApp
       const tgId = tg?.initDataUnsafe?.user?.id ? String(tg.initDataUnsafe.user.id) : ''
+      const tgPhone = String(tg?.initDataUnsafe?.user?.phone_number || '')
       let email = ''
       try {
         const { data: authData } = await supabase.auth.getUser()
         email = String(authData?.user?.email || '').toLowerCase()
       } catch {}
+
+      // ГЛАВНОЕ: сообщаем базе «кто я» — пишем telegram_id в сессию,
+      // иначе на новом устройстве база не сопоставит профиль и спрячет его
+      if (tgId) {
+        await supabase.auth
+          .updateUser({ data: { telegram_id: tgId, phone: tgPhone || undefined } })
+          .then(() => {}, () => {})
+      }
 
       let row: any = null
 
@@ -40,7 +49,7 @@ export function useTelegramUser() {
         const r = await supabase.from('users').select('*').eq('telegram_id', tgId).limit(1).maybeSingle()
         row = r.data || null
       }
-      // 3) создать, если совсем нет; если создание уперлось в уже существующую строку — перечитать
+      // 3) создать, если совсем нет; если упёрлись в существующую строку — перечитать
       if (!row && tgId) {
         const tgUser = tg?.initDataUnsafe?.user
         const name = `${tgUser?.first_name || ''} ${tgUser?.last_name || ''}`.trim()
@@ -61,7 +70,6 @@ export function useTelegramUser() {
       }
 
       if (row) {
-        // связываем почту и telegram_id + отмечаем активность
         const upd: any = { last_seen_at: new Date().toISOString() }
         if (email && String(row.email || '').toLowerCase() !== email) upd.email = email
         if (tgId && String(row.telegram_id || '') !== tgId) upd.telegram_id = tgId
