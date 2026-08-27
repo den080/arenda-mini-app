@@ -11,8 +11,6 @@ const norm10 = (s: string) => (s || '').replace(/\D/g, '').slice(-10)
 
 export function App() {
   const { user } = useTelegramUser() as any
-
-  // Кеш с НОВЫМ ключом — старый неправильный кеш ('roomio_admin') игнорируется
   const [isAdmin, setIsAdmin] = useState<boolean>(() => {
     try { return localStorage.getItem('roomio_admin_v2') === '1' } catch { return false }
   })
@@ -26,8 +24,6 @@ export function App() {
   const [fbFile, setFbFile] = useState<File | null>(null)
   const [fbBusy, setFbBusy] = useState(false)
 
-  // Админ — только если СВОЙ e-mail или СВОЙ телефон найден в списках админов.
-  // Не зависит от того, открыта база или нет: сверяем на устройстве.
   useEffect(() => {
     let cancelled = false
     ;(async () => {
@@ -60,7 +56,6 @@ export function App() {
     return () => { cancelled = true }
   }, [user?.id])
 
-  // Переключатель «Арендатор / Арендодатель» — у ВСЕХ пользователей
   const baseRole: 'tenant' | 'landlord' = user?.role === 'landlord' ? 'landlord' : 'tenant'
   const role: 'tenant' | 'landlord' = roleOverride || baseRole
   const view: 'tenant' | 'landlord' | 'admin' = adminView && isAdmin ? 'admin' : role
@@ -90,9 +85,26 @@ export function App() {
     } finally { setFbBusy(false) }
   }
 
-  const seg = (active: boolean): React.CSSProperties => ({
+  // Переключатель ролей: две равные доли на всю ширину — без «дыр»
+  const segFlex = (active: boolean): React.CSSProperties => ({
+    flex: 1, minWidth: 0, padding: '10px 8px', borderRadius: 12, border: 'none', cursor: 'pointer',
+    fontSize: 15, fontWeight: 600, textAlign: 'center', whiteSpace: 'nowrap',
+    background: active ? '#fff' : 'transparent',
+    color: active ? '#1d1d1f' : '#8e8e93',
+    boxShadow: active ? '0 1px 4px rgba(0,0,0,0.12)' : 'none',
+  })
+
+  // Квадратная кнопка-иконка (конверт) — фиксированная, справа
+  const iconBtn: React.CSSProperties = {
+    flexShrink: 0, width: 42, height: 42, borderRadius: 12, border: 'none', cursor: 'pointer',
+    background: 'transparent', fontSize: 18,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+  }
+
+  // Компактная фиксированная кнопка («Админка» / «В приложение»)
+  const fixedBtn = (active: boolean): React.CSSProperties => ({
     flexShrink: 0, padding: '10px 14px', borderRadius: 12, border: 'none', cursor: 'pointer',
-    fontSize: 15, fontWeight: 600,
+    fontSize: 15, fontWeight: 600, whiteSpace: 'nowrap',
     background: active ? '#fff' : 'transparent',
     color: active ? '#1d1d1f' : '#8e8e93',
     boxShadow: active ? '0 1px 4px rgba(0,0,0,0.12)' : 'none',
@@ -102,19 +114,19 @@ export function App() {
     <AuthGate>
       <Toaster />
       <div style={{ maxWidth: 760, margin: '0 auto', padding: '10px 10px 0' }}>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center', background: 'rgba(120,120,128,0.12)', borderRadius: 14, padding: 6, margin: '0 0 10px', overflowX: 'auto', minHeight: 46 }}>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'stretch', background: 'rgba(120,120,128,0.12)', borderRadius: 14, padding: 6, margin: '0 0 10px' }}>
           {!adminReady ? (
-            // пока проверка идёт — пустая полоска той же высоты, ничего не мигает
-            <span style={{ padding: '8px 12px', fontSize: 14, color: 'transparent', userSelect: 'none' }}>Roomio</span>
+            // заглушка той же высоты, пока идёт проверка прав — ничего не мигает
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', padding: '0 12px', color: 'transparent', userSelect: 'none', fontSize: 15, fontWeight: 600 }}>Roomio</div>
           ) : (
             <>
-              <button style={seg(role === 'tenant' && !adminView)} onClick={() => { setRoleOverride('tenant'); setAdminView(false) }}>Арендатор</button>
-              <button style={seg(role === 'landlord' && !adminView)} onClick={() => { setRoleOverride('landlord'); setAdminView(false) }}>Арендодатель</button>
-              <button style={seg(false)} onClick={() => setFbOpen(true)}>✉️</button>
+              <button style={segFlex(role === 'tenant' && !adminView)} onClick={() => { setRoleOverride('tenant'); setAdminView(false) }}>Арендатор</button>
+              <button style={segFlex(role === 'landlord' && !adminView)} onClick={() => { setRoleOverride('landlord'); setAdminView(false) }}>Арендодатель</button>
+              <button style={iconBtn} onClick={() => setFbOpen(true)}>✉️</button>
               {isAdmin && (
                 adminView
-                  ? <button style={seg(true)} onClick={() => setAdminView(false)}>В приложение</button>
-                  : <button style={seg(false)} onClick={() => setAdminView(true)}>Админка</button>
+                  ? <button style={fixedBtn(true)} onClick={() => setAdminView(false)}>В приложение</button>
+                  : <button style={fixedBtn(false)} onClick={() => setAdminView(true)}>Админка</button>
               )}
             </>
           )}
