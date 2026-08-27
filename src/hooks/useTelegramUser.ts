@@ -31,7 +31,7 @@ export function useTelegramUser() {
       let row: any = null
 
       // 1) по почте сессии
-      if (email && !row) {
+      if (email) {
         const r = await supabase.from('users').select('*').eq('email', email).limit(1).maybeSingle()
         row = r.data || null
       }
@@ -40,7 +40,7 @@ export function useTelegramUser() {
         const r = await supabase.from('users').select('*').eq('telegram_id', tgId).limit(1).maybeSingle()
         row = r.data || null
       }
-      // 3) создать профиль, если совсем нет
+      // 3) создать, если совсем нет; если создание уперлось в уже существующую строку — перечитать
       if (!row && tgId) {
         const tgUser = tg?.initDataUnsafe?.user
         const name = `${tgUser?.first_name || ''} ${tgUser?.last_name || ''}`.trim()
@@ -50,10 +50,18 @@ export function useTelegramUser() {
           .select('*')
           .maybeSingle()
         row = ins.data || null
+        if (!row) {
+          const r2 = await supabase.from('users').select('*').eq('telegram_id', tgId).limit(1).maybeSingle()
+          row = r2.data || null
+        }
+        if (!row && email) {
+          const r3 = await supabase.from('users').select('*').eq('email', email).limit(1).maybeSingle()
+          row = r3.data || null
+        }
       }
 
       if (row) {
-        // связываем почту и telegram_id между собой + отмечаем активность
+        // связываем почту и telegram_id + отмечаем активность
         const upd: any = { last_seen_at: new Date().toISOString() }
         if (email && String(row.email || '').toLowerCase() !== email) upd.email = email
         if (tgId && String(row.telegram_id || '') !== tgId) upd.telegram_id = tgId
