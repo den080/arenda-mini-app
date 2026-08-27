@@ -85,8 +85,11 @@ export function App() {
     } finally { setFbBusy(false) }
   }
 
+  // Кнопки ролей: растягиваются на широком экране, а в узком окне —
+  // не давятся, а аккуратно уходят в горизонтальную прокрутку
   const segFlex = (active: boolean): React.CSSProperties => ({
-    flex: 1, minWidth: 0, padding: '10px 8px', borderRadius: 12, border: 'none', cursor: 'pointer',
+    flex: '1 0 auto',
+    padding: '10px 14px', borderRadius: 12, border: 'none', cursor: 'pointer',
     fontSize: 15, fontWeight: 600, textAlign: 'center', whiteSpace: 'nowrap',
     background: active ? '#fff' : 'transparent',
     color: active ? '#1d1d1f' : '#8e8e93',
@@ -111,7 +114,7 @@ export function App() {
     <AuthGate>
       <Toaster />
       <div style={{ maxWidth: 760, margin: '0 auto', padding: '10px 10px 0' }}>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'stretch', background: 'rgba(120,120,128,0.12)', borderRadius: 14, padding: 6, margin: '0 0 10px' }}>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'stretch', background: 'rgba(120,120,128,0.12)', borderRadius: 14, padding: 6, margin: '0 0 10px', overflowX: 'auto' }}>
           {!adminReady ? (
             <div style={{ flex: 1, display: 'flex', alignItems: 'center', padding: '0 12px', color: 'transparent', userSelect: 'none', fontSize: 15, fontWeight: 600 }}>Roomio</div>
           ) : (
