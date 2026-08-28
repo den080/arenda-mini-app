@@ -20,7 +20,7 @@ export function App() {
   })
   const [roleOverride, setRoleOverride] = useState<null | 'tenant' | 'landlord'>(null)
   const [adminView, setAdminView] = useState(false)
-  const [viewAsId, setViewAsId] = useState<string>(() => {
+  const [viewAsId] = useState<string>(() => {
     try { return localStorage.getItem('roomio_viewas_id') || '' } catch { return '' }
   })
   const [viewPhone, setViewPhone] = useState('')
