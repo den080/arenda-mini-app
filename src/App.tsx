@@ -20,7 +20,7 @@ export function App() {
   })
   const [roleOverride, setRoleOverride] = useState<null | 'tenant' | 'landlord'>(null)
   const [adminView, setAdminView] = useState(false)
-const [viewAsId] = useState<string>(() => {
+  const [viewAsId, setViewAsId] = useState<string>(() => {
     try { return localStorage.getItem('roomio_viewas_id') || '' } catch { return '' }
   })
   const [viewPhone, setViewPhone] = useState('')
@@ -68,7 +68,6 @@ const [viewAsId] = useState<string>(() => {
   const role: 'tenant' | 'landlord' = roleOverride || baseRole
   const view: 'tenant' | 'landlord' | 'admin' = adminView && isAdmin ? 'admin' : role
 
-  // ===== режим просмотра: войти глазами пользователя по его телефону =====
   async function startViewAs() {
     const digits = norm10(viewPhone)
     if (digits.length < 10) { showToast('Введите телефон полностью'); return }
