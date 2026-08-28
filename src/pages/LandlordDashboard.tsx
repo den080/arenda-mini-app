@@ -240,7 +240,8 @@ export function LandlordDashboard() {
           const allPays = paysBy[contract.id] || []
           for (const p of allPays) allHistory.push({ ...p, objId: obj.id, address: obj.address })
           const fRows = fRowsBy[contract.id] || []
-          if (readingsMode === 'manual' && contract.meter_deadline_day && contractStarted && (!startMonthISO || periodISO >= startMonthISO)) {
+          const graceMonth = String(contract.created_at || '').slice(0, 7) === periodISO.slice(0, 7)
+          if (!graceMonth && readingsMode === 'manual' && contract.meter_deadline_day && contractStarted && (!startMonthISO || periodISO >= startMonthISO)) {
             const rr = (rulesBy[contract.id] || []).find((r: any) => r.violation_type === 'readings_overdue')
             const rRate = rr ? Number(rr.rate) || 0 : 0
             if (rRate > 0) {
@@ -290,7 +291,7 @@ export function LandlordDashboard() {
           const utilitiesAmount = Number(payment.utilities_amount || 0)
           const paymentId = String(payment.id)
           let waitingForReadings = false
-          if (readingsMode === 'manual' && contract.meter_deadline_day && contractStarted && today.getDate() > contract.meter_deadline_day) {
+          if (!graceMonth && readingsMode === 'manual' && contract.meter_deadline_day && contractStarted && today.getDate() > contract.meter_deadline_day) {
             // ===== ПРАВКА: «Ждём показания» только если есть счётчики без показаний и без отметки =====
             const metersW = metersByObj[obj.id] || []
             if (metersW.length) {
