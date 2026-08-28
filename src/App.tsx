@@ -6,6 +6,7 @@ import TenantDashboard from './pages/TenantDashboard'
 import LandlordDashboard from './pages/LandlordDashboard'
 import AdminDashboard from './pages/AdminDashboard'
 import { Toaster, Modal, showToast } from './components/ui'
+import { initErrorReporting, setErrorUser } from './lib/errorlog'
 
 const norm10 = (s: string) => (s || '').replace(/\D/g, '').slice(-10)
 
@@ -23,6 +24,11 @@ export function App() {
   const [fbMsg, setFbMsg] = useState('')
   const [fbFile, setFbFile] = useState<File | null>(null)
   const [fbBusy, setFbBusy] = useState(false)
+
+  // тревоги: вешаем глобальные ловушки один раз
+  useEffect(() => { initErrorReporting() }, [])
+  // тревоги: знаем, кто пользователь, чтобы логи были именными
+  useEffect(() => { setErrorUser(user) }, [user])
 
   useEffect(() => {
     let cancelled = false
@@ -85,8 +91,6 @@ export function App() {
     } finally { setFbBusy(false) }
   }
 
-  // Кнопки ролей: растягиваются на широком экране, а в узком окне —
-  // не давятся, а аккуратно уходят в горизонтальную прокрутку
   const segFlex = (active: boolean): React.CSSProperties => ({
     flex: '1 0 auto',
     padding: '10px 14px', borderRadius: 12, border: 'none', cursor: 'pointer',
