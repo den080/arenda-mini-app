@@ -1,6 +1,5 @@
 import { supabase } from './supabase'
 
-// Версия сборки — обновляйте строку при каждом коммите, чтобы в логах было видно, на чём упало
 export const APP_BUILD = '2026-08-28a'
 
 let currentUser: any = null
@@ -12,7 +11,7 @@ export function setErrorUser(u: any) { currentUser = u }
 async function send(message: string, stack: string, screen?: string) {
   const sig = message.slice(0, 80)
   const now = Date.now()
-  if (sig === lastSig && now - lastTs < 60000) return // не спамим одинаковым
+  if (sig === lastSig && now - lastTs < 60000) return
   lastSig = sig
   lastTs = now
 
@@ -31,7 +30,6 @@ async function send(message: string, stack: string, screen?: string) {
       : null,
   }
 
-  // 1) в базу — для вкладки «Ошибки» в админке
   try {
     await supabase.from('analytics_events').insert({
       event: 'error',
@@ -44,23 +42,19 @@ async function send(message: string, stack: string, screen?: string) {
     })
   } catch {}
 
-  // 2) мгновенная тревога вам в Telegram (сервер сам добавит историю действий)
   try {
     await fetch('/api/alert', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
   } catch {}
 }
 
-// Для ручных сообщений из кода (например, в catch важных мест)
 export function reportError(err: any, screen?: string) {
   send(err?.message || String(err), err?.stack || '', screen)
 }
 
-// Глобальные ловушки: краши и необработанные промисы
 export function initErrorReporting() {
   window.addEventListener('error', (e) => send(e.message, e.error?.stack || ''))
   window.addEventListener('unhandledrejection', (e) =>
     send('Unhandled rejection: ' + (e.reason?.message || String(e.reason)), e.reason?.stack || '')
   )
-  // тестовая тревога из консоли: window.__roomioTestError()
   ;(window as any).__roomioTestError = () => send('Тестовая тревога (проверка оповещений)', '')
 }
