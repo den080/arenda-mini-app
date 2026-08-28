@@ -506,6 +506,7 @@ export function LandlordDashboard() {
   }
 
   // ===== PRO: центр подтверждений — подтверждаем только отмеченные полученными =====
+    // ===== PRO: центр подтверждений — подтверждаем только отмеченные полученными =====
   async function confirmSelected() {
     const chosen = openList.filter(o => massSel[o.id] && Number(o.payment.paid_amount || 0) === 0)
     if (chosen.length === 0) { showToast('Отметьте полученные оплаты'); return }
@@ -513,6 +514,7 @@ export function LandlordDashboard() {
     try {
       let ok = 0
       for (const o of chosen) {
+        if (!o.contract) continue  // ← добавлена проверка
         const p = o.payment
         const total = Number(p.base_amount || 0) + Number(p.penalty_amount || 0) + Number(p.utilities_amount || 0)
         const claimedAt = p.claimed_at || null
