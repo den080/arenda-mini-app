@@ -125,6 +125,17 @@ export function AdminDashboard() {
     return () => clearInterval(t)
   }, [])
 
+  // Выход: завершает сессию и сбрасывает тихий вход, чтобы можно было сменить аккаунт
+  async function logout() {
+    try { await supabase.auth.signOut() } catch {}
+    try {
+      localStorage.removeItem('roomio_bound_email')
+      localStorage.removeItem('roomio_admin_v2')
+      localStorage.removeItem('roomio_admin_v2_ready')
+    } catch {}
+    window.location.reload()
+  }
+
   // ===== CSV для налоговой =====
   function downloadTaxCsv() {
     const rows: string[][] = [['Дата подтверждения', 'Период', 'Объект', 'Арендатор', 'Аренда', 'Штрафы', 'Ресурсы', 'Итого']]
@@ -160,7 +171,6 @@ export function AdminDashboard() {
   }
 
   // ===== Удаление персональных данных по запросу (152-ФЗ) =====
-  // Стираем личное; финансовая история остаётся (требование налогового учёта).
   async function eraseUserData(id: string) {
     await supabase.from('notifications_log').delete().eq('user_id', id)
     await supabase.from('analytics_events').delete().eq('user_id', id)
@@ -353,8 +363,11 @@ export function AdminDashboard() {
 
   return (
     <div style={{ ...T.page, paddingBottom: 60 }}>
-      <h1 style={T.h1}>Админка</h1>
-      <div style={{ display: 'flex', gap: 6, overflowX: 'auto', padding: '0 0 10px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+        <h1 style={{ ...T.h1, margin: 0 }}>Админка</h1>
+        <button onClick={logout} style={{ ...red, fontSize: 15, fontWeight: 600 }}>Выйти</button>
+      </div>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', padding: '10px 0' }}>
         {TABS.map(t => (
           <button
             key={t.id}
