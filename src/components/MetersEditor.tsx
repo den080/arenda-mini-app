@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { ConfirmDelete, showToast } from './ui'
+import { ConfirmDelete, Modal, showToast } from './ui'
 
 const S: Record<string, React.CSSProperties> = {
   editRow: { position: 'sticky', top: 0, zIndex: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px', background: '#f2f2f7' },
@@ -18,6 +18,7 @@ const S: Record<string, React.CSSProperties> = {
   check: { color: '#0071e3', fontSize: 17, fontWeight: 600 },
   add: { margin: '2px 0 12px', padding: '11px 16px', borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontSize: 15, fontWeight: 600, cursor: 'pointer' },
   hint: { fontSize: 12, color: '#8e8e93', margin: '4px 16px 12px' },
+  saveBar: { position: 'sticky', bottom: 0, zIndex: 10, display: 'flex', gap: 8, padding: '10px 16px', background: '#f2f2f7' },
 }
 
 export function MetersEditor({ objId }: { objId: string }) {
@@ -27,15 +28,33 @@ export function MetersEditor({ objId }: { objId: string }) {
   const [edit, setEdit] = useState(false)
   const [del, setDel] = useState<string | null>(null)
   const [elecPending, setElecPending] = useState<string | null>(null)
+  const [draft, setDraft] = useState<Record<string, { label: string; initial: string; typeCode: string }>>({})
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [withReadings, setWithReadings] = useState<string[]>([])
 
   async function load() {
     const { data: t } = await supabase.from('meter_types').select('*')
     setTypes(t || [])
     const { data: r } = await supabase.from('object_meters').select('*').eq('object_id', objId)
-    const codeOfL = (row: any) => ((t || []).find((x: any) => x.id === row.meter_type_id) || {}).code || ''
-    const g = (c: string) => c === 'water_cold' ? 0 : c === 'water_hot' ? 1 : c.startsWith('electricity') ? 2 : c === 'heat' ? 3 : c === 'gas' ? 4 : 5
-    const sorted = (r || []).slice().sort((a: any, b: any) => g(codeOfL(a)) - g(codeOfL(b)) || String(a.id).localeCompare(String(b.id)))
+    const active = (r || []).filter((x: any) => x.is_active)
+    // ФИКСИРОВАННЫЙ порядок: по дате создания — плитки не прыгают
+    const sorted = active.slice().sort((a: any, b: any) =>
+      String(a.created_at || '').localeCompare(String(b.created_at || '')) || String(a.id).localeCompare(String(b.id)))
     setRows(sorted)
+    const d: Record<string, any> = {}
+    for (const row of sorted) {
+      d[row.id] = {
+        label: row.label || '',
+        initial: row.initial_value ?? '',
+        typeCode: ((t || []).find((x: any) => x.id === row.meter_type_id) || {}).code || '',
+      }
+    }
+    setDraft(d)
+    const ids = sorted.map((x: any) => x.id)
+    if (ids.length) {
+      const { data: rd } = await supabase.from('meter_readings').select('object_meter_id').in('object_meter_id', ids)
+      setWithReadings(Array.from(new Set((rd || []).map((x: any) => x.object_meter_id))))
+    } else setWithReadings([])
   }
 
   useEffect(() => {
@@ -47,43 +66,68 @@ export function MetersEditor({ objId }: { objId: string }) {
 
   const typeByCode = (code: string) => types.find(t => t.code === code)
   const codeOf = (r: any) => (types.find(t => t.id === r.meter_type_id) || {}).code
-  const activeRows = (code: string) => rows.filter(r => codeOf(r) === code && r.is_active)
-  const isAct = (code: string) => activeRows(code).length > 0
+  const typeName = (code: string) => code === 'water_cold' ? 'Холодная' : code === 'water_hot' ? 'Горячая' : (types.find(t => t.code === code) || {}).label || code
+
+  const dirtyIds = rows.filter(r => {
+    const d = draft[r.id]
+    if (!d) return false
+    return d.label !== (r.label || '') || String(d.initial) !== String(r.initial_value ?? '') || d.typeCode !== codeOf(r)
+  }).map(r => r.id)
+  const dirty = dirtyIds.length > 0
 
   const waterCodes = ['water_cold', 'water_hot']
-  const waterRows = rows.filter(r => waterCodes.includes(codeOf(r)) && r.is_active)
+  const waterRows = rows.filter(r => waterCodes.includes(codeOf(r)))
   const elecCodes = ['electricity_single', 'electricity_day', 'electricity_night', 'electricity_peak', 'electricity_semipeak']
-  const activeElecRows = rows.filter(r => elecCodes.includes(codeOf(r)) && r.is_active)
+  const activeElecRows = rows.filter(r => elecCodes.includes(codeOf(r)))
+  const activeRows = (code: string) => rows.filter(r => codeOf(r) === code)
+  const isAct = (code: string) => activeRows(code).length > 0
 
+  function patchDraft(id: string, p: Partial<{ label: string; initial: string; typeCode: string }>) {
+    setDraft(prev => ({ ...prev, [id]: { ...prev[id], ...p } }))
+  }
+
+  // применяем черновик только после подтверждения
+  async function applySave() {
+    if (busy) return
+    setBusy(true)
+    try {
+      for (const id of dirtyIds) {
+        const r = rows.find(x => x.id === id)
+        const d = draft[id]
+        if (!r || !d) continue
+        const mt = types.find(t => t.code === d.typeCode)
+        const upd: any = {}
+        if (d.label !== (r.label || '')) upd.label = d.label
+        if (String(d.initial) !== String(r.initial_value ?? '')) upd.initial_value = d.initial === '' ? null : Number(d.initial)
+        if (mt && mt.id !== r.meter_type_id) upd.meter_type_id = mt.id
+        if (Object.keys(upd).length) {
+          const { error } = await supabase.from('object_meters').update(upd).eq('id', id)
+          if (error) showToast('Ошибка: ' + error.message)
+        }
+      }
+      showToast('✅ Сохранено')
+      setConfirmOpen(false)
+      window.dispatchEvent(new Event('rentflow-refresh'))
+      await load()
+    } finally { setBusy(false) }
+  }
+
+  // перед созданием читаем свежий список из базы — дубли невозможны
   async function setActive(code: string, active: boolean) {
-    const mt = typeByCode(code)
-    if (!mt) return
-    const ex = rows.find(r => r.meter_type_id === mt.id)
-    if (ex) {
-      await supabase.from('object_meters').update({ is_active: active }).eq('id', ex.id)
-    } else if (active) {
-      await supabase.from('object_meters').insert({ object_id: objId, meter_type_id: mt.id, is_active: true, label: '' })
-    }
-    window.dispatchEvent(new Event('rentflow-refresh'))
-    load()
-  }
-
-  async function setSerial(id: string, value: string) {
-    await supabase.from('object_meters').update({ label: value }).eq('id', id)
-    window.dispatchEvent(new Event('rentflow-refresh'))
-  }
-
-  async function setInitial(id: string, value: string) {
-    await supabase.from('object_meters').update({ initial_value: value === '' ? null : Number(value) }).eq('id', id)
-    window.dispatchEvent(new Event('rentflow-refresh'))
-  }
-
-  async function setWaterType(id: string, code: string) {
-    const mt = typeByCode(code)
-    if (!mt) return
-    await supabase.from('object_meters').update({ meter_type_id: mt.id }).eq('id', id)
-    window.dispatchEvent(new Event('rentflow-refresh'))
-    load()
+    if (busy) return
+    setBusy(true)
+    try {
+      const mt = typeByCode(code)
+      if (!mt) return
+      const { data: fresh } = await supabase.from('object_meters').select('*').eq('object_id', objId).eq('meter_type_id', mt.id)
+      if ((fresh || []).length) {
+        for (const r of fresh || []) await supabase.from('object_meters').update({ is_active: active }).eq('id', r.id)
+      } else if (active) {
+        await supabase.from('object_meters').insert({ object_id: objId, meter_type_id: mt.id, is_active: true, label: '' })
+      }
+      window.dispatchEvent(new Event('rentflow-refresh'))
+      await load()
+    } finally { setBusy(false) }
   }
 
   async function addWater() {
@@ -92,7 +136,11 @@ export function MetersEditor({ objId }: { objId: string }) {
     try {
       const mt = typeByCode('water_cold')
       if (!mt) return
-      const inactive = rows.find(r => !r.is_active && waterCodes.includes(codeOf(r)))
+      const { data: fresh } = await supabase.from('object_meters').select('*').eq('object_id', objId)
+      const inactive = (fresh || []).find((r: any) => {
+        const c = (types.find(t => t.id === r.meter_type_id) || {}).code
+        return !r.is_active && waterCodes.includes(c)
+      })
       if (inactive) {
         const { error } = await supabase.from('object_meters').update({ is_active: true }).eq('id', inactive.id)
         if (error) { showToast('Ошибка: ' + error.message); return }
@@ -102,16 +150,18 @@ export function MetersEditor({ objId }: { objId: string }) {
       }
       window.dispatchEvent(new Event('rentflow-refresh'))
       await load()
-    } finally {
-      setBusy(false)
-    }
+    } finally { setBusy(false) }
   }
 
   async function doRemove(id: string) {
-    await supabase.from('object_meters').update({ is_active: false }).eq('id', id)
-    showToast('Счётчик отключён')
-    window.dispatchEvent(new Event('rentflow-refresh'))
-    load()
+    if (busy) return
+    setBusy(true)
+    try {
+      await supabase.from('object_meters').update({ is_active: false }).eq('id', id)
+      showToast('Счётчик отключён')
+      window.dispatchEvent(new Event('rentflow-refresh'))
+      await load()
+    } finally { setBusy(false) }
   }
 
   function getElecMode(): string {
@@ -128,45 +178,60 @@ export function MetersEditor({ objId }: { objId: string }) {
       '2': ['electricity_day', 'electricity_night'],
       '3': ['electricity_peak', 'electricity_semipeak', 'electricity_night'],
     }
-    const all = ['electricity_single', 'electricity_day', 'electricity_night', 'electricity_peak', 'electricity_semipeak']
-    for (const code of all) await setActive(code, (need[mode] || []).includes(code))
+    for (const code of elecCodes) await setActive(code, (need[mode] || []).includes(code))
   }
 
   function requestElecMode(mode: string) {
+    if (busy) return
     const need: Record<string, string[]> = {
       none: [],
       '1': ['electricity_single'],
       '2': ['electricity_day', 'electricity_night'],
       '3': ['electricity_peak', 'electricity_semipeak', 'electricity_night'],
     }
-    const all = ['electricity_single', 'electricity_day', 'electricity_night', 'electricity_peak', 'electricity_semipeak']
-    const toDeactivate = all.filter(c => isAct(c) && !(need[mode] || []).includes(c))
+    const toDeactivate = elecCodes.filter(c => isAct(c) && !(need[mode] || []).includes(c))
     if (toDeactivate.length > 0) setElecPending(mode)
     else applyElecMode(mode)
   }
 
   const elecMode = getElecMode()
 
-  const meterCard = (r: any, title: string, extraRow?: any) => (
-    <div key={r.id} style={S.card}>
-      <div style={S.row}>
-        <span style={S.title}>{title}</span>
-        <span style={{ flex: 1 }} />
-        {edit && <button style={S.minus} onClick={() => setDel(r.id)}>−</button>}
+  const changeLines = dirtyIds.map(id => {
+    const r = rows.find(x => x.id === id)
+    const d = draft[id]
+    if (!r || !d) return ''
+    const parts: string[] = []
+    if (d.typeCode !== codeOf(r)) parts.push(`тип: ${typeName(codeOf(r))} → ${typeName(d.typeCode)}`)
+    if (d.label !== (r.label || '')) parts.push(`номер: ${r.label || '—'} → ${d.label || '—'}`)
+    if (String(d.initial) !== String(r.initial_value ?? '')) parts.push(`старт: ${r.initial_value ?? '—'} → ${d.initial || '—'}`)
+    return `• ${r.label || typeName(codeOf(r))}: ${parts.join(', ')}`
+  }).filter(Boolean)
+
+  const dirtyHasReadings = dirtyIds.some(id => withReadings.includes(id))
+
+  const meterCard = (r: any, title: string, extraRow?: any) => {
+    const d = draft[r.id] || { label: r.label || '', initial: r.initial_value ?? '', typeCode: codeOf(r) }
+    return (
+      <div key={r.id} style={S.card}>
+        <div style={S.row}>
+          <span style={S.title}>{title}</span>
+          <span style={{ flex: 1 }} />
+          {edit && <button style={S.minus} onClick={() => setDel(r.id)}>−</button>}
+        </div>
+        {extraRow && (<><div style={S.sep} />{extraRow}</>)}
+        <div style={S.sep} />
+        <div style={S.row}>
+          <span style={S.label}>Номер счётчика</span>
+          <input style={S.value} value={d.label} placeholder="—" onChange={(e) => patchDraft(r.id, { label: e.target.value })} />
+        </div>
+        <div style={S.sep} />
+        <div style={S.row}>
+          <span style={S.label}>Стартовые показания</span>
+          <input style={S.value} inputMode="decimal" value={String(d.initial)} placeholder="—" onChange={(e) => patchDraft(r.id, { initial: e.target.value })} />
+        </div>
       </div>
-      {extraRow && (<><div style={S.sep} />{extraRow}</>)}
-      <div style={S.sep} />
-      <div style={S.row}>
-        <span style={S.label}>Номер счётчика</span>
-        <input style={S.value} defaultValue={r.label || ''} placeholder="—" onBlur={(e) => setSerial(r.id, e.target.value)} />
-      </div>
-      <div style={S.sep} />
-      <div style={S.row}>
-        <span style={S.label}>Стартовые показания</span>
-        <input style={S.value} inputMode="decimal" defaultValue={r.initial_value ?? ''} placeholder="—" onBlur={(e) => setInitial(r.id, e.target.value)} />
-      </div>
-    </div>
-  )
+    )
+  }
 
   return (
     <div>
@@ -185,7 +250,7 @@ export function MetersEditor({ objId }: { objId: string }) {
         ].map((o, i) => (
           <div key={o.v}>
             {i > 0 && <div style={S.sep} />}
-            <button style={S.rowBtn} onClick={() => requestElecMode(o.v)}>
+            <button style={S.rowBtn} disabled={busy} onClick={() => requestElecMode(o.v)}>
               <span style={S.label}>{o.l}</span>
               {elecMode === o.v && <span style={S.check}>✓</span>}
             </button>
@@ -196,10 +261,10 @@ export function MetersEditor({ objId }: { objId: string }) {
 
       <div style={S.head}>Вода</div>
       {waterRows.length === 0 && <div style={S.hint}>Счётчиков воды нет</div>}
-      {waterRows.map(r => meterCard(r, codeOf(r) === 'water_hot' ? 'Горячая вода' : 'Холодная вода', (
+      {waterRows.map(r => meterCard(r, (draft[r.id]?.typeCode || codeOf(r)) === 'water_hot' ? 'Горячая вода' : 'Холодная вода', (
         <div style={S.row}>
           <span style={S.label}>Тип</span>
-          <select value={codeOf(r)} onChange={(e) => setWaterType(r.id, e.target.value)} style={S.select}>
+          <select value={draft[r.id]?.typeCode || codeOf(r)} onChange={(e) => patchDraft(r.id, { typeCode: e.target.value })} style={S.select}>
             <option value="water_cold">Холодная</option>
             <option value="water_hot">Горячая</option>
           </select>
@@ -210,7 +275,7 @@ export function MetersEditor({ objId }: { objId: string }) {
       <div style={S.head}>Отопление и газ</div>
       {!isAct('heat') && (
         <div style={S.card}>
-          <button style={S.rowBtn} onClick={() => setActive('heat', true)}>
+          <button style={S.rowBtn} disabled={busy} onClick={() => setActive('heat', true)}>
             <span style={S.label}>Теплосчётчик установлен</span>
             <span style={{ color: '#0071e3', fontSize: 15 }}>добавить</span>
           </button>
@@ -219,7 +284,7 @@ export function MetersEditor({ objId }: { objId: string }) {
       {activeRows('heat').map(r => meterCard(r, 'Теплосчётчик'))}
       {typeByCode('gas') && !isAct('gas') && (
         <div style={S.card}>
-          <button style={S.rowBtn} onClick={() => setActive('gas', true)}>
+          <button style={S.rowBtn} disabled={busy} onClick={() => setActive('gas', true)}>
             <span style={S.label}>Счётчик газа</span>
             <span style={{ color: '#0071e3', fontSize: 15 }}>добавить</span>
           </button>
@@ -227,7 +292,28 @@ export function MetersEditor({ objId }: { objId: string }) {
       )}
       {activeRows('gas').map(r => meterCard(r, 'Счётчик газа'))}
 
-      <div style={S.hint}>Стартовые показания видит арендатор. Отключение счётчика — в режиме «Изменить», с подтверждением.</div>
+      {dirty && (
+        <div style={S.saveBar}>
+          <button style={{ ...S.add, margin: 0, flex: 1 }} disabled={busy} onClick={() => setConfirmOpen(true)}>Сохранить изменения</button>
+          <button style={{ flex: 1, padding: '11px 16px', borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 15, cursor: 'pointer' }} disabled={busy} onClick={() => load()}>Отменить</button>
+        </div>
+      )}
+
+      <div style={S.hint}>Изменения применяются только после «Сохранить изменения» и подтверждения. Порядок счётчиков фиксированный и не меняется при вводе.</div>
+
+      <Modal open={confirmOpen} title="Подтвердить изменения счётчиков" onClose={() => setConfirmOpen(false)}>
+        <div style={{ fontSize: 14, color: '#555', marginBottom: 10, whiteSpace: 'pre-wrap' }}>{changeLines.join('\n')}</div>
+        {dirtyHasReadings && (
+          <div style={{ fontSize: 13, color: '#b25000', marginBottom: 10 }}>
+            ⚠️ По некоторым из этих счётчиков уже подавались показания. История сохранится, прошлые месяцы не пересчитаются.
+          </div>
+        )}
+        <div style={{ fontSize: 13, color: '#555', marginBottom: 14 }}>Тип счётчика влияет на расчёты квитанций и штрафов. Проверьте данные перед подтверждением.</div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }} disabled={busy} onClick={applySave}>Подтверждаю</button>
+          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 15, cursor: 'pointer' }} onClick={() => setConfirmOpen(false)}>Отмена</button>
+        </div>
+      </Modal>
 
       <ConfirmDelete
         open={!!del}
@@ -235,12 +321,11 @@ export function MetersEditor({ objId }: { objId: string }) {
         onClose={() => setDel(null)}
         onConfirm={() => { if (del) doRemove(del) }}
       />
-
       <ConfirmDelete
         open={!!elecPending}
         text="Смена тарифа отключит текущие электросчётчики. Продолжить?"
         onClose={() => setElecPending(null)}
-        onConfirm={() => { if (elecPending) applyElecMode(elecPending) }}
+        onConfirm={() => { const m = elecPending; setElecPending(null); if (m) applyElecMode(m) }}
       />
     </div>
   )
