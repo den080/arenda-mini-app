@@ -20,7 +20,7 @@ export function App() {
   })
   const [roleOverride, setRoleOverride] = useState<null | 'tenant' | 'landlord'>(null)
   const [adminView, setAdminView] = useState(false)
-  const [viewAsId] = useState<string>(() => {
+  const [viewAsId, setViewAsId] = useState<string>(() => {
     try { return localStorage.getItem('roomio_viewas_id') || '' } catch { return '' }
   })
   const [viewPhone, setViewPhone] = useState('')
@@ -31,6 +31,24 @@ export function App() {
 
   useEffect(() => { initErrorReporting() }, [])
   useEffect(() => { setErrorUser(user) }, [user])
+
+  // Сохраняем Telegram chat_id для push-уведомлений
+  useEffect(() => {
+    if (!user) return
+    const tg = (window as any)?.Telegram?.WebApp
+    const chatId = tg?.initDataUnsafe?.user?.id
+    if (!chatId) return
+    fetch('/api/save-chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: user.id, chat_id: String(chatId) }),
+    }).catch(() => {})
+  }, [user?.id])
+
+  // Разбираем очередь Telegram-уведомлений при каждом открытии приложения
+  useEffect(() => {
+    fetch('/api/flush-notify').catch(() => {})
+  }, [])
 
   useEffect(() => {
     let cancelled = false
