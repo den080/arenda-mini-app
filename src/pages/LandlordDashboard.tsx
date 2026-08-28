@@ -114,6 +114,7 @@ export function LandlordDashboard() {
   const [massOpen, setMassOpen] = useState(false)
   const [massOk, setMassOk] = useState(false)
   const [massBusy, setMassBusy] = useState(false)
+  const [massSel, setMassSel] = useState<Record<string, boolean>>({})
 
   useEffect(() => { setEarlyPayOpen(false) }, [openId])
 
@@ -218,7 +219,7 @@ export function LandlordDashboard() {
         for (const m of meetRes.data || []) if (!meetBy[m.contract_id]) meetBy[m.contract_id] = m
         const readCountBy: Record<string, number> = {}
         for (const r of readRes.data || []) readCountBy[r.contract_id] = (readCountBy[r.contract_id] || 0) + 1
-        // ===== ПРАВКА: счётчики объекта + отметки «тепло не используется» =====
+        // счётчики объекта + отметки «тепло не используется»
         const { data: omRows } = await supabase.from('object_meters').select('id, object_id, meter_types(code)').in('object_id', objIds).eq('is_active', true)
         const { data: skipRows } = await supabase.from('meter_skips').select('object_meter_id').eq('period', periodISO)
         const skipSet = new Set((skipRows || []).map((s: any) => s.object_meter_id))
@@ -240,6 +241,7 @@ export function LandlordDashboard() {
           const allPays = paysBy[contract.id] || []
           for (const p of allPays) allHistory.push({ ...p, objId: obj.id, address: obj.address })
           const fRows = fRowsBy[contract.id] || []
+          // льготный месяц: в месяц добавления договора штраф за показания не начисляется
           const graceMonth = String(contract.created_at || '').slice(0, 7) === periodISO.slice(0, 7)
           if (!graceMonth && readingsMode === 'manual' && contract.meter_deadline_day && contractStarted && (!startMonthISO || periodISO >= startMonthISO)) {
             const rr = (rulesBy[contract.id] || []).find((r: any) => r.violation_type === 'readings_overdue')
@@ -249,7 +251,7 @@ export function LandlordDashboard() {
               if (todayMid > deadline) {
                 const periodReads = readPeriodBy[contract.id] || []
                 const confirmed = periodReads.some((r: any) => r.status === 'confirmed')
-                // ===== ПРАВКА: теплосчётчик с отметкой «тепло не используется» не считается ошибкой =====
+                // теплосчётчик с отметкой «тепло не используется» не считается ошибкой
                 const metersP = metersByObj[obj.id] || []
                 const readSetP = new Set(periodReads.map((r: any) => r.object_meter_id))
                 const unexcusedP = metersP.filter((m: any) => !readSetP.has(m.id) && !((m.meter_types?.code === 'heat') && skipSet.has(m.id)))
@@ -292,7 +294,6 @@ export function LandlordDashboard() {
           const paymentId = String(payment.id)
           let waitingForReadings = false
           if (!graceMonth && readingsMode === 'manual' && contract.meter_deadline_day && contractStarted && today.getDate() > contract.meter_deadline_day) {
-            // ===== ПРАВКА: «Ждём показания» только если есть счётчики без показаний и без отметки =====
             const metersW = metersByObj[obj.id] || []
             if (metersW.length) {
               const readSetW = new Set((readRes.data || []).filter((r: any) => r.contract_id === contract.id).map((r: any) => r.object_meter_id))
@@ -504,37 +505,37 @@ export function LandlordDashboard() {
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
 
-  // ===== PRO: подтверждение одного платежа из списка и «Подтвердить все» =====
-  async function confirmFullPayment(p: any, con: any): Promise<string | null> {
-    const total = Number(p.base_amount || 0) + Number(p.penalty_amount || 0) + Number(p.utilities_amount || 0)
-    const { error } = await supabase.from('payments').update({
-      paid_amount: total, confirmed_by_landlord: true, confirmed_at: new Date().toISOString(),
-    }).eq('id', p.id)
-    if (error) return error.message
-    await ensureNextPayment(con.id)
-    await supabase.from('notifications_log').insert({
-      user_id: con.tenant_id, type: 'payment_confirmed', related_id: p.id,
-      message: '🟢 Арендодатель подтвердил оплату',
-      sent_at: new Date().toISOString(),
-    })
-    return null
-  }
-
-  async function confirmAllOpen() {
+  // ===== PRO: центр подтверждений — подтверждаем только отмеченные полученными =====
+  async function confirmSelected() {
+    const chosen = openList.filter(o => massSel[o.id] && Number(o.payment.paid_amount || 0) === 0)
+    if (chosen.length === 0) { showToast('Отметьте полученные оплаты'); return }
     setMassBusy(true)
     try {
       let ok = 0
-      for (const o of openList) {
-        const err = await confirmFullPayment(o.payment, o.contract)
-        if (!err) ok++
+      for (const o of chosen) {
+        const p = o.payment
+        const total = Number(p.base_amount || 0) + Number(p.penalty_amount || 0) + Number(p.utilities_amount || 0)
+        const claimedAt = p.claimed_at || null
+        const { error } = await supabase.from('payments').update({
+          paid_amount: total, confirmed_by_landlord: true,
+          confirmed_at: claimedAt || new Date().toISOString(),
+        }).eq('id', p.id)
+        if (error) { showToast('Ошибка: ' + error.message); continue }
+        ok++
+        await ensureNextPayment(o.contract.id)
+        await supabase.from('notifications_log').insert({
+          user_id: o.contract.tenant_id, type: 'payment_confirmed', related_id: p.id,
+          message: '🟢 Арендодатель подтвердил оплату',
+          sent_at: new Date().toISOString(),
+        })
       }
       showToast(`✅ Подтверждено платежей: ${ok}`)
       setMassOpen(false)
+      setMassSel({})
       setMassOk(false)
       window.dispatchEvent(new Event('rentflow-refresh'))
     } finally { setMassBusy(false) }
   }
-
   async function doAddDeposit(amount: number) {
     if (!contract) return
     if (deposit <= 0) { showToast('Сначала укажите общую сумму депозита'); return }
@@ -830,31 +831,18 @@ export function LandlordDashboard() {
           )}
           {openList.length > 0 && (
             <div style={T.card}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                <div style={T.h2}>Ждут подтверждения · {openList.length}</div>
-                {isPro ? (
-                  <button style={actBlue} onClick={() => { setMassOk(false); setMassOpen(true) }}>Подтвердить все</button>
-                ) : (
-                  <button style={actBlue} onClick={() => showToast('«Подтвердить все» доступно в Pro')}>Подтвердить все · Pro</button>
-                )}
-              </div>
-              {openList.map((o) => (
-                <div key={o.id} style={T.row}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f' }}>{o.address}</div>
-                    <div style={iosMuted}>{(o.contract as any)?.tenant?.full_name || '—'} · {new Date(o.payment.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })} · {o.amount.toFixed(0)} ₽</div>
-                  </div>
-                  {isPro ? (
-                    <button style={actBlue} onClick={async () => {
-                      const err = await confirmFullPayment(o.payment, o.contract)
-                      if (err) showToast('Ошибка: ' + err); else { showToast('✅ Подтверждено'); window.dispatchEvent(new Event('rentflow-refresh')) }
-                    }}>подтвердить</button>
-                  ) : (
-                    <button style={actBlue} onClick={() => { setOpenId(o.id); setTab('pay') }}>к объекту</button>
-                  )}
-                </div>
-              ))}
-              {!isPro && <div style={{ ...T.tiny, margin: '8px 0 0' }}>На бесплатном тарифе подтверждайте оплату внутри каждого объекта. «Подтвердить все» и быстрые кнопки — в Pro.</div>}
+              <button
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', minHeight: 48, border: 'none', background: 'transparent', cursor: 'pointer', padding: '4px 0', textAlign: 'left', boxSizing: 'border-box' }}
+                onClick={() => {
+                  if (!isPro) { showToast('Центр подтверждений — в Pro'); return }
+                  setMassSel({})
+                  setMassOk(false)
+                  setMassOpen(true)
+                }}
+              >
+                <span style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f' }}>Ждут подтверждения: {openList.length}</span>
+                <span style={{ color: '#0071e3', fontSize: 14, fontWeight: 600 }}>{isPro ? 'открыть ›' : 'Pro ›'}</span>
+              </button>
             </div>
           )}
           <div style={secHead}>Объекты</div>
@@ -910,14 +898,39 @@ export function LandlordDashboard() {
               ))}
             </div>
           )}
-          <Modal open={massOpen} title="Подтвердить все платежи" onClose={() => setMassOpen(false)}>
-            <div style={{ fontSize: 14, color: '#555', marginBottom: 12 }}>Будут подтверждены {openList.length} платежей: арендаторы получат уведомления, создадутся следующие счета.</div>
-            <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 14, marginBottom: 14, color: '#1d1d1f' }}>
+          <Modal open={massOpen} title="Подтверждение оплат" onClose={() => setMassOpen(false)}>
+            <div style={{ fontSize: 13, color: '#8e8e93', marginBottom: 10 }}>Отметьте платежи, по которым деньги фактически получены. Частичные оплаты учитываются внутри объекта.</div>
+            {openList.map((o) => {
+              const partial = Number(o.payment.paid_amount || 0) > 0
+              return (
+                <div key={o.id} style={{ padding: '10px 0', borderBottom: '1px solid rgba(60,60,67,0.12)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    {!partial && (
+                      <input type="checkbox" checked={!!massSel[o.id]} onChange={(e) => setMassSel({ ...massSel, [o.id]: e.target.checked })} style={{ width: 20, height: 20, flexShrink: 0 }} />
+                    )}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f' }}>{o.address}</div>
+                      <div style={{ fontSize: 13, color: '#8e8e93' }}>
+                        {(o.contract as any)?.tenant?.full_name || '—'} · {new Date(o.payment.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })} · {o.amount.toFixed(0)} ₽{o.payment.card_claimed ? ' · заявил об оплате' : ''}
+                      </div>
+                    </div>
+                    {partial && (
+                      <button style={actBlue} onClick={() => { setMassOpen(false); setOpenId(o.id); setTab('pay') }}>частично ›</button>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 14, margin: '12px 0', color: '#1d1d1f' }}>
               <input type="checkbox" checked={massOk} onChange={(e) => setMassOk(e.target.checked)} />
               Деньги фактически получены
             </label>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button disabled={!massOk || massBusy} style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer', opacity: (!massOk || massBusy) ? 0.4 : 1 }} onClick={confirmAllOpen}>Подтвердить</button>
+              <button
+                disabled={!massOk || massBusy || !Object.values(massSel).some(Boolean)}
+                style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer', opacity: (!massOk || massBusy || !Object.values(massSel).some(Boolean)) ? 0.4 : 1 }}
+                onClick={confirmSelected}
+              >Подтвердить выбранные ({Object.values(massSel).filter(Boolean).length})</button>
               <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 15, cursor: 'pointer' }} onClick={() => setMassOpen(false)}>Отмена</button>
             </div>
           </Modal>
@@ -1282,3 +1295,4 @@ export function LandlordDashboard() {
 }
 
 export default LandlordDashboard
+
