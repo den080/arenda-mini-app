@@ -18,26 +18,29 @@ const S: Record<string, React.CSSProperties> = {
   check: { color: '#0071e3', fontSize: 17, fontWeight: 600 },
   add: { margin: '2px 0 12px', padding: '11px 16px', borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontSize: 15, fontWeight: 600, cursor: 'pointer' },
   hint: { fontSize: 12, color: '#8e8e93', margin: '4px 16px 12px' },
-  saveBar: { position: 'sticky', bottom: 0, zIndex: 10, display: 'flex', gap: 8, padding: '10px 16px', background: '#f2f2f7' },
+  saveBar: { position: 'sticky', bottom: 64, zIndex: 20, display: 'flex', gap: 8, padding: '10px 16px', background: '#f2f2f7', borderRadius: 12 },
 }
 
 export function MetersEditor({ objId }: { objId: string }) {
   const [types, setTypes] = useState<any[]>([])
   const [rows, setRows] = useState<any[]>([])
   const [busy, setBusy] = useState(false)
-  const [edit, setEdit] = useState(false)
+  const [unlocked, setUnlocked] = useState(false)
   const [del, setDel] = useState<string | null>(null)
   const [elecPending, setElecPending] = useState<string | null>(null)
   const [draft, setDraft] = useState<Record<string, { label: string; initial: string; typeCode: string }>>({})
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [withReadings, setWithReadings] = useState<string[]>([])
+  const [skips, setSkips] = useState<string[]>([])
+
+  const now = new Date()
+  const periodISO = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
 
   async function load() {
     const { data: t } = await supabase.from('meter_types').select('*')
     setTypes(t || [])
     const { data: r } = await supabase.from('object_meters').select('*').eq('object_id', objId)
     const active = (r || []).filter((x: any) => x.is_active)
-    // ФИКСИРОВАННЫЙ порядок: по дате создания — плитки не прыгают
     const sorted = active.slice().sort((a: any, b: any) =>
       String(a.created_at || '').localeCompare(String(b.created_at || '')) || String(a.id).localeCompare(String(b.id)))
     setRows(sorted)
@@ -54,7 +57,9 @@ export function MetersEditor({ objId }: { objId: string }) {
     if (ids.length) {
       const { data: rd } = await supabase.from('meter_readings').select('object_meter_id').in('object_meter_id', ids)
       setWithReadings(Array.from(new Set((rd || []).map((x: any) => x.object_meter_id))))
-    } else setWithReadings([])
+      const { data: sk } = await supabase.from('meter_skips').select('object_meter_id').eq('period', periodISO).in('object_meter_id', ids)
+      setSkips((sk || []).map((s: any) => s.object_meter_id))
+    } else { setWithReadings([]); setSkips([]) }
   }
 
   useEffect(() => {
@@ -78,7 +83,9 @@ export function MetersEditor({ objId }: { objId: string }) {
   const waterCodes = ['water_cold', 'water_hot']
   const waterRows = rows.filter(r => waterCodes.includes(codeOf(r)))
   const elecCodes = ['electricity_single', 'electricity_day', 'electricity_night', 'electricity_peak', 'electricity_semipeak']
+  // день строго перед ночью (и т.д. по тарифу)
   const activeElecRows = rows.filter(r => elecCodes.includes(codeOf(r)))
+    .sort((a, b) => elecCodes.indexOf(codeOf(a)) - elecCodes.indexOf(codeOf(b)))
   const activeRows = (code: string) => rows.filter(r => codeOf(r) === code)
   const isAct = (code: string) => activeRows(code).length > 0
 
@@ -86,7 +93,6 @@ export function MetersEditor({ objId }: { objId: string }) {
     setDraft(prev => ({ ...prev, [id]: { ...prev[id], ...p } }))
   }
 
-  // применяем черновик только после подтверждения
   async function applySave() {
     if (busy) return
     setBusy(true)
@@ -105,14 +111,14 @@ export function MetersEditor({ objId }: { objId: string }) {
           if (error) showToast('Ошибка: ' + error.message)
         }
       }
-      showToast('✅ Сохранено')
+      showToast('✅ Сохранено и заблокировано')
       setConfirmOpen(false)
+      setUnlocked(false)
       window.dispatchEvent(new Event('rentflow-refresh'))
       await load()
     } finally { setBusy(false) }
   }
 
-  // перед созданием читаем свежий список из базы — дубли невозможны
   async function setActive(code: string, active: boolean) {
     if (busy) return
     setBusy(true)
@@ -164,6 +170,18 @@ export function MetersEditor({ objId }: { objId: string }) {
     } finally { setBusy(false) }
   }
 
+  async function toggleSkip(id: string, on: boolean) {
+    if (on) {
+      await supabase.from('meter_skips').upsert({ object_meter_id: id, period: periodISO }, { onConflict: 'object_meter_id,period' })
+      showToast('✅ Отмечено: тепло в этом месяце не используется')
+    } else {
+      await supabase.from('meter_skips').delete().eq('object_meter_id', id).eq('period', periodISO)
+      showToast('Отметка снята')
+    }
+    window.dispatchEvent(new Event('rentflow-refresh'))
+    await load()
+  }
+
   function getElecMode(): string {
     if (isAct('electricity_peak') && isAct('electricity_semipeak') && isAct('electricity_night')) return '3'
     if (isAct('electricity_day') && isAct('electricity_night')) return '2'
@@ -182,7 +200,7 @@ export function MetersEditor({ objId }: { objId: string }) {
   }
 
   function requestElecMode(mode: string) {
-    if (busy) return
+    if (busy || !unlocked) return
     const need: Record<string, string[]> = {
       none: [],
       '1': ['electricity_single'],
@@ -209,26 +227,35 @@ export function MetersEditor({ objId }: { objId: string }) {
 
   const dirtyHasReadings = dirtyIds.some(id => withReadings.includes(id))
 
-  const meterCard = (r: any, title: string, extraRow?: any) => {
+  const meterCard = (r: any, title: string, extraRow?: any, isHeat?: boolean) => {
     const d = draft[r.id] || { label: r.label || '', initial: r.initial_value ?? '', typeCode: codeOf(r) }
     return (
       <div key={r.id} style={S.card}>
         <div style={S.row}>
           <span style={S.title}>{title}</span>
           <span style={{ flex: 1 }} />
-          {edit && <button style={S.minus} onClick={() => setDel(r.id)}>−</button>}
+          {unlocked && <button style={S.minus} onClick={() => setDel(r.id)}>−</button>}
         </div>
         {extraRow && (<><div style={S.sep} />{extraRow}</>)}
         <div style={S.sep} />
         <div style={S.row}>
           <span style={S.label}>Номер счётчика</span>
-          <input style={S.value} value={d.label} placeholder="—" onChange={(e) => patchDraft(r.id, { label: e.target.value })} />
+          <input style={S.value} disabled={!unlocked} value={d.label} placeholder="—" onChange={(e) => patchDraft(r.id, { label: e.target.value })} />
         </div>
         <div style={S.sep} />
         <div style={S.row}>
           <span style={S.label}>Стартовые показания</span>
-          <input style={S.value} inputMode="decimal" value={String(d.initial)} placeholder="—" onChange={(e) => patchDraft(r.id, { initial: e.target.value })} />
+          <input style={S.value} disabled={!unlocked} inputMode="decimal" value={String(d.initial)} placeholder="—" onChange={(e) => patchDraft(r.id, { initial: e.target.value })} />
         </div>
+        {isHeat && (
+          <>
+            <div style={S.sep} />
+            <label style={{ ...S.row, cursor: 'pointer' }}>
+              <input type="checkbox" checked={skips.includes(r.id)} onChange={(e) => toggleSkip(r.id, e.target.checked)} />
+              <span style={S.label}>Тепло не используется в этом месяце</span>
+            </label>
+          </>
+        )}
       </div>
     )
   }
@@ -237,8 +264,11 @@ export function MetersEditor({ objId }: { objId: string }) {
     <div>
       <div style={S.editRow}>
         <span style={{ fontSize: 13, color: '#8e8e93', textTransform: 'uppercase', letterSpacing: 0.3 }}>Счётчики</span>
-        <button style={S.editBtn} onClick={() => setEdit(!edit)}>{edit ? 'Готово' : 'Изменить'}</button>
+        <button style={S.editBtn} onClick={() => {
+          if (unlocked) { load(); setUnlocked(false) } else setUnlocked(true)
+        }}>{unlocked ? 'Готово (заблокировать)' : 'Внести изменения'}</button>
       </div>
+      {!unlocked && <div style={S.hint}>Настройки защищены. Чтобы поменять номер, тип или стартовые показания — нажмите «Внести изменения», затем подтвердите сохранение.</div>}
 
       <div style={S.head}>Электричество</div>
       <div style={S.card}>
@@ -250,7 +280,7 @@ export function MetersEditor({ objId }: { objId: string }) {
         ].map((o, i) => (
           <div key={o.v}>
             {i > 0 && <div style={S.sep} />}
-            <button style={S.rowBtn} disabled={busy} onClick={() => requestElecMode(o.v)}>
+            <button style={{ ...S.rowBtn, opacity: unlocked ? 1 : 0.55 }} disabled={busy || !unlocked} onClick={() => requestElecMode(o.v)}>
               <span style={S.label}>{o.l}</span>
               {elecMode === o.v && <span style={S.check}>✓</span>}
             </button>
@@ -264,27 +294,27 @@ export function MetersEditor({ objId }: { objId: string }) {
       {waterRows.map(r => meterCard(r, (draft[r.id]?.typeCode || codeOf(r)) === 'water_hot' ? 'Горячая вода' : 'Холодная вода', (
         <div style={S.row}>
           <span style={S.label}>Тип</span>
-          <select value={draft[r.id]?.typeCode || codeOf(r)} onChange={(e) => patchDraft(r.id, { typeCode: e.target.value })} style={S.select}>
+          <select style={S.select} disabled={!unlocked} value={draft[r.id]?.typeCode || codeOf(r)} onChange={(e) => patchDraft(r.id, { typeCode: e.target.value })}>
             <option value="water_cold">Холодная</option>
             <option value="water_hot">Горячая</option>
           </select>
         </div>
       )))}
-      <button style={S.add} disabled={busy} onClick={addWater}>+ Добавить счётчик воды</button>
+      <button style={S.add} disabled={busy || !unlocked} onClick={addWater}>+ Добавить счётчик воды</button>
 
       <div style={S.head}>Отопление и газ</div>
       {!isAct('heat') && (
         <div style={S.card}>
-          <button style={S.rowBtn} disabled={busy} onClick={() => setActive('heat', true)}>
+          <button style={{ ...S.rowBtn, opacity: unlocked ? 1 : 0.55 }} disabled={busy || !unlocked} onClick={() => setActive('heat', true)}>
             <span style={S.label}>Теплосчётчик установлен</span>
             <span style={{ color: '#0071e3', fontSize: 15 }}>добавить</span>
           </button>
         </div>
       )}
-      {activeRows('heat').map(r => meterCard(r, 'Теплосчётчик'))}
+      {activeRows('heat').map(r => meterCard(r, 'Теплосчётчик', undefined, true))}
       {typeByCode('gas') && !isAct('gas') && (
         <div style={S.card}>
-          <button style={S.rowBtn} disabled={busy} onClick={() => setActive('gas', true)}>
+          <button style={{ ...S.rowBtn, opacity: unlocked ? 1 : 0.55 }} disabled={busy || !unlocked} onClick={() => setActive('gas', true)}>
             <span style={S.label}>Счётчик газа</span>
             <span style={{ color: '#0071e3', fontSize: 15 }}>добавить</span>
           </button>
@@ -292,14 +322,14 @@ export function MetersEditor({ objId }: { objId: string }) {
       )}
       {activeRows('gas').map(r => meterCard(r, 'Счётчик газа'))}
 
-      {dirty && (
+      {unlocked && dirty && (
         <div style={S.saveBar}>
           <button style={{ ...S.add, margin: 0, flex: 1 }} disabled={busy} onClick={() => setConfirmOpen(true)}>Сохранить изменения</button>
           <button style={{ flex: 1, padding: '11px 16px', borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 15, cursor: 'pointer' }} disabled={busy} onClick={() => load()}>Отменить</button>
         </div>
       )}
 
-      <div style={S.hint}>Изменения применяются только после «Сохранить изменения» и подтверждения. Порядок счётчиков фиксированный и не меняется при вводе.</div>
+      <div style={S.hint}>Порядок счётчиков фиксированный: электричество — день, затем ночь. Изменения применяются только после подтверждения, затем настройки блокируются.</div>
 
       <Modal open={confirmOpen} title="Подтвердить изменения счётчиков" onClose={() => setConfirmOpen(false)}>
         <div style={{ fontSize: 14, color: '#555', marginBottom: 10, whiteSpace: 'pre-wrap' }}>{changeLines.join('\n')}</div>
@@ -308,7 +338,7 @@ export function MetersEditor({ objId }: { objId: string }) {
             ⚠️ По некоторым из этих счётчиков уже подавались показания. История сохранится, прошлые месяцы не пересчитаются.
           </div>
         )}
-        <div style={{ fontSize: 13, color: '#555', marginBottom: 14 }}>Тип счётчика влияет на расчёты квитанций и штрафов. Проверьте данные перед подтверждением.</div>
+        <div style={{ fontSize: 13, color: '#555', marginBottom: 14 }}>Тип счётчика влияет на расчёты квитанций и штрафов. После сохранения настройки снова будут заблокированы.</div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }} disabled={busy} onClick={applySave}>Подтверждаю</button>
           <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 15, cursor: 'pointer' }} onClick={() => setConfirmOpen(false)}>Отмена</button>
