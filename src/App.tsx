@@ -20,14 +20,16 @@ export function App() {
   })
   const [roleOverride, setRoleOverride] = useState<null | 'tenant' | 'landlord'>(null)
   const [adminView, setAdminView] = useState(false)
+  const [viewAsId, setViewAsId] = useState<string>(() => {
+    try { return localStorage.getItem('roomio_viewas_id') || '' } catch { return '' }
+  })
+  const [viewPhone, setViewPhone] = useState('')
   const [fbOpen, setFbOpen] = useState(false)
   const [fbMsg, setFbMsg] = useState('')
   const [fbFile, setFbFile] = useState<File | null>(null)
   const [fbBusy, setFbBusy] = useState(false)
 
-  // тревоги: вешаем глобальные ловушки один раз
   useEffect(() => { initErrorReporting() }, [])
-  // тревоги: знаем, кто пользователь, чтобы логи были именными
   useEffect(() => { setErrorUser(user) }, [user])
 
   useEffect(() => {
@@ -65,6 +67,22 @@ export function App() {
   const baseRole: 'tenant' | 'landlord' = user?.role === 'landlord' ? 'landlord' : 'tenant'
   const role: 'tenant' | 'landlord' = roleOverride || baseRole
   const view: 'tenant' | 'landlord' | 'admin' = adminView && isAdmin ? 'admin' : role
+
+  // ===== режим просмотра: войти глазами пользователя по его телефону =====
+  async function startViewAs() {
+    const digits = norm10(viewPhone)
+    if (digits.length < 10) { showToast('Введите телефон полностью'); return }
+    const { data } = await supabase.from('users').select('*')
+    const u = (data || []).find((x: any) => norm10(x.phone || '') === digits)
+    if (!u) { showToast('Пользователь с таким телефоном не найден'); return }
+    try { localStorage.setItem('roomio_viewas_id', u.id) } catch {}
+    window.location.reload()
+  }
+
+  function exitViewAs() {
+    try { localStorage.removeItem('roomio_viewas_id') } catch {}
+    window.location.reload()
+  }
 
   async function sendFeedback() {
     if (!user) return
@@ -118,6 +136,18 @@ export function App() {
     <AuthGate>
       <Toaster />
       <div style={{ maxWidth: 760, margin: '0 auto', padding: '10px 10px 0' }}>
+        {viewAsId && user && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, background: 'rgba(255,149,0,0.15)', borderRadius: 12, padding: '8px 12px', margin: '0 0 8px' }}>
+            <span style={{ fontSize: 14, fontWeight: 600, color: '#b25000' }}>
+              Режим просмотра: {user.full_name || user.phone || 'пользователь'}
+            </span>
+            <button
+              onClick={exitViewAs}
+              style={{ border: 'none', background: '#fff', color: '#b25000', fontWeight: 700, fontSize: 13, borderRadius: 8, padding: '6px 10px', cursor: 'pointer', flexShrink: 0 }}
+            >Выйти</button>
+          </div>
+        )}
+
         <div style={{ display: 'flex', gap: 6, alignItems: 'stretch', background: 'rgba(120,120,128,0.12)', borderRadius: 14, padding: 6, margin: '0 0 10px', overflowX: 'auto' }}>
           {!adminReady ? (
             <div style={{ flex: 1, display: 'flex', alignItems: 'center', padding: '0 12px', color: 'transparent', userSelect: 'none', fontSize: 15, fontWeight: 600 }}>Roomio</div>
@@ -134,6 +164,22 @@ export function App() {
             </>
           )}
         </div>
+
+        {isAdmin && adminView && !viewAsId && (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: 'rgba(120,120,128,0.08)', borderRadius: 12, padding: 8, margin: '0 0 10px' }}>
+            <input
+              value={viewPhone}
+              onChange={(e) => setViewPhone(e.target.value)}
+              placeholder="+7 ___ ___-__-__"
+              inputMode="tel"
+              style={{ flex: 1, minWidth: 0, padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 15, boxSizing: 'border-box', outline: 'none' }}
+            />
+            <button
+              onClick={startViewAs}
+              style={{ flexShrink: 0, padding: '10px 14px', borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}
+            >Смотреть как</button>
+          </div>
+        )}
 
         {!user ? (
           <div style={{ background: '#fff', borderRadius: 14, padding: 20, marginTop: 10, textAlign: 'center' }}>
