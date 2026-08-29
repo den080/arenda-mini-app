@@ -264,12 +264,13 @@ export function MetersEditor({ objId }: { objId: string }) {
 
   return (
     <div>
-      <div style={S.editRow}>
+            <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 30, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px', background: 'rgba(242,242,247,0.94)', backdropFilter: 'blur(10px)', boxShadow: '0 1px 0 rgba(60,60,67,0.12)' }}>
         <span style={{ fontSize: 13, color: '#8e8e93', textTransform: 'uppercase', letterSpacing: 0.3 }}>Счётчики</span>
         <button style={S.editBtn} onClick={() => {
           if (unlocked) { load(); setUnlocked(false) } else setUnlocked(true)
         }}>{unlocked ? 'Готово (заблокировать)' : 'Внести изменения'}</button>
       </div>
+      <div style={{ height: 44 }} />
       {!unlocked && <div style={S.hint}>Настройки защищены. Чтобы поменять номер, тип или стартовые показания — нажмите «Внести изменения», затем подтвердите сохранение.</div>}
 
       <div style={S.head}>Электричество</div>
