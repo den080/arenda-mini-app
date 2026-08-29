@@ -5,9 +5,9 @@ import { showToast, ConfirmDelete } from './ui'
 
 const PRESETS = ['Управляющая компания', 'Аварийная служба', 'Диспетчер', 'Электрик', 'Сантехник', 'Охрана', 'Другое']
 
-const inp: React.CSSProperties = { width: '100%', padding: '8px 0', border: 'none', borderBottom: '1px solid rgba(60,60,67,0.12)', background: 'transparent', fontSize: 15, color: '#1d1d1f', outline: 'none', borderRadius: 0, boxSizing: 'border-box' }
-const blue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: 4 }
-const red: React.CSSProperties = { border: 'none', background: 'transparent', color: '#ff3b30', fontSize: 15, cursor: 'pointer', padding: 4, flexShrink: 0 }
+const inp: React.CSSProperties = { width: '100%', padding: '8px 0', border: 'none', borderBottom: '1px solid rgba(60,60,67,0.12)', background: 'transparent', fontSize: 17, color: '#1d1d1f', outline: 'none', borderRadius: 0, boxSizing: 'border-box' }
+const blue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 17, fontWeight: 600, cursor: 'pointer', padding: 4 }
+const red: React.CSSProperties = { border: 'none', background: 'transparent', color: '#ff3b30', fontSize: 17, cursor: 'pointer', padding: 4, flexShrink: 0 }
 
 function formatPhoneInput(v: string): string {
   const digits = (v || '').replace(/\D/g, '').slice(0, 11)
@@ -71,7 +71,7 @@ export function ContactsEditor({ objId }: { objId: string }) {
   return (
     <div style={T.card}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '10px 0 4px' }}>
-        <span style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f' }}>Контакты</span>
+        <span style={{ fontSize: 17, fontWeight: 600, color: '#1d1d1f' }}>Контакты</span>
         <button style={blue} onClick={() => setUnlocked(!unlocked)}>{unlocked ? 'Готово (заблокировать)' : 'Внести изменения'}</button>
       </div>
       {!unlocked && <div style={{ ...T.tiny, margin: '0 0 8px' }}>Контакты защищены от случайных изменений. Для правок и добавления нажмите «Внести изменения».</div>}
@@ -107,9 +107,9 @@ export function ContactsEditor({ objId }: { objId: string }) {
           ) : (
             <>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-                <span style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f' }}>{r.label || 'Контакт'}</span>
+                <span style={{ fontSize: 17, fontWeight: 600, color: '#1d1d1f' }}>{r.label || 'Контакт'}</span>
                 {r.phone ? (
-                  <a href={`tel:${String(r.phone).replace(/[^\d+]/g, '')}`} style={{ color: '#0071e3', fontSize: 15, fontWeight: 600, textDecoration: 'none', flexShrink: 0 }}>{r.phone}</a>
+                  <a href={`tel:${String(r.phone).replace(/[^\d+]/g, '')}`} style={{ color: '#0071e3', fontSize: 17, fontWeight: 600, textDecoration: 'none', flexShrink: 0 }}>{r.phone}</a>
                 ) : (
                   <span style={{ fontSize: 13, color: '#8e8e93' }}>телефон не указан</span>
                 )}
