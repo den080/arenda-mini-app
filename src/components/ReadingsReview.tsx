@@ -10,6 +10,13 @@ const valMoney: React.CSSProperties = { fontSize: 16, fontWeight: 600, color: '#
 const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProperties
 const rightInput: React.CSSProperties = { width: 150, border: 'none', outline: 'none', background: 'rgba(120,120,128,0.08)', borderRadius: 8, padding: '8px 10px', fontSize: 16, fontWeight: 600, textAlign: 'right', color: '#1d1d1f', boxSizing: 'border-box' }
 
+// число без лишних нулей: 7.876 → «7.876», 8 → «8»
+function fmt(v: any): string {
+  const x = Number(v)
+  if (!isFinite(x)) return String(v ?? '')
+  return String(Math.round(x * 1000) / 1000)
+}
+
 export function ReadingsReview({ contractId, tenantId }: { contractId: string; tenantId: string }) {
   const { user } = useTelegramUser()
   const [meters, setMeters] = useState<any[]>([])
@@ -78,7 +85,7 @@ export function ReadingsReview({ contractId, tenantId }: { contractId: string; t
   async function enterValue(meterId: string, ref: number | null) {
     const v = Number(String(vals[meterId] || '').replace(',', '.'))
     if (isNaN(v) || v <= 0) { showToast('Введите значение показания'); return }
-    if (ref != null && v < ref) { showToast(`Значение не может быть меньше предыдущего (${ref})`); return }
+    if (ref != null && v < ref) { showToast(`Значение не может быть меньше предыдущего (${fmt(ref)})`); return }
     const existing = reads[meterId]
     if (existing && existing.status === 'confirmed') {
       showToast('Эти показания уже подтверждены')
@@ -114,7 +121,6 @@ export function ReadingsReview({ contractId, tenantId }: { contractId: string; t
     <div style={T.card}>
       <div style={T.h2}>Показания за этот месяц</div>
       <div style={{ ...T.tiny, margin: '0 0 10px' }}>Если арендатор прислал фото счётчиков в чат — впишите значения сами, чтобы учёт и расчёты не прерывались.</div>
-
       {meters.map((m, i) => {
         const t = types.find(x => x.id === m.meter_type_id)
         const rd = reads[m.id]
@@ -123,8 +129,8 @@ export function ReadingsReview({ contractId, tenantId }: { contractId: string; t
         const prevRaw = prevReads[m.id]?.value
         const refVal = prevRaw != null ? Number(prevRaw) : (m.initial_value != null ? Number(m.initial_value) : null)
         const prevLabel = prevRaw != null
-          ? `прошлый мес: ${prevRaw}`
-          : (m.initial_value != null ? `стартовые: ${Number(m.initial_value).toFixed(0)}` : 'прошлого месяца нет')
+          ? `прошлый мес: ${fmt(prevRaw)}`
+          : (m.initial_value != null ? `стартовые: ${fmt(m.initial_value)}` : 'прошлого месяца нет')
         const title = `${t?.label || 'Счётчик'}${m.label ? ` · № ${m.label}` : ''}`
         const noReading = !rd
         const incomplete = rd && rd.status === 'incomplete'
@@ -165,7 +171,7 @@ export function ReadingsReview({ contractId, tenantId }: { contractId: string; t
                     />
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
-                    <span style={{ fontSize: 13, color: '#8e8e93' }}>{prevLabel} · <span style={{ color: '#ff3b30' }}>{rd.value} — отмечены неполными</span></span>
+                    <span style={{ fontSize: 13, color: '#8e8e93' }}>{prevLabel} · <span style={{ color: '#ff3b30' }}>{fmt(rd.value)} — отмечены неполными</span></span>
                     <button style={actBlue} onClick={() => enterValue(m.id, refVal)}>Внести</button>
                   </div>
                 </>
@@ -174,7 +180,7 @@ export function ReadingsReview({ contractId, tenantId }: { contractId: string; t
                 <>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
                     <span style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f' }}>{title}</span>
-                    <span style={valMoney}>{rd.value}</span>
+                    <span style={valMoney}>{fmt(rd.value)}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
                     <span style={{ fontSize: 13, color: '#8e8e93' }}>
@@ -196,7 +202,7 @@ export function ReadingsReview({ contractId, tenantId }: { contractId: string; t
                   </div>
                   {open && hist.slice(0, 12).map((r: any) => (
                     <div key={r.id} style={{ fontSize: 12, color: '#8e8e93', padding: '3px 0' }}>
-                      {r.value} · {new Date(r.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })} · {r.status === 'confirmed' ? 'подтверждены' : r.status === 'incomplete' ? 'не полностью' : 'ожидают'}{r.entered_by ? ' · внёс арендодатель' : ''}
+                      {fmt(r.value)} · {new Date(r.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })} · {r.status === 'confirmed' ? 'подтверждены' : r.status === 'incomplete' ? 'не полностью' : 'ожидают'}{r.entered_by ? ' · внёс арендодатель' : ''}
                     </div>
                   ))}
                 </div>
