@@ -4,11 +4,11 @@ import { useTelegramUser } from '../hooks/useTelegramUser'
 import { T } from '../theme'
 import { showToast } from './ui'
 
-const actBlue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 14, fontWeight: 600, cursor: 'pointer', padding: 4, flexShrink: 0 }
-const actRed: React.CSSProperties = { border: 'none', background: 'transparent', color: '#ff3b30', fontSize: 14, cursor: 'pointer', padding: 4, flexShrink: 0 }
-const valMoney: React.CSSProperties = { fontSize: 16, fontWeight: 600, color: '#1d1d1f', whiteSpace: 'nowrap' }
+const actBlue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: 4, flexShrink: 0 }
+const actRed: React.CSSProperties = { border: 'none', background: 'transparent', color: '#ff3b30', fontSize: 15, cursor: 'pointer', padding: 4, flexShrink: 0 }
+const valMoney: React.CSSProperties = { fontSize: 17, fontWeight: 600, color: '#1d1d1f', whiteSpace: 'nowrap' }
 const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProperties
-const rightInput: React.CSSProperties = { width: 150, border: 'none', outline: 'none', background: 'rgba(120,120,128,0.08)', borderRadius: 8, padding: '8px 10px', fontSize: 16, fontWeight: 600, textAlign: 'right', color: '#1d1d1f', boxSizing: 'border-box' }
+const rightInput: React.CSSProperties = { width: 150, border: 'none', outline: 'none', background: 'rgba(120,120,128,0.08)', borderRadius: 8, padding: '8px 10px', fontSize: 17, fontWeight: 600, textAlign: 'right', color: '#1d1d1f', boxSizing: 'border-box' }
 
 // число без лишних нулей: 7.876 → «7.876», 8 → «8»
 function fmt(v: any): string {
@@ -143,7 +143,7 @@ export function ReadingsReview({ contractId, tenantId }: { contractId: string; t
               {noReading && (
                 <>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-                    <span style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f' }}>{title}</span>
+                    <span style={{ fontSize: 17, fontWeight: 600, color: '#1d1d1f' }}>{title}</span>
                     <input
                       value={vals[m.id] || ''}
                       onChange={(e) => setVals(prev => ({ ...prev, [m.id]: e.target.value }))}
@@ -161,7 +161,7 @@ export function ReadingsReview({ contractId, tenantId }: { contractId: string; t
               {incomplete && (
                 <>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-                    <span style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f' }}>{title}</span>
+                    <span style={{ fontSize: 17, fontWeight: 600, color: '#1d1d1f' }}>{title}</span>
                     <input
                       value={vals[m.id] || ''}
                       onChange={(e) => setVals(prev => ({ ...prev, [m.id]: e.target.value }))}
@@ -179,7 +179,7 @@ export function ReadingsReview({ contractId, tenantId }: { contractId: string; t
               {rd && !incomplete && (
                 <>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-                    <span style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f' }}>{title}</span>
+                    <span style={{ fontSize: 17, fontWeight: 600, color: '#1d1d1f' }}>{title}</span>
                     <span style={valMoney}>{fmt(rd.value)}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
@@ -201,7 +201,7 @@ export function ReadingsReview({ contractId, tenantId }: { contractId: string; t
                     история · {hist.length} {open ? '▲' : '▼'}
                   </div>
                   {open && hist.slice(0, 12).map((r: any) => (
-                    <div key={r.id} style={{ fontSize: 12, color: '#8e8e93', padding: '3px 0' }}>
+                    <div key={r.id} style={{ fontSize: 13, color: '#8e8e93', padding: '3px 0' }}>
                       {fmt(r.value)} · {new Date(r.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })} · {r.status === 'confirmed' ? 'подтверждены' : r.status === 'incomplete' ? 'не полностью' : 'ожидают'}{r.entered_by ? ' · внёс арендодатель' : ''}
                     </div>
                   ))}
