@@ -3,17 +3,11 @@ import { supabase } from '../lib/supabase'
 import { useTelegramUser } from '../hooks/useTelegramUser'
 import { T } from '../theme'
 import { Modal, showToast, Toaster } from './ui'
+import DemoTour from './DemoTour'
 
 const inp: React.CSSProperties = { width: '100%', padding: '12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box', outline: 'none' }
 
-const POLICY = `ПОЛИТИКА КОНФИДЕНЦИАЛЬНОСТИ (кратко)
-Оператор: владелец сервиса Roomio (самозанятый, РФ).
-Состав данных: имя, номер телефона, e-mail, адреса объектов, суммы аренды и депозитов, показания счётчиков, история платежей и действий.
-Цели: организация расчётов, уведомления, поддержка работы сервиса.
-Хранение: защищённая облачная база; доступ — только вы, ваш контрагент по договору и владелец сервиса для поддержки.
-Передача третьим лицам: не осуществляется, кроме случаев, требуемых законом.
-Срок: до удаления аккаунта или договора.
-Ваши права: запросить, изменить, удалить данные — через владельца сервиса.`
+const POLICY = `ПОЛИТИКА КОНФИДЕНЦИАЛЬНОСТИ (кратко) Оператор: владелец сервиса Roomio (самозанятый, РФ). Состав данных: имя, номер телефона, e-mail, адреса объектов, суммы аренды и депозитов, показания счётчиков, история платежей и действий. Цели: организация расчётов, уведомления, поддержка работы сервиса. Хранение: защищённая облачная база; доступ — только вы, ваш контрагент по договору и владелец сервиса для поддержки. Передача третьим лицам: не осуществляется, кроме случаев, требуемых законом. Срок: до удаления аккаунта или договора. Ваши права: запросить, изменить, удалить данные — через владельца сервиса.`
 
 // СЛУЧАЙНЫЙ ключ устройства (64 hex-символа). В отличие от «roomio-tg-…»,
 // его невозможно угадать или перебрать снаружи.
@@ -37,10 +31,19 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const [consent, setConsent] = useState(false)
   const [policyOpen, setPolicyOpen] = useState(false)
   const [busy, setBusy] = useState(false)
+  // ДЕМО-РЕЖИМ: кнопка на экране входа или ссылка с ?demo=1 (для проверки и будущих клиентов)
+  const [demo, setDemo] = useState<boolean>(() => {
+    try { return new URLSearchParams(window.location.search).has('demo') } catch { return false }
+  })
 
   const tg = (window as any)?.Telegram?.WebApp
   const tgId = String(tg?.initDataUnsafe?.user?.id || (user as any)?.telegram_id || '')
   const tgPhone = String(tg?.initDataUnsafe?.user?.phone_number || '')
+
+  function exitDemo() {
+    try { window.history.replaceState({}, '', window.location.pathname) } catch {}
+    setDemo(false)
+  }
 
   // Вход: живая сессия → тихий вход (сохранённая почта + ключ устройства) → иначе форма
   useEffect(() => {
@@ -85,7 +88,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
   async function sendCode() {
     if (!consent) { showToast('Нужно согласие на обработку данных'); return }
-    if (!/^\S+@\S+\.\S+$/.test(email.trim())) { showToast('Проверьте e-mail'); return }
+    if (!/^\S+@\S+.\S+$/.test(email.trim())) { showToast('Проверьте e-mail'); return }
     setBusy(true)
     try {
       const { error } = await supabase.auth.signInWithOtp({ email: email.trim() })
@@ -107,7 +110,6 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         lastErr = error
       }
       if (lastErr) { showToast('Неверный код: ' + lastErr.message); return }
-
       const em = email.trim().toLowerCase()
       localStorage.setItem('roomio_bound_email', em)
       // Новый случайный ключ устройства; старый предсказуемый пароль больше не используется
@@ -124,6 +126,14 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       showToast('✅ Вход выполнен')
     } finally { setBusy(false) }
   }
+
+  // демо открывается сразу, без ожидания сессии
+  if (demo) return (
+    <>
+      <Toaster />
+      <DemoTour onExit={exitDemo} />
+    </>
+  )
 
   if (!ready) return <div style={T.page}>Загрузка…</div>
   if (hasSession) return <>{children}</>
@@ -153,6 +163,11 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
             <button disabled={busy} onClick={sendCode} style={{ width: '100%', padding: 13, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 16, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>
               {busy ? 'Отправка…' : 'Получить код'}
             </button>
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
+              <button onClick={() => setDemo(true)} style={{ border: 'none', background: 'transparent', color: '#0071e3', fontSize: 14, fontWeight: 600, cursor: 'pointer', padding: 4 }}>
+                Смотреть демо без входа ›
+              </button>
+            </div>
           </>
         ) : (
           <>
@@ -166,6 +181,11 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
               </button>
             </div>
             <div style={{ ...T.tiny, margin: '10px 0 0', textAlign: 'center' }}>Письмо могло попасть в «Спам» — проверьте папку.</div>
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 8 }}>
+              <button onClick={() => setDemo(true)} style={{ border: 'none', background: 'transparent', color: '#0071e3', fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: 4 }}>
+                Смотреть демо без входа ›
+              </button>
+            </div>
           </>
         )}
       </div>
