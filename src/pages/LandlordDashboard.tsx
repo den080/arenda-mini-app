@@ -535,6 +535,19 @@ export function LandlordDashboard() {
       window.dispatchEvent(new Event('rentflow-refresh'))
     } finally { setMassBusy(false) }
   }
+
+  async function doAddDeposit(amount: number) {
+    if (!contract) return
+    if (deposit <= 0) { showToast('Сначала укажите общую сумму депозита'); return }
+    ...
+    [весь блок из моего предыдущего сообщения]
+    ...
+  }
+
+  async function confirmChannel(paymentId: string, channel: 'card' | 'cash', close: boolean = false) {
+    ...
+  }
+
   const getNotificationText = (type: string) => {
     switch (type) {
       case 'payment_claimed': return '✅ Арендатор сообщил об оплате'
