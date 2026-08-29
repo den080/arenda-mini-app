@@ -3,8 +3,8 @@ import { supabase } from '../lib/supabase'
 import { T } from '../theme'
 import { Modal, showToast } from './ui'
 
-const iosBlue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: 4, flexShrink: 0 }
-const inp: React.CSSProperties = { width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 15, boxSizing: 'border-box', outline: 'none', background: '#fff' }
+const iosBlue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 17, fontWeight: 600, cursor: 'pointer', padding: 4, flexShrink: 0 }
+const inp: React.CSSProperties = { width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 17, boxSizing: 'border-box', outline: 'none', background: '#fff' }
 
 export function AmendmentWizard({ contractId, tenantId }: { contractId: string; tenantId: string }) {
   const [rent, setRent] = useState('')
@@ -82,7 +82,7 @@ export function AmendmentWizard({ contractId, tenantId }: { contractId: string; 
         style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', border: 'none', background: 'transparent', cursor: 'pointer', padding: '10px 0 4px', textAlign: 'left', boxSizing: 'border-box' }}
       >
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f' }}>Допсоглашение</div>
+          <div style={{ fontSize: 17, fontWeight: 600, color: '#1d1d1f' }}>Допсоглашение</div>
           <div style={{ fontSize: 13, color: '#8e8e93', marginTop: 2 }}>
             {current?.amendment_at
               ? `Аренда ${Number(current.rent_amount).toFixed(0)} ₽ с ${new Date(current.amendment_from || current.amendment_at).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}`
@@ -94,13 +94,13 @@ export function AmendmentWizard({ contractId, tenantId }: { contractId: string; 
       {expanded && (
         <>
           <div style={{ ...T.small, margin: '4px 0 10px' }}>Новые суммы встанут в неоплаченные счета с выбранного месяца, оплаченная история не изменится.</div>
-          <div style={{ fontSize: 14, margin: '8px 0 4px' }}>Новая аренда, ₽/мес</div>
+          <div style={{ fontSize: 15, margin: '8px 0 4px' }}>Новая аренда, ₽/мес</div>
           <input value={rent} onChange={(e) => setRent(e.target.value)} inputMode="numeric" style={inp} />
-          <div style={{ fontSize: 14, margin: '10px 0 4px' }}>Действует с месяца</div>
+          <div style={{ fontSize: 15, margin: '10px 0 4px' }}>Действует с месяца</div>
           <select value={fromMonth} onChange={(e) => setFromMonth(e.target.value)} style={inp}>
             {months.map(m => <option key={m.v} value={m.v}>{m.l}</option>)}
           </select>
-          <div style={{ fontSize: 14, margin: '10px 0 4px' }}>Комментарий (необязательно)</div>
+          <div style={{ fontSize: 15, margin: '10px 0 4px' }}>Комментарий (необязательно)</div>
           <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Например: индексация по договору" style={inp} />
           <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0 6px' }}>
             <button style={iosBlue} onClick={() => { setOk(false); setOpen(true) }}>Сохранить допсоглашение</button>
@@ -108,10 +108,10 @@ export function AmendmentWizard({ contractId, tenantId }: { contractId: string; 
         </>
       )}
       <Modal open={open} title="Допсоглашение" onClose={() => setOpen(false)}>
-        <div style={{ fontSize: 14, color: '#555', marginBottom: 12 }}>
+        <div style={{ fontSize: 15, color: '#555', marginBottom: 12 }}>
           Аренда {Number(rent || 0).toFixed(0)} ₽/мес с {fromMonth ? new Date(`${fromMonth}-01`).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : '—'}. Неоплаченные счета с этого месяца будут пересчитаны, оплаченные — не изменятся.
         </div>
-        <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 14, marginBottom: 14, color: '#1d1d1f' }}>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 15, marginBottom: 14, color: '#1d1d1f' }}>
           <input type="checkbox" checked={ok} onChange={(e) => setOk(e.target.checked)} />
           Согласовано с арендатором
         </label>
@@ -119,9 +119,9 @@ export function AmendmentWizard({ contractId, tenantId }: { contractId: string; 
           <button
             disabled={!ok || busy}
             onClick={apply}
-            style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer', opacity: ok ? 1 : 0.4 }}
+            style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 17, cursor: 'pointer', opacity: ok ? 1 : 0.4 }}
           >{busy ? 'Сохранение…' : 'Сохранить'}</button>
-          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 15, cursor: 'pointer' }} onClick={() => setOpen(false)}>Отмена</button>
+          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 17, cursor: 'pointer' }} onClick={() => setOpen(false)}>Отмена</button>
         </div>
       </Modal>
     </div>
