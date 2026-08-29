@@ -3,23 +3,25 @@ import { supabase } from '../lib/supabase'
 import { ConfirmDelete, Modal, showToast } from './ui'
 
 const S: Record<string, React.CSSProperties> = {
-  editRow: { position: 'sticky', top: 0, zIndex: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px', background: '#f2f2f7' },
-  editBtn: { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: 4 },
+  editBtn: { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 17, fontWeight: 600, cursor: 'pointer', padding: 4 },
   head: { fontSize: 13, color: '#8e8e93', margin: '16px 16px 6px', textTransform: 'uppercase', letterSpacing: 0.3 },
   card: { background: '#fff', borderRadius: 12, margin: '0 0 10px', padding: '0 16px' },
   row: { display: 'flex', alignItems: 'center', gap: 10, minHeight: 44, padding: '4px 0', boxSizing: 'border-box' },
   rowBtn: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, minHeight: 44, padding: '4px 0', boxSizing: 'border-box', width: '100%', border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left' },
   sep: { height: 1, background: 'rgba(60,60,67,0.12)' },
-  label: { fontSize: 15, color: '#1d1d1f' },
-  title: { fontSize: 15, fontWeight: 600, color: '#1d1d1f' },
-  value: { flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'transparent', textAlign: 'right', fontSize: 15, color: '#1d1d1f', padding: 0 },
-  select: { flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'transparent', textAlign: 'right', fontSize: 15, color: '#0071e3', padding: 0 },
+  label: { fontSize: 17, color: '#1d1d1f' },
+  title: { fontSize: 17, fontWeight: 600, color: '#1d1d1f' },
+  value: { flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'transparent', textAlign: 'right', fontSize: 17, color: '#1d1d1f', padding: 0 },
+  select: { flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'transparent', textAlign: 'right', fontSize: 17, color: '#0071e3', padding: 0 },
   minus: { width: 22, height: 22, borderRadius: 11, border: 'none', background: '#ff3b30', color: '#fff', fontSize: 16, lineHeight: '20px', cursor: 'pointer', padding: 0, flexShrink: 0 },
   check: { color: '#0071e3', fontSize: 17, fontWeight: 600 },
-  add: { margin: '2px 0 12px', padding: '11px 16px', borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontSize: 15, fontWeight: 600, cursor: 'pointer' },
-  hint: { fontSize: 12, color: '#8e8e93', margin: '4px 16px 12px' },
+  add: { margin: '2px 0 12px', padding: '11px 16px', borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontSize: 17, fontWeight: 600, cursor: 'pointer' },
+  hint: { fontSize: 13, color: '#8e8e93', margin: '4px 16px 12px' },
   saveBar: { position: 'sticky', bottom: 64, zIndex: 20, display: 'flex', gap: 8, padding: '10px 16px', background: '#f2f2f7', borderRadius: 12 },
 }
+
+// запятая = десятичный разделитель (7,876 → 7.876)
+const normNum = (v: any) => String(v ?? '').replace(',', '.').trim()
 
 export function MetersEditor({ objId }: { objId: string }) {
   const [types, setTypes] = useState<any[]>([])
@@ -32,9 +34,6 @@ export function MetersEditor({ objId }: { objId: string }) {
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [withReadings, setWithReadings] = useState<string[]>([])
   const [skips, setSkips] = useState<string[]>([])
-
-  // запятая = десятичный разделитель (7,876 → 7.876)
-  const normNum = (v: any) => String(v ?? '').replace(',', '.').trim()
 
   const now = new Date()
   const periodISO = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
@@ -264,7 +263,7 @@ export function MetersEditor({ objId }: { objId: string }) {
 
   return (
     <div>
-            <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 30, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px', background: 'rgba(242,242,247,0.94)', backdropFilter: 'blur(10px)', boxShadow: '0 1px 0 rgba(60,60,67,0.12)' }}>
+      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 30, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px', background: 'rgba(242,242,247,0.94)', backdropFilter: 'blur(10px)', boxShadow: '0 1px 0 rgba(60,60,67,0.12)' }}>
         <span style={{ fontSize: 13, color: '#8e8e93', textTransform: 'uppercase', letterSpacing: 0.3 }}>Счётчики</span>
         <button style={S.editBtn} onClick={() => {
           if (unlocked) { load(); setUnlocked(false) } else setUnlocked(true)
@@ -310,7 +309,7 @@ export function MetersEditor({ objId }: { objId: string }) {
         <div style={S.card}>
           <button style={{ ...S.rowBtn, opacity: unlocked ? 1 : 0.55 }} disabled={busy || !unlocked} onClick={() => setActive('heat', true)}>
             <span style={S.label}>Теплосчётчик установлен</span>
-            <span style={{ color: '#0071e3', fontSize: 15 }}>добавить</span>
+            <span style={{ color: '#0071e3', fontSize: 17 }}>добавить</span>
           </button>
         </div>
       )}
@@ -319,7 +318,7 @@ export function MetersEditor({ objId }: { objId: string }) {
         <div style={S.card}>
           <button style={{ ...S.rowBtn, opacity: unlocked ? 1 : 0.55 }} disabled={busy || !unlocked} onClick={() => setActive('gas', true)}>
             <span style={S.label}>Счётчик газа</span>
-            <span style={{ color: '#0071e3', fontSize: 15 }}>добавить</span>
+            <span style={{ color: '#0071e3', fontSize: 17 }}>добавить</span>
           </button>
         </div>
       )}
@@ -328,14 +327,14 @@ export function MetersEditor({ objId }: { objId: string }) {
       {unlocked && dirty && (
         <div style={S.saveBar}>
           <button style={{ ...S.add, margin: 0, flex: 1 }} disabled={busy} onClick={() => setConfirmOpen(true)}>Сохранить изменения</button>
-          <button style={{ flex: 1, padding: '11px 16px', borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 15, cursor: 'pointer' }} disabled={busy} onClick={() => load()}>Отменить</button>
+          <button style={{ flex: 1, padding: '11px 16px', borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 17, cursor: 'pointer' }} disabled={busy} onClick={() => load()}>Отменить</button>
         </div>
       )}
 
       <div style={S.hint}>Порядок счётчиков фиксированный: электричество — день, затем ночь. Значения с запятой (7,876) поддерживаются. Изменения применяются только после подтверждения, затем настройки блокируются.</div>
 
       <Modal open={confirmOpen} title="Подтвердить изменения счётчиков" onClose={() => setConfirmOpen(false)}>
-        <div style={{ fontSize: 14, color: '#555', marginBottom: 10, whiteSpace: 'pre-wrap' }}>{changeLines.join('\n')}</div>
+        <div style={{ fontSize: 15, color: '#555', marginBottom: 10, whiteSpace: 'pre-wrap' }}>{changeLines.join('\n')}</div>
         {dirtyHasReadings && (
           <div style={{ fontSize: 13, color: '#b25000', marginBottom: 10 }}>
             ⚠️ По некоторым из этих счётчиков уже подавались показания. История сохранится, прошлые месяцы не пересчитаются.
@@ -343,8 +342,8 @@ export function MetersEditor({ objId }: { objId: string }) {
         )}
         <div style={{ fontSize: 13, color: '#555', marginBottom: 14 }}>Тип счётчика влияет на расчёты квитанций и штрафов. После сохранения настройки снова будут заблокированы.</div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }} disabled={busy} onClick={applySave}>Подтверждаю</button>
-          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 15, cursor: 'pointer' }} onClick={() => setConfirmOpen(false)}>Отмена</button>
+          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 17, cursor: 'pointer' }} disabled={busy} onClick={applySave}>Подтверждаю</button>
+          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 17, cursor: 'pointer' }} onClick={() => setConfirmOpen(false)}>Отмена</button>
         </div>
       </Modal>
 
