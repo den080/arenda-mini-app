@@ -33,6 +33,9 @@ export function MetersEditor({ objId }: { objId: string }) {
   const [withReadings, setWithReadings] = useState<string[]>([])
   const [skips, setSkips] = useState<string[]>([])
 
+  // запятая = десятичный разделитель (7,876 → 7.876)
+  const normNum = (v: any) => String(v ?? '').replace(',', '.').trim()
+
   const now = new Date()
   const periodISO = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
 
@@ -76,14 +79,13 @@ export function MetersEditor({ objId }: { objId: string }) {
   const dirtyIds = rows.filter(r => {
     const d = draft[r.id]
     if (!d) return false
-    return d.label !== (r.label || '') || String(d.initial) !== String(r.initial_value ?? '') || d.typeCode !== codeOf(r)
+    return d.label !== (r.label || '') || normNum(d.initial) !== normNum(r.initial_value ?? '') || d.typeCode !== codeOf(r)
   }).map(r => r.id)
   const dirty = dirtyIds.length > 0
 
   const waterCodes = ['water_cold', 'water_hot']
   const waterRows = rows.filter(r => waterCodes.includes(codeOf(r)))
   const elecCodes = ['electricity_single', 'electricity_day', 'electricity_night', 'electricity_peak', 'electricity_semipeak']
-  // день строго перед ночью (и т.д. по тарифу)
   const activeElecRows = rows.filter(r => elecCodes.includes(codeOf(r)))
     .sort((a, b) => elecCodes.indexOf(codeOf(a)) - elecCodes.indexOf(codeOf(b)))
   const activeRows = (code: string) => rows.filter(r => codeOf(r) === code)
@@ -104,7 +106,7 @@ export function MetersEditor({ objId }: { objId: string }) {
         const mt = types.find(t => t.code === d.typeCode)
         const upd: any = {}
         if (d.label !== (r.label || '')) upd.label = d.label
-        if (String(d.initial) !== String(r.initial_value ?? '')) upd.initial_value = d.initial === '' ? null : Number(d.initial)
+        if (normNum(d.initial) !== normNum(r.initial_value ?? '')) upd.initial_value = d.initial === '' ? null : Number(normNum(d.initial))
         if (mt && mt.id !== r.meter_type_id) upd.meter_type_id = mt.id
         if (Object.keys(upd).length) {
           const { error } = await supabase.from('object_meters').update(upd).eq('id', id)
@@ -221,7 +223,7 @@ export function MetersEditor({ objId }: { objId: string }) {
     const parts: string[] = []
     if (d.typeCode !== codeOf(r)) parts.push(`тип: ${typeName(codeOf(r))} → ${typeName(d.typeCode)}`)
     if (d.label !== (r.label || '')) parts.push(`номер: ${r.label || '—'} → ${d.label || '—'}`)
-    if (String(d.initial) !== String(r.initial_value ?? '')) parts.push(`старт: ${r.initial_value ?? '—'} → ${d.initial || '—'}`)
+    if (normNum(d.initial) !== normNum(r.initial_value ?? '')) parts.push(`старт: ${r.initial_value ?? '—'} → ${d.initial || '—'}`)
     return `• ${r.label || typeName(codeOf(r))}: ${parts.join(', ')}`
   }).filter(Boolean)
 
@@ -329,7 +331,7 @@ export function MetersEditor({ objId }: { objId: string }) {
         </div>
       )}
 
-      <div style={S.hint}>Порядок счётчиков фиксированный: электричество — день, затем ночь. Изменения применяются только после подтверждения, затем настройки блокируются.</div>
+      <div style={S.hint}>Порядок счётчиков фиксированный: электричество — день, затем ночь. Значения с запятой (7,876) поддерживаются. Изменения применяются только после подтверждения, затем настройки блокируются.</div>
 
       <Modal open={confirmOpen} title="Подтвердить изменения счётчиков" onClose={() => setConfirmOpen(false)}>
         <div style={{ fontSize: 14, color: '#555', marginBottom: 10, whiteSpace: 'pre-wrap' }}>{changeLines.join('\n')}</div>
