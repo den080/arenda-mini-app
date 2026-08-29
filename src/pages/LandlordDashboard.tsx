@@ -39,35 +39,11 @@ interface ObjectWithStatus extends PropertyObject {
   hasConfirmedCashMeeting?: boolean
 }
 
-function parseDate(d: any): Date {
-  const [y, m, dd] = String(d).slice(0, 10).split('-').map(Number)
-  return new Date(y, (m || 1) - 1, dd || 1)
-}
-
-function isFirstPeriod(period: any, sd: Date | null): boolean {
-  if (!sd) return false
-  const p = parseDate(period)
-  return p.getMonth() === sd.getMonth() && p.getFullYear() === sd.getFullYear()
-}
-
-function clampDay(y: number, m: number, d: number): number {
-  const last = new Date(y, m + 1, 0).getDate()
-  return Math.min(Math.max(1, d), last)
-}
-
-function toISO(d: Date): string {
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const dd = String(d.getDate()).padStart(2, '0')
-  return `${d.getFullYear()}-${m}-${dd}`
-}
-
-// Убираем эмодзи только из строк карточки «Уведомления»
-function noEmoji(s: string): string {
-  return String(s || '')
-    .replace(/[\p{Extended_Pictographic}\uFE0F\u200D]/gu, '')
-    .replace(/\s{2,}/g, ' ')
-    .trim()
-}
+function parseDate(d: any): Date { const [y, m, dd] = String(d).slice(0, 10).split('-').map(Number); return new Date(y, (m || 1) - 1, dd || 1) }
+function isFirstPeriod(period: any, sd: Date | null): boolean { if (!sd) return false; const p = parseDate(period); return p.getMonth() === sd.getMonth() && p.getFullYear() === sd.getFullYear() }
+function clampDay(y: number, m: number, d: number): number { const last = new Date(y, m + 1, 0).getDate(); return Math.min(Math.max(1, d), last) }
+function toISO(d: Date): string { const m = String(d.getMonth() + 1).padStart(2, '0'); const dd = String(d.getDate()).padStart(2, '0'); return `${d.getFullYear()}-${m}-${dd}` }
+function noEmoji(s: string): string { return String(s || '').replace(/[\p{Extended_Pictographic}\uFE0F\u200D]/gu, '').replace(/\s{2,}/g, ' ').trim() }
 
 const OBJ_TABS = [
   { id: 'pay', l: 'Оплата' },
@@ -84,7 +60,6 @@ export function LandlordDashboard() {
   const pool: string = teamHook.pool || 'own'
   const selectPool: (id: string) => void = teamHook.selectPool || (() => {})
   const teamRole: string | null = teamHook.role ?? null
-
   const [objects, setObjects] = useState<ObjectWithStatus[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -118,7 +93,6 @@ export function LandlordDashboard() {
 
   useEffect(() => { setEarlyPayOpen(false) }, [openId])
 
-  // Совместный доступ: виден при активном Pro ИЛИ если номер в списке «Доступ» (admin/tester)
   useEffect(() => {
     if (!user) return
     ;(async () => {
@@ -219,7 +193,6 @@ export function LandlordDashboard() {
         for (const m of meetRes.data || []) if (!meetBy[m.contract_id]) meetBy[m.contract_id] = m
         const readCountBy: Record<string, number> = {}
         for (const r of readRes.data || []) readCountBy[r.contract_id] = (readCountBy[r.contract_id] || 0) + 1
-        // счётчики объекта + отметки «тепло не используется»
         const { data: omRows } = await supabase.from('object_meters').select('id, object_id, meter_types(code)').in('object_id', objIds).eq('is_active', true)
         const { data: skipRows } = await supabase.from('meter_skips').select('object_meter_id').eq('period', periodISO)
         const skipSet = new Set((skipRows || []).map((s: any) => s.object_meter_id))
@@ -350,6 +323,7 @@ export function LandlordDashboard() {
     const interval = setInterval(() => fetchData(), 30000)
     return () => { window.removeEventListener('rentflow-refresh', onRefresh); clearInterval(interval) }
   }, [user, teamId, pool])
+
   useEffect(() => {
     if (user) { setAnalyticsUser(user); trackOpen('landlord') }
   }, [user])
@@ -503,7 +477,6 @@ export function LandlordDashboard() {
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
 
-  // ===== PRO: центр подтверждений — подтверждаем только отмеченные полученными =====
   async function confirmSelected() {
     const chosen = openList.filter(o => massSel[o.id] && Number(o.payment.paid_amount || 0) === 0)
     if (chosen.length === 0) { showToast('Отметьте полученные оплаты'); return }
@@ -539,13 +512,110 @@ export function LandlordDashboard() {
   async function doAddDeposit(amount: number) {
     if (!contract) return
     if (deposit <= 0) { showToast('Сначала укажите общую сумму депозита'); return }
-    ...
-    [весь блок из моего предыдущего сообщения]
-    ...
+    if (isNaN(amount) || amount <= 0) { showToast('Некорректная сумма'); return }
+    const { error } = await supabase.from('contracts').update({ deposit_paid: Math.min(deposit, depositPaid + amount) }).eq('id', contract.id)
+    if (error) { showToast('Ошибка: ' + error.message); return }
+    showToast('✅ Платёж по депозиту внесён')
+    window.dispatchEvent(new Event('rentflow-refresh'))
+  }
+
+  async function doEditDeposit(v: number) {
+    if (!contract) return
+    if (isNaN(v) || v < 0) { showToast('Некорректное значение'); return }
+    const { error } = await supabase.from('contracts').update({ deposit_paid: Math.min(deposit, v) }).eq('id', contract.id)
+    if (error) { showToast('Ошибка: ' + error.message); return }
+    showToast('✅ Депозит обновлён')
+    window.dispatchEvent(new Event('rentflow-refresh'))
+  }
+
+  function openAdjust(id: string, zero: boolean) {
+    const row = (current?.frozenRows || []).find((f: any) => f.id === id)
+    setFzAmount(row ? String(row.amount) : '')
+    setFzNote('')
+    setFz({ id, zero })
+  }
+
+  async function confirmAdjust() {
+    if (!fz || !contract) return
+    const zero = fz.zero
+    const note = fzNote.trim()
+    if (zero && !note) { showToast('Обнуление требует причину'); return }
+    let newAmount = zero ? 0 : Number(fzAmount)
+    if (!zero && (isNaN(newAmount) || newAmount < 0)) { showToast('Некорректная сумма'); return }
+    if (!zero && !note) { showToast('Изменение требует примечание'); return }
+    const { error } = await supabase.from('frozen_penalties').update({
+      amount: newAmount, adjusted_at: new Date().toISOString(),
+      adjusted_note: zero ? `обнулено: ${note}` : `изменено на ${newAmount.toFixed(0)}: ${note}`,
+    }).eq('id', fz.id)
+    if (error) { showToast('Ошибка: ' + error.message); return }
+    await supabase.from('notifications_log').insert({ user_id: contract.tenant_id, type: 'deferred_confirmed', related_id: contract.id, message: zero ? '🧊 Замороженный штраф обнулён' : `🧊 Замороженный штраф изменён: теперь ${newAmount.toFixed(0)} ₽`, sent_at: new Date().toISOString() })
+    showToast('✅ Сохранено')
+    setFz(null)
+    window.dispatchEvent(new Event('rentflow-refresh'))
+  }
+
+  async function confirmDeferral(requestId: string, contractId: string, paymentId: string, amount: number, tenantId: string) {
+    const { data: pay } = await supabase.from('payments').select('*').eq('id', paymentId).maybeSingle()
+    const { error: e1 } = await supabase.from('frozen_penalties').insert({ contract_id: contractId, payment_id: paymentId, period: pay ? pay.period : null, amount, original_amount: amount, note: 'отсрочка штрафа подтверждена' })
+    if (e1) { showToast('Ошибка: ' + e1.message); return }
+    await supabase.from('deferred_requests').update({ status: 'confirmed' }).eq('id', requestId)
+    if (paymentId) {
+      const newPenalty = Math.max(0, Number(pay?.penalty_amount || 0) - amount)
+      await supabase.from('payments').update({ penalty_amount: newPenalty }).eq('id', paymentId)
+    }
+    await supabase.from('notifications_log').insert({ user_id: tenantId, type: 'deferred_confirmed', related_id: contractId, message: `🧊 Штраф ${Number(amount).toFixed(0)} ₽ заморожен и будет учтён в конце договора`, sent_at: new Date().toISOString() })
+    showToast('✅ Отсрочка подтверждена')
+    window.dispatchEvent(new Event('rentflow-refresh'))
+  }
+
+  async function freezePenalty(paymentId: string) {
+    const { data: pay } = await supabase.from('payments').select('*').eq('id', paymentId).maybeSingle()
+    if (!pay) return
+    const pen = Number(pay.penalty_amount || 0)
+    if (pen <= 0) { showToast('Нет штрафа для заморозки'); return }
+    const { error } = await supabase.from('frozen_penalties').insert({ contract_id: pay.contract_id, payment_id: pay.id, period: pay.period, amount: pen, original_amount: pen, note: 'штраф заморожен вручную' })
+    if (error) { showToast('Ошибка: ' + error.message); return }
+    await supabase.from('payments').update({ penalty_amount: 0 }).eq('id', paymentId)
+    const { data: con } = await supabase.from('contracts').select('*').eq('id', pay.contract_id).maybeSingle()
+    if (con) await supabase.from('notifications_log').insert({ user_id: con.tenant_id, type: 'deferred_confirmed', related_id: pay.id, message: `🧊 Штраф ${pen.toFixed(0)} ₽ заморожен и будет учтён в конце договора`, sent_at: new Date().toISOString() })
+    showToast('✅ Штраф заморожен')
+    window.dispatchEvent(new Event('rentflow-refresh'))
+  }
+
+  async function updatePaymentMethod(contractId: string, method: 'card' | 'cash' | 'both') {
+    const updateData: any = { payment_method: method }
+    if (method === 'cash') updateData.cash_slots = []
+    const { error } = await supabase.from('contracts').update(updateData).eq('id', contractId)
+    if (!error) {
+      showToast('✅ Способ оплаты обновлён')
+      setObjects(prev => prev.map(o => o.contract?.id === contractId ? { ...o, contract: { ...o.contract!, payment_method: method, cash_slots: method === 'cash' ? [] : (o.contract as any).cash_slots } } : o))
+    } else showToast('Ошибка: ' + error.message)
   }
 
   async function confirmChannel(paymentId: string, channel: 'card' | 'cash', close: boolean = false) {
-    ...
+    const { data: pay } = await supabase.from('payments').select('*').eq('id', paymentId).maybeSingle()
+    if (!pay) { showToast('Платёж не найден'); return }
+    const { data: cashMeeting } = await supabase.from('cash_meetings').select('*').eq('contract_id', pay.contract_id).eq('kind', 'meeting').eq('status', 'confirmed').order('created_at', { ascending: false }).limit(1).maybeSingle()
+    const cardEngaged = !!pay.card_claimed
+    const update: any = {}
+    if (channel === 'card') { if (close) return; update.confirmed_card = true } else { if (close) update.cash_closed = true; else update.confirmed_cash = true }
+    const afterCard = channel === 'card' ? true : pay.confirmed_card
+    const afterCashConfirmed = channel === 'cash' && !close ? true : pay.confirmed_cash
+    const afterCashClosed = channel === 'cash' && close ? true : pay.cash_closed
+    const cashFinalClosed = afterCashClosed || afterCashConfirmed
+    const cardSatisfied = !cardEngaged || afterCard
+    const cashSatisfied = !(!!cashMeeting && !afterCashClosed) || cashFinalClosed
+    if (cardSatisfied && cashSatisfied) { update.confirmed_by_landlord = true; update.confirmed_at = new Date().toISOString(); update.paid_amount = Number(pay.base_amount || 0) + Number(pay.penalty_amount || 0) + Number(pay.utilities_amount || 0) }
+    const { error: e1 } = await supabase.from('payments').update(update).eq('id', paymentId)
+    if (e1) { showToast('Ошибка: ' + e1.message); return }
+    showToast('✅ Подтверждено')
+    if (update.confirmed_by_landlord) await ensureNextPayment(pay.contract_id)
+    const { data: con } = await supabase.from('contracts').select('*').eq('id', pay.contract_id).maybeSingle()
+    if (con) {
+      const msg = channel === 'card' ? '🟢 Арендодатель подтвердил безналичную оплату' : (close ? '⚪ Наличный расчёт завершён' : '🟢 Арендодатель подтвердил оплату наличными')
+      await supabase.from('notifications_log').insert({ user_id: con.tenant_id, type: 'payment_confirmed', related_id: pay.id, message: msg, sent_at: new Date().toISOString() })
+    }
+    window.dispatchEvent(new Event('rentflow-refresh'))
   }
 
   const getNotificationText = (type: string) => {
@@ -609,7 +679,6 @@ export function LandlordDashboard() {
     </div>
   )
   if (error) return <div style={T.page}><div style={T.card}>{error}</div></div>
-
   if (arch) {
     return (
       <div style={{ ...T.page, paddingBottom: 40 }}>
@@ -663,8 +732,8 @@ export function LandlordDashboard() {
             <div style={T.h2}>Замороженные штрафы</div>
             {archiveFrozen.map((f: any) => (
               <div key={f.id} style={T.item}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 17 }}>
-                  <span style={{ fontWeight: 500, color: '#1d1d1f' }}>{f.period ? parseDate(f.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : 'без месяца'}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                  <span style={{ fontSize: 17, fontWeight: 500, color: '#1d1d1f' }}>{f.period ? parseDate(f.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : 'без месяца'}</span>
                   <span style={valMoney}>{Number(f.amount).toFixed(0)} ₽</span>
                 </div>
                 {f.adjusted_note && <div style={T.tiny}>{f.adjusted_note}</div>}
@@ -841,6 +910,7 @@ export function LandlordDashboard() {
       </PullToRefresh>
     )
   }
+
   return (
     <div style={{ ...T.page, paddingBottom: 90 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 0 8px' }}>
@@ -1197,5 +1267,3 @@ export function LandlordDashboard() {
 }
 
 export default LandlordDashboard
-
-
