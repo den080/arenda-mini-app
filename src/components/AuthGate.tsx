@@ -19,6 +19,20 @@ function randKey(): string {
   }
 }
 
+function formatPhone(v: string): string {
+  const digits = (v || '').replace(/\D/g, '').slice(0, 11)
+  if (digits.length === 11 && (digits.startsWith('7') || digits.startsWith('8'))) {
+    const x = digits.slice(1)
+    let out = '+7'
+    if (x.length > 0) out += ' ' + x.slice(0, 3)
+    if (x.length > 3) out += ' ' + x.slice(3, 6)
+    if (x.length > 6) out += ' ' + x.slice(6, 8)
+    if (x.length > 8) out += ' ' + x.slice(8, 10)
+    return out
+  }
+  return v
+}
+
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const { user, loading: userLoading } = useTelegramUser()
   const [ready, setReady] = useState(false)
@@ -33,6 +47,10 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const [demo, setDemo] = useState<boolean>(() => {
     try { return new URLSearchParams(window.location.search).has('demo') } catch { return false }
   })
+  const [claimOpen, setClaimOpen] = useState(false)
+  const [claimPhone, setClaimPhone] = useState('')
+  const [claimBusy, setClaimBusy] = useState(false)
+  const [claimMsg, setClaimMsg] = useState('')
 
   const tg = (window as any)?.Telegram?.WebApp
   const tgId = String(tg?.initDataUnsafe?.user?.id || (user as any)?.telegram_id || '')
@@ -117,9 +135,32 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       if (user?.id) {
         await supabase.from('users').update({ email: em }).eq('id', user.id).then(() => {}, () => {})
       }
+      // если это арендатор без договора — предлагаем привязать по телефону
+      const { data: me } = await supabase.from('users').select('id, role').eq('email', em).maybeSingle()
+      let needClaim = false
+      if (me && me.role === 'tenant') {
+        const { count } = await supabase.from('contracts').select('id', { count: 'exact', head: true }).eq('tenant_id', me.id)
+        needClaim = (count || 0) === 0
+      }
+      if (needClaim) { setClaimOpen(true); return }
       setHasSession(true)
       showToast('✅ Вход выполнен')
     } finally { setBusy(false) }
+  }
+
+  async function claim() {
+    setClaimBusy(true)
+    setClaimMsg('')
+    try {
+      const { data, error } = await supabase.rpc('claim_contract_by_phone', { p_phone: claimPhone })
+      if (error) { showToast('Ошибка: ' + error.message); return }
+      if ((data || 0) > 0) {
+        showToast('✅ Договор привязан')
+        setHasSession(true)
+      } else {
+        setClaimMsg('Договор с таким телефоном не найден. Проверьте номер или попросите арендодателя указать его в договоре.')
+      }
+    } finally { setClaimBusy(false) }
   }
 
   if (demo) return (
@@ -131,6 +172,35 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
   if (!ready) return <div style={T.page}>Загрузка…</div>
   if (hasSession) return <>{children}</>
+
+  if (claimOpen) return (
+    <div style={{ ...T.page, maxWidth: 480, margin: '0 auto' }}>
+      <Toaster />
+      <div style={T.card}>
+        <div style={{ fontSize: 22, fontWeight: 800, marginBottom: 6 }}>Привязать договор</div>
+        <div style={{ ...T.small, margin: '0 0 12px' }}>
+          Введите телефон, на который оформлен договор у арендодателя, — откроется ваша аренда.
+        </div>
+        <input
+          style={inp}
+          value={claimPhone}
+          onChange={(e) => setClaimPhone(formatPhone(e.target.value))}
+          placeholder="+7 ___ ___-__-__"
+          inputMode="tel"
+          autoComplete="off"
+        />
+        {claimMsg && <div style={{ ...T.tiny, margin: '8px 0 0', color: '#c00' }}>{claimMsg}</div>}
+        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+          <button disabled={claimBusy} onClick={claim} style={{ flex: 1, padding: 13, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 17, cursor: 'pointer', opacity: claimBusy ? 0.6 : 1 }}>
+            {claimBusy ? 'Проверка…' : 'Привязать'}
+          </button>
+          <button onClick={() => setHasSession(true)} style={{ flex: 1, padding: 13, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 17, cursor: 'pointer' }}>
+            Пропустить
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 
   return (
     <div style={{ ...T.page, maxWidth: 480, margin: '0 auto' }}>
