@@ -21,7 +21,7 @@ function randKey(): string {
   }
 }
 
-// Тестовое окно ЮKassa для демо
+// Тестовое окно ЮKassa — ТОЛЬКО для покупки подписки Pro
 function MockYooKassa({ title, amount, onPay }: { title: string; amount: string; onPay: () => void }) {
   return (
     <div style={{ border: '1px solid #ddd', borderRadius: 12, padding: 12, margin: '10px 0' }}>
@@ -29,14 +29,13 @@ function MockYooKassa({ title, amount, onPay }: { title: string; amount: string;
       <div style={{ fontSize: 17, fontWeight: 700, color: '#1d1d1f', marginBottom: 8 }}>{title} · {amount}</div>
       <div style={{ fontFamily: 'monospace', fontSize: 15, background: 'rgba(120,120,128,0.08)', borderRadius: 8, padding: '8px 10px', marginBottom: 8, color: '#1d1d1f' }}>1111 1111 1111 1111</div>
       <button style={blueBtn} onClick={onPay}>Оплатить {amount}</button>
-      <div style={{ fontSize: 13, color: '#8e8e93', marginTop: 6 }}>В реальном приложении это окно открывает ЮKassa; деньги поступают на счёт самозанятого.</div>
+      <div style={{ fontSize: 13, color: '#8e8e93', marginTop: 6 }}>Так в реальном приложении арендодатель покупает подписку Pro. Платежи по аренде через платформу не проходят.</div>
     </div>
   )
 }
 
 function DemoView({ onExit }: { onExit: () => void }) {
   const [role, setRole] = useState<'tenant' | 'landlord'>('tenant')
-  const [payOpen, setPayOpen] = useState(false)
   const [rentPaid, setRentPaid] = useState(false)
   const [rentConfirmed, setRentConfirmed] = useState(false)
   const [proOpen, setProOpen] = useState(false)
@@ -70,9 +69,18 @@ function DemoView({ onExit }: { onExit: () => void }) {
             <div style={dRow}><span style={{ fontSize: 17 }}>Аренда</span><span style={{ fontSize: 17, fontWeight: 600 }}>67 000 ₽</span></div>
             <div style={dRow}><span style={{ fontSize: 17 }}>Ресурсы по квитанции</span><span style={{ fontSize: 17, fontWeight: 600 }}>4 200 ₽</span></div>
             <div style={{ ...dRow, borderBottom: 'none' }}><span style={{ fontSize: 17, fontWeight: 700 }}>Итого</span><span style={{ fontSize: 17, fontWeight: 700 }}>71 200 ₽</span></div>
-            {!rentPaid && !payOpen && <button style={blueBtn} onClick={() => setPayOpen(true)}>Оплатить через ЮKassa</button>}
-            {payOpen && !rentPaid && <MockYooKassa title="Оплата аренды" amount="71 200 ₽" onPay={() => { setRentPaid(true); setPayOpen(false) }} />}
-            {rentPaid && !rentConfirmed && <div style={T.note}>Оплата прошла через ЮKassa и ждёт подтверждения арендодателем. Переключитесь на роль «Арендодатель» — он увидит заявку в центре подтверждений.</div>}
+            {!rentPaid && (
+              <>
+                <div style={{ border: '1px solid #ddd', borderRadius: 12, padding: 12, margin: '10px 0' }}>
+                  <div style={{ fontSize: 13, color: '#8e8e93', marginBottom: 6 }}>Реквизиты арендодателя</div>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f' }}>Сбербанк</div>
+                  <div style={{ fontFamily: 'monospace', fontSize: 15, background: 'rgba(120,120,128,0.08)', borderRadius: 8, padding: '8px 10px', marginTop: 6, color: '#1d1d1f' }}>2202 2063 1292 7213</div>
+                </div>
+                <button style={blueBtn} onClick={() => setRentPaid(true)}>Я оплатил — уведомить арендодателя</button>
+                <div style={{ fontSize: 13, color: '#8e8e93', marginTop: 6 }}>Аренда оплачивается напрямую арендодателю: карта, СБП или наличные. Сервис хранит учёт, подтверждения и расписки.</div>
+              </>
+            )}
+            {rentPaid && !rentConfirmed && <div style={T.note}>Оплата заявлена — арендодатель подтвердит получение. Переключитесь на роль «Арендодатель».</div>}
             {rentConfirmed && <div style={T.noteGreen}>Арендодатель подтвердил оплату: расписка сформирована, создан счёт за октябрь.</div>}
           </div>
           <div style={T.card}>
@@ -97,7 +105,7 @@ function DemoView({ onExit }: { onExit: () => void }) {
             ) : rentConfirmed ? (
               <div style={T.noteGreen}>Оплата подтверждена: арендатору расписка, создан следующий счёт.</div>
             ) : (
-              <div style={{ ...T.small, margin: '8px 0' }}>Заявленных оплат пока нет. Переключитесь на роль «Арендатор» и оплатите счёт через ЮKassa.</div>
+              <div style={{ ...T.small, margin: '8px 0' }}>Заявленных оплат пока нет. Переключитесь на роль «Арендатор» и отметьте счёт оплаченным.</div>
             )}
           </div>
           <div style={T.card}>
@@ -111,10 +119,10 @@ function DemoView({ onExit }: { onExit: () => void }) {
             <div style={T.tiny}>Штраф не давит сразу: учитывается только при съезде из депозита. Каждое изменение — с причиной и датой.</div>
           </div>
           <div style={T.card}>
-            <div style={T.h2}>Тариф Pro · 990 ₽/мес</div>
-            <div style={{ ...T.small, margin: '0 0 4px' }}>Массовое подтверждение оплат, совместный доступ, пулы аренды. Оплата — через ЮKassa, подписка выдаётся автоматически.</div>
+            <div style={T.h2}>Тариф Pro · 299 ₽/мес</div>
+            <div style={{ ...T.small, margin: '0 0 4px' }}>Массовое подтверждение оплат, совместный доступ, пулы аренды. Единственный платёж в сервисе — покупка подписки через ЮKassa; выдаётся автоматически.</div>
             {!proDone && !proOpen && <button style={blueBtn} onClick={() => setProOpen(true)}>Купить Pro через ЮKassa</button>}
-            {proOpen && !proDone && <MockYooKassa title="Подписка Pro" amount="990 ₽" onPay={() => { setProDone(true); setProOpen(false) }} />}
+            {proOpen && !proDone && <MockYooKassa title="Подписка Pro" amount="299 ₽" onPay={() => { setProDone(true); setProOpen(false) }} />}
             {proDone && <div style={T.noteGreen}>Оплата успешна — подписка Pro выдана автоматически на 30 дней.</div>}
           </div>
         </>
@@ -256,7 +264,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
               • Счета аренды создаются автоматически, оплаты под контролем<br />
               • Показания счётчиков и квитанции — в приложении<br />
               • Штрафы замораживаются вместо конфликтов, учёт при съезде — из депозита<br />
-              • Оплата аренды и подписки Pro — через ЮKassa
+              • Расчёты по аренде — напрямую между сторонами; через ЮKassa оплачивается только подписка Pro (299 ₽/мес)
             </div>
             <button onClick={() => setDemo(true)} style={{ ...blueBtn, marginBottom: 8 }}>
               Смотреть демо без входа
@@ -273,7 +281,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
           <>
             <div style={{ fontSize: 22, fontWeight: 800, marginBottom: 6 }}>Вход в Roomio</div>
             <div style={{ ...T.small, margin: '0 0 14px' }}>
-              Код придёт на e-mail один раз; аккаунт привяжется к профилю, дальше входы без кода.
+              Код придёт на e-mail один раз; аккаунт привяжется к профилю, дальше входы без кода. Если вы уже пользуетесь приложением в Telegram — входите с той же почтой, все данные подтянутся.
             </div>
             <input
               style={inp}
