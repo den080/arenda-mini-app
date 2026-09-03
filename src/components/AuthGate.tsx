@@ -11,15 +11,6 @@ const dRow: React.CSSProperties = { display: 'flex', justifyContent: 'space-betw
 
 const POLICY = `ПОЛИТИКА КОНФИДЕНЦИАЛЬНОСТИ (кратко) Оператор: владелец сервиса Roomio (самозанятый, РФ). Состав данных: имя, номер телефона, e-mail, адреса объектов, суммы аренды и депозитов, показания счётчиков, история платежей и действий. Цели: организация расчётов, уведомления, поддержка работы сервиса. Хранение: защищённая облачная база; доступ — только вы, ваш контрагент по договору и владелец сервиса для поддержки. Передача третьим лицам: не осуществляется, кроме случаев, требуемых законом. Срок: до удаления аккаунта или договора. Ваши права: запросить, изменить, удалить данные — через владельца сервиса.`
 
-function randKey(): string {
-  try {
-    const a = new Uint8Array(32)
-    crypto.getRandomValues(a)
-    return Array.from(a, (b) => b.toString(16).padStart(2, '0')).join('')
-  } catch {
-    return Math.random().toString(36).slice(2) + Date.now().toString(36) + Math.random().toString(36).slice(2)
-  }
-}
 
 // Тестовое окно ЮKassa — ТОЛЬКО для покупки подписки Pro
 function MockYooKassa({ title, amount, onPay }: { title: string; amount: string; onPay: () => void }) {
@@ -224,11 +215,8 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         lastErr = error
       }
       if (lastErr) { showToast('Неверный код: ' + lastErr.message); return }
-      const em = email.trim().toLowerCase()
+            const em = email.trim().toLowerCase()
       localStorage.setItem('roomio_bound_email', em)
-      const key = randKey()
-      localStorage.setItem('roomio_key:' + em, key)
-      try { await supabase.auth.updateUser({ password: key }) } catch {}
       if (tgId || tgPhone) {
         try { await supabase.auth.updateUser({ data: { telegram_id: tgId || undefined, phone: tgPhone || undefined } }) } catch {}
       }
