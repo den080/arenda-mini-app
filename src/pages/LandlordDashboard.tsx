@@ -780,7 +780,7 @@ export function LandlordDashboard() {
                 {f.adjusted_note && <div style={T.tiny}>{f.adjusted_note}</div>}
               </div>
             ))}
-            <div style={T.tiny}>Записи хранятся постоянно — это ваша защита при спорах и в суде.</div>
+            <Hint text="Записи хранятся постоянно — это ваша защита при спорах и в суде." />
           </div>
         )}
         <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0' }}>
@@ -1246,20 +1246,20 @@ export function LandlordDashboard() {
       )}
       <BottomNav tabs={OBJ_TABS} tab={tab} setTab={setTab} badges={{ pay: payBadge, meters: metersBadge }} />
       <Modal open={!!payConfirm} title="Подтверждение оплаты" onClose={() => setPayConfirm(null)}>
-        <div style={{ fontSize: 15, color: '#555', marginBottom: 12 }}>
+        <div style={{ fontSize: 15, color: '#555', marginBottom: 12, lineHeight: 1.45, overflowWrap: 'break-word' }}>
           Счёт за {pcMonth} на {pcSum.toFixed(0)} ₽.{' '}
           {payConfirm?.kind === 'cash-close'
             ? 'Наличный расчёт будет завершён без отметки о получении.'
-            : 'Платёж будет отмечен полученным (в т. ч. досрочно), создастся следующий счёт. Действие необратимо.'}
+            : 'Платёж будет отмечен полученным, создастся следующий счёт. Действие необратимо.'}
         </div>
-        <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 15, marginBottom: 14, color: '#1d1d1f' }}>
-          <input type="checkbox" checked={payConfirmOk} onChange={(e) => setPayConfirmOk(e.target.checked)} />
-          Деньги фактически получены
+        <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: 15, marginBottom: 14, color: '#1d1d1f', lineHeight: 1.35 }}>
+          <input type="checkbox" checked={payConfirmOk} onChange={(e) => setPayConfirmOk(e.target.checked)} style={{ marginTop: 2, flexShrink: 0 }} />
+          <span style={{ flex: 1, minWidth: 0 }}>Деньги фактически получены</span>
         </label>
         <div style={{ display: 'flex', gap: 8 }}>
           <button
             disabled={!payConfirmOk}
-            style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 17, cursor: 'pointer', opacity: payConfirmOk ? 1 : 0.4 }}
+            style={{ flex: 1, minWidth: 0, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 16, cursor: 'pointer', opacity: payConfirmOk ? 1 : 0.4, whiteSpace: 'nowrap' }}
             onClick={() => {
               const k = payConfirm!.kind
               setPayConfirm(null)
@@ -1269,7 +1269,7 @@ export function LandlordDashboard() {
               else confirmChannel(current.paymentId, 'card')
             }}
           >Подтвердить</button>
-          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 17, cursor: 'pointer' }} onClick={() => setPayConfirm(null)}>Отмена</button>
+          <button style={{ flex: 1, minWidth: 0, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 16, cursor: 'pointer', whiteSpace: 'nowrap' }} onClick={() => setPayConfirm(null)}>Отмена</button>
         </div>
       </Modal>
       <Modal open={!!receiptFor} title="Расписка" onClose={() => setReceiptFor(null)}>
