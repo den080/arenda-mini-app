@@ -175,9 +175,6 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
           const em = String(session.user?.email || '').toLowerCase()
           if (em) {
             localStorage.setItem('roomio_bound_email', em)
-            if (user?.id) {
-              supabase.from('users').update({ email: em }).eq('id', user.id).then(() => {}, () => {})
-            }
             if (tgId || tgPhone) {
               supabase.auth.updateUser({ data: { telegram_id: tgId || undefined, phone: tgPhone || undefined } }).then(() => {}, () => {})
             }
@@ -219,9 +216,6 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       localStorage.setItem('roomio_bound_email', em)
       if (tgId || tgPhone) {
         try { await supabase.auth.updateUser({ data: { telegram_id: tgId || undefined, phone: tgPhone || undefined } }) } catch {}
-      }
-      if (user?.id) {
-        await supabase.from('users').update({ email: em }).eq('id', user.id).then(() => {}, () => {})
       }
       setHasSession(true)
       showToast('✅ Вход выполнен')
