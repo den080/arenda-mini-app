@@ -14,7 +14,7 @@ import TeamManager from '../components/TeamManager'
 import ContactsEditor from '../components/ContactsEditor'
 import { ensureNextPayment } from '../lib/nextPayment'
 import { setAnalyticsUser, trackOpen, trackScreen } from '../lib/analytics'
-import { import { BottomNav, Modal, PromptNumber, Progress, ConfirmDelete, showToast, SkeletonList, PullToRefresh, Hint } from '../components/ui'
+import { BottomNav, Modal, PromptNumber, Progress, ConfirmDelete, showToast, SkeletonList, PullToRefresh, Hint } from '../components/ui'
 import { T } from '../theme'
 import type { Object as PropertyObject, Contract, NotificationLog, User } from '../types/database'
 
@@ -1026,12 +1026,6 @@ export function LandlordDashboard() {
                       <button style={T.btn} onClick={() => { setPayConfirmOk(false); setPayConfirm({ kind: 'full' }) }}>Получил оплату за {pcMonth} вне приложения</button>
                     )}
                     <Hint text={`До оплаты ещё ${daysToPay} дн. Если деньги уже получены досрочно — отметьте это здесь.`} />
-                      <div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0' }}>
-                        <button style={actBlue} onClick={() => setEarlyPayOpen(true)}>Отметить оплату вне приложения (досрочно)</button>
-                      </div>
-                    ) : (
-                      <button style={T.btn} onClick={() => { setPayConfirmOk(false); setPayConfirm({ kind: 'full' }) }}>Получил оплату за {pcMonth} вне приложения</button>
-                    )}
                   </>
                 )
               )}
