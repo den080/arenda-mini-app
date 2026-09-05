@@ -1051,6 +1051,9 @@ export function LandlordDashboard() {
               <div style={{ ...T.row, justifyContent: 'center' }}>
                 <button style={actBlue} onClick={() => saveUtilitiesNext(utilInputs[current.id] ?? String(current.utilitiesAmount || 0))}>Включить в платёж</button>
               </div>
+                {utilSaved && (
+                <div style={{ ...T.noteGreen, margin: '8px 0 0' }}>{utilSaved}</div>
+              )}
               <Hint text="Введённая сумма записывается как есть (заменяет предыдущую), добавляется к платежу отдельно, не растёт при просрочке и не входит в штрафы." />
             </div>
           )}
