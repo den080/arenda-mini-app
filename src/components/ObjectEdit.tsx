@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { ensureNextPayment } from '../lib/nextPayment'
 import { T } from '../theme'
@@ -37,6 +37,19 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
   const [eRemind, setERemind] = useState('')
   const [eDetails, setEDetails] = useState<PayDetail[]>([])
   const [editDetailsErr, setEditDetailsErr] = useState<string | null>(null)
+  const [showBar, setShowBar] = useState(false)
+  const barAnchor = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    function onScroll() {
+      const el = barAnchor.current
+      if (!el) { setShowBar(false); return }
+      setShowBar(el.getBoundingClientRect().top < 0)
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    onScroll()
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [ready])
 
   useEffect(() => {
     (async () => {
@@ -216,14 +229,18 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
       style={T.card}
       onKeyDown={(e: any) => { if (e.key === 'Enter' && e.target && (e.target as any).blur) (e.target as any).blur() }}
     >
-      <div style={{ position: 'sticky', top: 0, zIndex: 50, background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(60,60,67,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '10px 0', margin: '0 0 10px' }}>
-        <span style={{ fontSize: 13, color: '#8e8e93', textTransform: 'uppercase', letterSpacing: 0.3 }}>Объект и договор</span>
-        <button
-          style={{ border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, borderRadius: 10, padding: '10px 16px', cursor: 'pointer', flexShrink: 0 }}
-          onClick={() => { try { (document.activeElement as any)?.blur?.() } catch {} saveEdit() }}
-        >Сохранить изменения</button>
-      </div>
-      {locked && (
+      <div ref={barAnchor} />
+      <div style={T.h2}>Объект и договор</div>
+      {showBar && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 120, background: 'rgba(242,242,247,0.95)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(60,60,67,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '10px 16px', boxSizing: 'border-box' }}>
+          <span style={{ fontSize: 15, fontWeight: 600, color: '#8e8e93' }}>Объект и договор</span>
+          <button
+            style={{ border: 'none', background: 'transparent', color: '#0071e3', fontWeight: 600, fontSize: 17, cursor: 'pointer', padding: 4, flexShrink: 0 }}
+            onClick={() => { try { (document.activeElement as any)?.blur?.() } catch {} saveEdit() }}
+          >Сохранить изменения</button>
+        </div>
+      )}
+      && (
         <div style={T.note}>Платежи начались — ключевые условия (аренда, депозит, день оплаты, дата начала, штрафы) защищены от изменений. Остальные поля можно редактировать.</div>
       )}
       <div style={S.lab}>Адрес</div>
