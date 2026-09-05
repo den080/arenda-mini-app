@@ -534,7 +534,15 @@ export function LandlordDashboard() {
     showToast('✅ Депозит обновлён')
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
-
+  async function setPoolShare(share: boolean) {
+    if (!current) return
+    const teamToSet = share ? ((pools.find((p: any) => p.id !== 'own') || null)?.id || null) : null
+    if (share && !teamToSet) { showToast('Сначала создайте пул'); return }
+    const { error } = await supabase.from('objects').update({ team_id: teamToSet }).eq('id', current.id)
+    if (error) { showToast('Ошибка: ' + error.message); return }
+    showToast(share ? '✅ Объект добавлен в пул — команда его видит' : '✅ Объект убран из пула — виден только вам')
+    window.dispatchEvent(new Event('rentflow-refresh'))
+  }
   function openAdjust(id: string, zero: boolean) {
     const row = (current?.frozenRows || []).find((f: any) => f.id === id)
     setFzAmount(row ? String(row.amount) : '')
@@ -1148,6 +1156,17 @@ export function LandlordDashboard() {
             ))}
             {contract.payment_method === 'both' && <div style={T.tiny}>Способ оплаты выбирает арендатор: карта или наличные.</div>}
           </div>
+                    {contract && current.landlord_id === user?.id && (
+            <div style={T.card}>
+              <div style={T.h2}>Совместный доступ к объекту</div>
+              <div style={{ ...T.small, margin: '0 0 8px' }}>
+                {(current as any).team_id ? 'Сейчас объект виден команде в пуле.' : 'Сейчас объект виден только вам.'}
+              </div>
+              <button style={actBlue} onClick={() => setPoolShare(!(current as any).team_id)}>
+                {(current as any).team_id ? 'Убрать из пула' : 'Поделиться в пуле'}
+              </button>
+            </div>
+          )}
           <div style={T.card}>
             <div style={T.h2}>Замороженные штрафы</div>
             {(current.frozenRows || []).length === 0 && <div style={{ ...T.small, margin: '8px 0' }}>Замороженных штрафов нет</div>}
