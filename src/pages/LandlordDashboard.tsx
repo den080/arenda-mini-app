@@ -329,6 +329,13 @@ export function LandlordDashboard() {
   }, [user])
 
   const arch = archived.find(a => a.id === archiveId) || null
+    const seenPoolKeys = new Set<string>()
+  const poolsView = pools.filter((p: any) => {
+    const k = `${p.id}|${(p.name || '').toLowerCase()}`
+    if (seenPoolKeys.has(k)) return false
+    seenPoolKeys.add(k)
+    return true
+  })
   const current = objects.find(o => o.id === openId) || null
 
   useEffect(() => {
@@ -790,9 +797,9 @@ export function LandlordDashboard() {
       <PullToRefresh onRefresh={async () => { window.dispatchEvent(new Event('rentflow-refresh')); await new Promise(r => setTimeout(r, 600)) }}>
         <div style={{ ...T.page, paddingBottom: 40 }}>
           <h1 style={T.h1}>Мои объекты</h1>
-          {pools.length > 1 && (
+           {showTeam && poolsView.length > 1 && (
             <div style={{ display: 'flex', gap: 6, overflowX: 'auto', padding: '0 0 10px' }}>
-              {pools.map((p: any) => (
+              {poolsView.map((p: any) => (
                 <button
                   key={p.id}
                   onClick={() => selectPool(p.id)}
