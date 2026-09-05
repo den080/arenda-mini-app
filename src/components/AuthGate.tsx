@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useTelegramUser } from '../hooks/useTelegramUser'
 import { T } from '../theme'
-import { Modal, showToast, Toaster } from './ui'
+import { Modal, showToast, Toaster, Hint } from './ui'
 
 const inp: React.CSSProperties = { width: '100%', padding: '12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 17, boxSizing: 'border-box', outline: 'none' }
 const blueBtn: React.CSSProperties = { width: '100%', padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 17, cursor: 'pointer', boxSizing: 'border-box' }
@@ -19,7 +19,7 @@ function MockYooKassa({ title, amount, onPay }: { title: string; amount: string;
       <div style={{ fontSize: 17, fontWeight: 700, color: '#1d1d1f', marginBottom: 8 }}>{title} · {amount}</div>
       <div style={{ fontFamily: 'monospace', fontSize: 15, background: 'rgba(120,120,128,0.08)', borderRadius: 8, padding: '8px 10px', marginBottom: 8, color: '#1d1d1f' }}>1111 1111 1111 1111</div>
       <button style={blueBtn} onClick={onPay}>Оплатить {amount}</button>
-      <div style={{ fontSize: 13, color: '#8e8e93', marginTop: 6 }}>Так в реальном приложении арендодатель покупает подписку Pro. Платежи по аренде через платформу не проходят.</div>
+      <Hint text="Так в реальном приложении арендодатель покупает подписку Pro. Платежи по аренде через платформу не проходят." />
     </div>
   )
 }
@@ -67,7 +67,7 @@ function DemoView({ onExit }: { onExit: () => void }) {
                   <div style={{ fontFamily: 'monospace', fontSize: 15, background: 'rgba(120,120,128,0.08)', borderRadius: 8, padding: '8px 10px', marginTop: 6, color: '#1d1d1f' }}>2202 2063 1292 7213</div>
                 </div>
                 <button style={blueBtn} onClick={() => setRentPaid(true)}>Я оплатил — уведомить арендодателя</button>
-                <div style={{ fontSize: 13, color: '#8e8e93', marginTop: 6 }}>Аренда оплачивается напрямую арендодателю: карта, СБП или наличные. Сервис хранит учёт, подтверждения и расписки.</div>
+                <Hint text="Аренда оплачивается напрямую арендодателю: карта, СБП или наличные. Сервис хранит учёт, подтверждения и расписки." />
               </>
             )}
             {rentPaid && !rentConfirmed && <div style={T.note}>Оплата заявлена — арендодатель подтвердит получение. Переключитесь на роль «Арендодатель».</div>}
@@ -77,7 +77,7 @@ function DemoView({ onExit }: { onExit: () => void }) {
             <div style={T.h2}>Показания за сентябрь</div>
             <div style={dRow}><span style={{ fontSize: 17 }}>Холодная вода · ХВ-034944</span><span style={{ fontSize: 15, color: '#8e8e93' }}>прошлые: 322</span></div>
             <div style={{ ...dRow, borderBottom: 'none' }}><span style={{ fontSize: 17 }}>Горячая вода · ГВ-724271</span><span style={{ fontSize: 15, color: '#8e8e93' }}>прошлые: 24</span></div>
-            <div style={T.tiny}>Не передать к дедлайну — начислится замороженный штраф (учтётся только при съезде из депозита).</div>
+            <Hint text="Не передать к дедлайну — начислится замороженный штраф (учтётся только при съезде из депозита)." />
           </div>
         </>
       ) : (
@@ -106,11 +106,11 @@ function DemoView({ onExit }: { onExit: () => void }) {
           <div style={T.card}>
             <div style={T.h2}>Замороженные штрафы</div>
             <div style={dRow}><span style={{ fontSize: 17 }}>август · просрочка показаний</span><span style={{ fontSize: 17, fontWeight: 600 }}>1 300 ₽</span></div>
-            <div style={T.tiny}>Штраф не давит сразу: учитывается только при съезде из депозита. Каждое изменение — с причиной и датой.</div>
+            <Hint text="Штраф не давит сразу: учитывается только при съезде из депозита. Каждое изменение — с причиной и датой." />
           </div>
           <div style={T.card}>
             <div style={T.h2}>Тариф Pro · 299 ₽/мес</div>
-            <div style={{ ...T.small, margin: '0 0 4px' }}>Массовое подтверждение оплат, совместный доступ, пулы аренды. Единственный платёж в сервисе — подписка через ЮKassa; выдаётся автоматически.</div>
+            <div style={{ ...T.small, margin: '0 0 4px' }}>Массовое подтверждение оплат, совместный доступ, пулы аренды.</div>
             {!proDone && !proOpen && <button style={blueBtn} onClick={() => setProOpen(true)}>Купить Pro через ЮKassa</button>}
             {proOpen && !proDone && <MockYooKassa title="Подписка Pro" amount="299 ₽" onPay={() => { setProDone(true); setProOpen(false) }} />}
             {proDone && <div style={T.noteGreen}>Оплата успешна — подписка Pro выдана автоматически на 30 дней.</div>}
@@ -267,9 +267,11 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         ) : stage === 'email' ? (
           <>
             <div style={{ fontSize: 22, fontWeight: 800, marginBottom: 6 }}>Вход в Roomio</div>
-            <div style={{ ...T.small, margin: '0 0 14px' }}>
-              Код придёт на e-mail один раз; аккаунт привяжется к профилю, дальше входы без кода. Если вы уже пользуетесь приложением в Telegram — входите с той же почтой, все данные подтянутся.
+            <div style={{ ...T.small, margin: '0 0 8px' }}>
+              Код придёт на e-mail один раз, дальше входы — без кода.
             </div>
+            <Hint text="Если вы уже пользуетесь приложением в Telegram — входите с той же почтой, все данные подтянутся." />
+            <div style={{ height: 10 }} />
             <input
               style={inp}
               value={email}
