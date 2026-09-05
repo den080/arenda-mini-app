@@ -4,7 +4,7 @@ import { useTelegramUser } from '../hooks/useTelegramUser'
 import CashNegotiation from '../components/CashNegotiation'
 import BillReview from '../components/BillReview'
 import Chat from '../components/Chat'
-import { BottomNav, showToast, SkeletonList, PullToRefresh } from '../components/ui'
+import { BottomNav, showToast, SkeletonList, PullToRefresh, Hint } from '../components/ui'
 import { T } from '../theme'
 
 const TABS = [
@@ -239,7 +239,7 @@ export function TenantDashboard() {
               <input style={inp} value={claimPhone} onChange={(e) => setClaimPhone(formatPhone(e.target.value))} placeholder="+7 ___ ___-__-__" inputMode="tel" />
               {claimMsg && <div style={{ ...T.tiny, margin: '8px 0 0', color: '#c00' }}>{claimMsg}</div>}
               <button style={T.btn} disabled={claimBusy} onClick={claim}>{claimBusy ? 'Проверка…' : 'Привязать договор'}</button>
-              <div style={T.tiny}>Если договора ещё нет — попросите арендодателя добавить вас по телефону, затем введите его здесь.</div>
+              <Hint text="Если договора ещё нет — попросите арендодателя добавить вас по телефону, затем введите его здесь." />
             </div>
           )}
           {contracts.filter((c: any) => c.status === 'active').map((c: any) => (
@@ -523,7 +523,7 @@ export function TenantDashboard() {
                       {f.adjusted_note && <div style={T.tiny}>{f.adjusted_note}</div>}
                     </div>
                   ))}
-                  <div style={T.tiny}>Записи хранятся до конца договора</div>
+                  <Hint text="Записи хранятся до конца договора: каждое изменение — с примечанием и датой." />
                 </div>
               )}
             </>

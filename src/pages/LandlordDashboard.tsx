@@ -14,7 +14,7 @@ import TeamManager from '../components/TeamManager'
 import ContactsEditor from '../components/ContactsEditor'
 import { ensureNextPayment } from '../lib/nextPayment'
 import { setAnalyticsUser, trackOpen, trackScreen } from '../lib/analytics'
-import { BottomNav, Modal, PromptNumber, Progress, ConfirmDelete, showToast, SkeletonList, PullToRefresh } from '../components/ui'
+import { BottomNav, Modal, PromptNumber, Progress, ConfirmDelete, showToast, SkeletonList, PullToRefresh, Hint } from '../components/ui'
 import { T } from '../theme'
 import type { Object as PropertyObject, Contract, NotificationLog, User } from '../types/database'
 
@@ -981,12 +981,12 @@ export function LandlordDashboard() {
               {!current.payment?.card_claimed && !current.hasConfirmedCashMeeting && (
                 daysToPay <= 7 || pcPaid > 0 ? (
                   <>
-                    <div style={{ ...T.tiny, margin: '10px 0 6px' }}>Арендатор не отмечал оплату в приложении? Если деньги получены наличными или переводом напрямую — подтвердите здесь, заявка арендатора не нужна.</div>
+                    <Hint text="Арендатор не отмечал оплату в приложении? Если деньги получены наличными или переводом напрямую — подтвердите здесь, заявка арендатора не нужна." />
                     <button style={T.btn} onClick={() => { setPayConfirmOk(false); setPayConfirm({ kind: 'full' }) }}>{pcPaid > 0 ? `Подтвердить получение остатка за ${pcMonth} (${Math.max(0, pcSum - pcPaid).toFixed(0)} ₽)` : `Получил оплату за ${pcMonth} вне приложения`}</button>
                   </>
                 ) : (
                   <>
-                    <div style={{ ...T.tiny, margin: '10px 0 6px' }}>До оплаты ещё {daysToPay} дн. Если деньги уже получены досрочно — отметьте это здесь.</div>
+                    <Hint text={`До оплаты ещё ${daysToPay} дн. Если деньги уже получены досрочно — отметьте это здесь.`} />
                     {!earlyPayOpen ? (
                       <div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0' }}>
                         <button style={actBlue} onClick={() => setEarlyPayOpen(true)}>Отметить оплату вне приложения (досрочно)</button>
@@ -1007,8 +1007,8 @@ export function LandlordDashboard() {
               <div style={T.h2}>Ресурсы по квитанции</div>
               <div style={T.row}>
                 <span style={iosMuted}>Сумма по квитанции</span>
-                <input
-                  type="number"
+                 <input
+                  type="text"
                   value={utilInputs[current.id] ?? String(current.utilitiesAmount || '')}
                   onChange={(e) => setUtilInputs({ ...utilInputs, [current.id]: e.target.value })}
                   placeholder="0"
@@ -1019,7 +1019,7 @@ export function LandlordDashboard() {
               <div style={{ ...T.row, justifyContent: 'center' }}>
                 <button style={actBlue} onClick={() => saveUtilitiesNext(utilInputs[current.id] ?? String(current.utilitiesAmount || 0))}>Включить в платёж</button>
               </div>
-              <div style={{ ...T.tiny, margin: '0 0 10px' }}>Введённая сумма записывается как есть (заменяет предыдущую), добавляется к платежу отдельно, не растёт при просрочке и не входит в штрафы.</div>
+              <Hint text="Введённая сумма записывается как есть (заменяет предыдущую), добавляется к платежу отдельно, не растёт при просрочке и не входит в штрафы." />
             </div>
           )}
           {current.readingsMode === 'self' && contract && (
@@ -1154,7 +1154,7 @@ export function LandlordDashboard() {
                 </button>
               </div>
             ))}
-            {contract.payment_method === 'both' && <div style={T.tiny}>Способ оплаты выбирает арендатор: карта или наличные.</div>}
+            {contract.payment_method === 'both' && <Hint text="Способ оплаты выбирает арендатор: карта или наличные." />}
           </div>
                     {contract && current.landlord_id === user?.id && (
             <div style={T.card}>
@@ -1190,7 +1190,7 @@ export function LandlordDashboard() {
                   : <div style={{ ...T.small, color: '#ff3b30' }}>Сверх депозита долг: {((current.frozenTotal || 0) - deposit).toFixed(0)} ₽</div>)
                 : <div style={{ ...T.small, color: '#ff3b30' }}>Долг арендатора (депозита нет)</div>
             )}
-            <div style={T.tiny}>Записи не удаляются до конца договора; каждое изменение сохраняется с примечанием и датой.</div>
+            <Hint text="Записи не удаляются до конца договора; каждое изменение сохраняется с примечанием и датой." />
           </div>
           {contract.status === 'active' && (
             <>
