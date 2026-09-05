@@ -216,7 +216,13 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
       style={T.card}
       onKeyDown={(e: any) => { if (e.key === 'Enter' && e.target && (e.target as any).blur) (e.target as any).blur() }}
     >
-      <div style={T.h2}>Объект и договор</div>
+      <div style={{ position: 'sticky', top: 0, zIndex: 50, background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(60,60,67,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '10px 0', margin: '0 0 10px' }}>
+        <span style={{ fontSize: 13, color: '#8e8e93', textTransform: 'uppercase', letterSpacing: 0.3 }}>Объект и договор</span>
+        <button
+          style={{ border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, borderRadius: 10, padding: '10px 16px', cursor: 'pointer', flexShrink: 0 }}
+          onClick={() => { try { (document.activeElement as any)?.blur?.() } catch {} saveEdit() }}
+        >Сохранить изменения</button>
+      </div>
       {locked && (
         <div style={T.note}>Платежи начались — ключевые условия (аренда, депозит, день оплаты, дата начала, штрафы) защищены от изменений. Остальные поля можно редактировать.</div>
       )}
@@ -268,13 +274,7 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
       )}
       <div style={S.lab}>Напоминать за сколько дней</div>
       <input style={S.inp} value={eRemind} onChange={(e) => setERemind(e.target.value)} inputMode="numeric" />
-      <div style={{ padding: '12px 0 4px' }}>
-        <button
-          style={{ width: '100%', padding: 13, borderRadius: 12, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 16, cursor: 'pointer' }}
-          onClick={() => { try { (document.activeElement as any)?.blur?.() } catch {} saveEdit() }}
-        >Сохранить изменения</button>
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0 8px' }}>
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 4px' }}>
         <button style={S.red} onClick={() => setDelOpen(true)}>Удалить объект</button>
       </div>
       <div style={{ borderTop: '1px solid rgba(60,60,67,0.12)', paddingTop: 12, marginTop: 4 }}>
