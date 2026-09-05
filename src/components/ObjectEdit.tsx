@@ -269,6 +269,7 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
       <div style={S.lab}>Напоминать за сколько дней</div>
       <input style={S.inp} value={eRemind} onChange={(e) => setERemind(e.target.value)} inputMode="numeric" />
       <div style={S.btnRow}>
+        <button style={S.blue} onClick={saveEdit}>Сохранить</button>
         <button style={S.red} onClick={() => setDelOpen(true)}>Удалить объект</button>
       </div>
       <div style={{ borderTop: '1px solid rgba(60,60,67,0.12)', paddingTop: 12, marginTop: 4 }}>
