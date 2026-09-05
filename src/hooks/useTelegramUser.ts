@@ -47,11 +47,7 @@ export function useTelegramUser() {
       }
 
       let row: any = null
-      try {
-        const { data: prof } = await supabase.rpc('profile_resolve', { p_email: email, p_tg: tgId })
-        if (prof && (prof as any).id) row = prof as any
-      } catch {}
-      if (!row && email) {
+      if (email) {
         const r = await supabase.from('users').select('*').eq('email', email).limit(1).maybeSingle()
         row = r.data || null
       }
@@ -90,6 +86,11 @@ export function useTelegramUser() {
 
   useEffect(() => {
     resolve()
+  }, [resolve])
+
+  useEffect(() => {
+    const { data: sub } = supabase.auth.onAuthStateChange(() => { resolve() })
+    return () => { sub?.subscription?.unsubscribe() }
   }, [resolve])
 
   return { user, loading, refresh: resolve }

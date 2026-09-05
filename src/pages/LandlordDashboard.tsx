@@ -702,7 +702,9 @@ export function LandlordDashboard() {
   const lastConfirmedIsFirst = !!(contract && current?.payment && current.payment.confirmed_by_landlord && isFirstPeriod(current.payment.period, sd))
   const showUtilities = !!(contract && current?.paymentId && current.readingsMode !== 'self' && (openPay ? !firstMonthCurrent : lastConfirmedIsFirst))
   const tenantChoseCash = contract && (contract.payment_method === 'cash' || (contract.payment_method === 'both' && (contract as any).tenant_pay_method === 'cash'))
-  const objHistory = history.filter(h => h.objId === current?.id).slice(0, 10)
+  const objHistoryRaw = history.filter(h => h.objId === current?.id)
+  const firstOpenPeriod = objHistoryRaw.filter((h: any) => !h.confirmed_by_landlord).map((h: any) => h.period).sort()[0]
+  const objHistory = objHistoryRaw.filter((h: any) => !(!h.confirmed_by_landlord && firstOpenPeriod && h.period > firstOpenPeriod)).slice(0, 10)
   const pcPay = current?.payment
   const pcMonth = pcPay ? new Date(pcPay.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : ''
   const pcSum = pcPay ? Number(pcPay.base_amount || 0) + Number(pcPay.penalty_amount || 0) + Number(pcPay.utilities_amount || 0) : 0
@@ -1050,7 +1052,9 @@ export function LandlordDashboard() {
                 />
               </div>
               <div style={{ ...T.row, justifyContent: 'center' }}>
-                <button style={actBlue} onClick={() => saveUtilitiesNext(utilInputs[current.id] ?? String(current.utilitiesAmount || 0))}>Включить в платёж</button>
+                 <button style={actBlue} onClick={() => saveUtilitiesNext(utilInputs[current.id] ?? String(current.utilitiesAmount || 0))}>
+                  {Number(current.payment?.utilities_amount || 0) > 0 ? 'Обновить сумму в текущем платеже' : 'Включить в платёж'}
+                </button>
               </div>
                 {utilSaved && (
                 <div style={{ ...T.noteGreen, margin: '8px 0 0' }}>{utilSaved}</div>

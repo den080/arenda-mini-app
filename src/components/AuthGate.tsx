@@ -138,6 +138,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const [consent, setConsent] = useState(false)
   const [policyOpen, setPolicyOpen] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [codeSent, setCodeSent] = useState<string | null>(null)
   const [demo, setDemo] = useState<boolean>(() => {
     try { return new URLSearchParams(window.location.search).has('demo') } catch { return false }
   })
@@ -197,8 +198,8 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     try {
       const { error } = await supabase.auth.signInWithOtp({ email: email.trim() })
       if (error) { showToast(`Ошибка ${error.status ?? ''}: ${error.message || 'без сообщения'}`); return }
+      setCodeSent(`Код отправлен на ${email.trim()}. Проверьте также папку «Спам».`)
       setStage('code')
-      showToast('Код отправлен на ' + email.trim())
     } finally { setBusy(false) }
   }
 
@@ -293,6 +294,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
           </>
         ) : (
           <>
+            {codeSent && <div style={{ ...T.noteGreen, margin: '0 0 10px' }}>{codeSent}</div>}
             <input style={inp} value={code} onChange={(e) => setCode(e.target.value)} placeholder="Код из письма" inputMode="numeric" autoComplete="off" />
             <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
               <button disabled={busy} onClick={verify} style={{ flex: 1, padding: 13, borderRadius: 12, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 17, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>

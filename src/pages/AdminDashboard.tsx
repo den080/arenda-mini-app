@@ -365,7 +365,7 @@ export function AdminDashboard() {
     <div style={{ ...T.page, paddingBottom: 60 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
         <h1 style={{ ...T.h1, margin: 0 }}>Админка</h1>
-        <button onClick={logout} style={{ ...red, fontSize: 15, fontWeight: 600 }}>Выйти</button>
+        <button style={iosRed} onClick={() => { if (window.confirm('Выйти из админки?')) { ...текущее действие... } }}>Выйти</button>
       </div>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', padding: '10px 0' }}>
         {TABS.map(t => (
