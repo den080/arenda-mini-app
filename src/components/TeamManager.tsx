@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useTelegramUser } from '../hooks/useTelegramUser'
 import { useTeam } from '../hooks/useTeam'
 import { T } from '../theme'
-import { showToast, ConfirmDelete } from './ui'
+import { showToast, ConfirmDelete, Hint } from './ui'
 
 const ROLE_LABEL: Record<string, string> = { owner: 'Владелец', manager: 'Менеджер', viewer: 'Наблюдатель' }
 const iosBlue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: 4, flexShrink: 0 }
@@ -105,10 +105,10 @@ export function TeamManager() {
             <option value="viewer">Наблюдатель</option>
           </select>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 10px' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 4px' }}>
           <button style={iosBlue} disabled={busy} onClick={invite}>Выдать доступ</button>
         </div>
-        <div style={{ ...T.tiny, margin: '0 0 10px' }}>Сотрудник открывает бота со своего телефона: первый раз входит по номеру, дальше — автоматически. Менеджер работает как вы, но без выдачи доступа и удалений; наблюдатель — только просмотр.</div>
+        <Hint text="Сотрудник открывает бота со своего телефона: первый раз входит по номеру, дальше — автоматически. Менеджер работает как вы, но без выдачи доступа и удалений; наблюдатель — только просмотр." />
         <ConfirmDelete
           open={!!del}
           text="Сотрудник сразу потеряет доступ к пулу."
