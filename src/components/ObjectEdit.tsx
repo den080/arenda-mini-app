@@ -21,6 +21,7 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
   const [cPayDay, setCPayDay] = useState(1)
   const [eAddress, setEAddress] = useState('')
   const [eNotes, setENotes] = useState('')
+  const [eDocName, setEDocName] = useState('')
   const [eName, setEName] = useState('')
   const [ePhone, setEPhone] = useState('')
   const [eStartDate, setEStartDate] = useState('')
@@ -43,6 +44,7 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
       if (!o) return
       setEAddress(o.address || '')
       setENotes(o.notes || '')
+      setEDocName((o as any).landlord_doc_name || '')
       const { data: contract } = await supabase.from('contracts').select('*').eq('object_id', objectId).eq('status', 'active').maybeSingle()
       if (contract) {
         setEditContractId(contract.id)
@@ -143,7 +145,7 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
         if (d.type === 'card' ? dg.length !== 16 : dg.length !== 11) { showToast('Проверьте номер карты или СБП в способах оплаты'); return }
       }
     }
-    const { error: oe } = await supabase.from('objects').update({ address: eAddress, notes: eNotes || null }).eq('id', objectId)
+    const { error: oe } = await supabase.from('objects').update({ address: eAddress, notes: eNotes || null, landlord_doc_name: eDocName.trim() || null }).eq('id', objectId)
     if (oe) { showToast('Ошибка: ' + oe.message); return }
     if (editContractId) {
       const firstCard = eDetails.find(d => d.type === 'card')
@@ -209,7 +211,6 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
   }
 
   if (!ready) return null
-
   return (
     <div style={T.card}>
       <div style={T.h2}>Объект и договор</div>
@@ -218,6 +219,8 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
       )}
       <div style={S.lab}>Адрес</div>
       <input style={S.inp} value={eAddress} onChange={(e) => setEAddress(e.target.value)} />
+      <div style={S.lab}>Арендодатель (ФИО как в договоре)</div>
+      <input style={S.inp} value={eDocName} onChange={(e) => setEDocName(e.target.value)} placeholder="Фамилия Имя Отчество" />
       <div style={S.lab}>Заметка</div>
       <input style={S.inp} value={eNotes} onChange={(e) => setENotes(e.target.value)} />
       <div style={S.lab}>Арендатор (имя)</div>
