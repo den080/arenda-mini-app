@@ -227,3 +227,18 @@ if (typeof document !== 'undefined' && !document.getElementById('rf-anim-css')) 
   `
   document.head.appendChild(style)
 }
+export function Hint({ text }: { text: string }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div style={{ margin: '6px 0 0' }}>
+      <button
+        onClick={() => setOpen(!open)}
+        style={{ border: 'none', background: 'transparent', color: '#8e8e93', fontSize: 13, cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 4 }}
+      >
+        <span style={{ display: 'inline-block', transform: open ? 'rotate(90deg)' : 'none' }}>›</span>
+        {open ? 'Скрыть' : 'Подробнее'}
+      </button>
+      {open && <div style={{ fontSize: 13, color: '#8e8e93', lineHeight: 1.45, marginTop: 4 }}>{text}</div>}
+    </div>
+  )
+}
