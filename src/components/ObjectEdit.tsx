@@ -212,19 +212,22 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
 
   if (!ready) return null
   return (
-    <div style={T.card}>
+    <div
+      style={{ ...T.card, marginBottom: 76 }}
+      onKeyDown={(e: any) => { if (e.key === 'Enter' && e.target && (e.target as any).blur) (e.target as any).blur() }}
+    >
       <div style={T.h2}>Объект и договор</div>
       {locked && (
         <div style={T.note}>Платежи начались — ключевые условия (аренда, депозит, день оплаты, дата начала, штрафы) защищены от изменений. Остальные поля можно редактировать.</div>
       )}
       <div style={S.lab}>Адрес</div>
       <input style={S.inp} value={eAddress} onChange={(e) => setEAddress(e.target.value)} />
-      <div style={S.lab}>Арендодатель (ФИО как в договоре)</div>
-      <input style={S.inp} value={eDocName} onChange={(e) => setEDocName(e.target.value)} placeholder="Фамилия Имя Отчество" />
+      <div style={S.lab}>Арендодатель (имя для документов)</div>
+      <input style={S.inp} value={eDocName} onChange={(e) => setEDocName(e.target.value)} placeholder="Иванов Иван Иванович" />
       <div style={S.lab}>Заметка</div>
       <input style={S.inp} value={eNotes} onChange={(e) => setENotes(e.target.value)} />
       <div style={S.lab}>Арендатор (имя)</div>
-      <input style={S.inp} value={eName} onChange={(e) => setEName(e.target.value)} />
+      <input style={S.inp} value={eName} onChange={(e) => setEName(e.target.value)} placeholder="Имя Фамилия" />
       <div style={S.lab}>Телефон арендатора</div>
       <input style={S.inp} value={ePhone} onChange={(e) => setEPhone(formatPhoneInput(e.target.value))} inputMode="tel" />
       <div style={S.lab}>Начало договора</div>
@@ -266,7 +269,6 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
       <div style={S.lab}>Напоминать за сколько дней</div>
       <input style={S.inp} value={eRemind} onChange={(e) => setERemind(e.target.value)} inputMode="numeric" />
       <div style={S.btnRow}>
-        <button style={S.blue} onClick={saveEdit}>Сохранить</button>
         <button style={S.red} onClick={() => setDelOpen(true)}>Удалить объект</button>
       </div>
       <div style={{ borderTop: '1px solid rgba(60,60,67,0.12)', paddingTop: 12, marginTop: 4 }}>
@@ -274,6 +276,12 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
         <div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0 8px' }}>
           <button style={S.blue} onClick={() => { setRepairOk(false); setRepairOpen(true) }}>Выровнять историю старых платежей</button>
         </div>
+      </div>
+      <div style={{ position: 'fixed', left: 0, right: 0, bottom: 'calc(50px + env(safe-area-inset-bottom))', zIndex: 150, background: 'rgba(249,249,251,0.95)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderTop: '1px solid rgba(60,60,67,0.12)', padding: '8px 16px' }}>
+        <button
+          style={{ width: '100%', padding: 13, borderRadius: 12, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 16, cursor: 'pointer' }}
+          onClick={() => { try { (document.activeElement as any)?.blur?.() } catch {} saveEdit() }}
+        >Сохранить изменения</button>
       </div>
       <Modal open={repairOpen} title="Выровнять историю" onClose={() => setRepairOpen(false)}>
         <div style={{ fontSize: 14, color: '#555', marginBottom: 12 }}>
