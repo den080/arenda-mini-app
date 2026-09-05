@@ -5,16 +5,16 @@ import { T } from '../theme'
 import { Modal, showToast, Toaster, Hint } from './ui'
 
 const inp: React.CSSProperties = { width: '100%', padding: '12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 17, boxSizing: 'border-box', outline: 'none' }
-const blueBtn: React.CSSProperties = { width: '100%', padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 17, cursor: 'pointer', boxSizing: 'border-box' }
+const blueBtn: React.CSSProperties = { width: '100%', padding: 13, borderRadius: 12, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 17, cursor: 'pointer', boxSizing: 'border-box', margin: '10px 0 0' }
 const demoBtn: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: 4 }
-const dRow: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, padding: '8px 0', borderBottom: '1px solid rgba(60,60,67,0.12)' }
+const dRow: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, padding: '10px 0', borderBottom: '1px solid rgba(60,60,67,0.12)' }
 
 const POLICY = `ПОЛИТИКА КОНФИДЕНЦИАЛЬНОСТИ (кратко) Оператор: владелец сервиса Roomio (самозанятый, РФ). Состав данных: имя, номер телефона, e-mail, адреса объектов, суммы аренды и депозитов, показания счётчиков, история платежей и действий. Цели: организация расчётов, уведомления, поддержка работы сервиса. Хранение: защищённая облачная база; доступ — только вы, ваш контрагент по договору и владелец сервиса для поддержки. Передача третьим лицам: не осуществляется, кроме случаев, требуемых законом. Срок: до удаления аккаунта или договора. Ваши права: запросить, изменить, удалить данные — через владельца сервиса.`
 
 // Тестовое окно ЮKassa — ТОЛЬКО для покупки подписки Pro
 function MockYooKassa({ title, amount, onPay }: { title: string; amount: string; onPay: () => void }) {
   return (
-    <div style={{ border: '1px solid #ddd', borderRadius: 12, padding: 12, margin: '10px 0' }}>
+    <div style={{ border: '1px solid #e3e3e8', borderRadius: 12, padding: 12, margin: '12px 0 4px' }}>
       <div style={{ fontSize: 13, color: '#8e8e93', marginBottom: 6 }}>ЮKassa · окно оплаты (демо)</div>
       <div style={{ fontSize: 17, fontWeight: 700, color: '#1d1d1f', marginBottom: 8 }}>{title} · {amount}</div>
       <div style={{ fontFamily: 'monospace', fontSize: 15, background: 'rgba(120,120,128,0.08)', borderRadius: 8, padding: '8px 10px', marginBottom: 8, color: '#1d1d1f' }}>1111 1111 1111 1111</div>
@@ -38,11 +38,11 @@ function DemoView({ onExit }: { onExit: () => void }) {
   })
   return (
     <div style={{ ...T.page, maxWidth: 480, margin: '0 auto', paddingBottom: 40 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, background: 'rgba(255,149,0,0.15)', borderRadius: 12, padding: '8px 12px', margin: '10px 0' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, background: 'rgba(255,149,0,0.15)', borderRadius: 12, padding: '10px 12px', margin: '8px 0 12px' }}>
         <span style={{ fontSize: 15, fontWeight: 600, color: '#b25000' }}>Демо: продукт и сценарии оплат без регистрации</span>
         <button onClick={onExit} style={{ border: 'none', background: '#fff', color: '#b25000', fontWeight: 700, fontSize: 13, borderRadius: 8, padding: '6px 10px', cursor: 'pointer', flexShrink: 0 }}>Выйти</button>
       </div>
-      <div style={{ display: 'flex', gap: 6, background: 'rgba(120,120,128,0.12)', borderRadius: 14, padding: 6, margin: '0 0 10px' }}>
+      <div style={{ display: 'flex', gap: 6, background: 'rgba(120,120,128,0.12)', borderRadius: 14, padding: 6, margin: '0 0 12px' }}>
         <button style={seg(role === 'tenant')} onClick={() => setRole('tenant')}>Арендатор</button>
         <button style={seg(role === 'landlord')} onClick={() => setRole('landlord')}>Арендодатель</button>
       </div>
@@ -61,7 +61,7 @@ function DemoView({ onExit }: { onExit: () => void }) {
             <div style={{ ...dRow, borderBottom: 'none' }}><span style={{ fontSize: 17, fontWeight: 700 }}>Итого</span><span style={{ fontSize: 17, fontWeight: 700 }}>71 200 ₽</span></div>
             {!rentPaid && (
               <>
-                <div style={{ border: '1px solid #ddd', borderRadius: 12, padding: 12, margin: '10px 0' }}>
+                <div style={{ border: '1px solid #e3e3e8', borderRadius: 12, padding: 12, margin: '12px 0 4px' }}>
                   <div style={{ fontSize: 13, color: '#8e8e93', marginBottom: 6 }}>Реквизиты арендодателя</div>
                   <div style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f' }}>Сбербанк</div>
                   <div style={{ fontFamily: 'monospace', fontSize: 15, background: 'rgba(120,120,128,0.08)', borderRadius: 8, padding: '8px 10px', marginTop: 6, color: '#1d1d1f' }}>2202 2063 1292 7213</div>
@@ -86,7 +86,7 @@ function DemoView({ onExit }: { onExit: () => void }) {
             <div style={T.h2}>Центр подтверждений (Pro)</div>
             {rentPaid && !rentConfirmed ? (
               <>
-                <label style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '8px 0' }}>
+                <label style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '10px 0' }}>
                   <input type="checkbox" defaultChecked style={{ width: 20, height: 20, flexShrink: 0 }} />
                   <span style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f' }}>Реутов, ул. Лесная д.11, кв.4 · сентябрь · 71 200 ₽ · заявил об оплате</span>
                 </label>
@@ -95,7 +95,7 @@ function DemoView({ onExit }: { onExit: () => void }) {
             ) : rentConfirmed ? (
               <div style={T.noteGreen}>Оплата подтверждена: арендатору расписка, создан следующий счёт.</div>
             ) : (
-              <div style={{ ...T.small, margin: '8px 0' }}>Заявленных оплат пока нет. Переключитесь на роль «Арендатор» и отметьте счёт оплаченным.</div>
+              <div style={{ ...T.small, margin: '8px 0 4px' }}>Заявленных оплат пока нет. Переключитесь на роль «Арендатор» и отметьте счёт оплаченным.</div>
             )}
           </div>
           <div style={T.card}>
@@ -105,7 +105,7 @@ function DemoView({ onExit }: { onExit: () => void }) {
           </div>
           <div style={T.card}>
             <div style={T.h2}>Замороженные штрафы</div>
-            <div style={dRow}><span style={{ fontSize: 17 }}>август · просрочка показаний</span><span style={{ fontSize: 17, fontWeight: 600 }}>1 300 ₽</span></div>
+            <div style={{ ...dRow, borderBottom: 'none' }}><span style={{ fontSize: 17 }}>август · просрочка показаний</span><span style={{ fontSize: 17, fontWeight: 600 }}>1 300 ₽</span></div>
             <Hint text="Штраф не давит сразу: учитывается только при съезде из депозита. Каждое изменение — с причиной и датой." />
           </div>
           <div style={T.card}>
@@ -120,7 +120,7 @@ function DemoView({ onExit }: { onExit: () => void }) {
 
       <div style={T.card}>
         <div style={{ fontSize: 17, fontWeight: 700, color: '#1d1d1f' }}>Понравилось?</div>
-        <div style={{ fontSize: 15, color: '#8e8e93', margin: '6px 0 10px' }}>Регистрация занимает минуту: e-mail + код. Тестовые данные заменятся вашими реальными объектами и договорами.</div>
+        <div style={{ fontSize: 15, color: '#8e8e93', margin: '6px 0 12px', lineHeight: 1.4 }}>Регистрация занимает минуту: e-mail + код. Тестовые данные заменятся вашими реальными объектами и договорами.</div>
         <button style={blueBtn} onClick={onExit}>Создать аккаунт</button>
       </div>
     </div>
@@ -256,10 +256,10 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
             <button onClick={() => setDemo(true)} style={{ ...blueBtn, marginBottom: 8 }}>
               Смотреть демо без входа
             </button>
-            <button onClick={() => setStage('email')} style={{ width: '100%', padding: 13, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 17, cursor: 'pointer' }}>
+            <button onClick={() => setStage('email')} style={{ width: '100%', padding: 13, borderRadius: 12, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 17, cursor: 'pointer', margin: '8px 0 0' }}>
               Войти по e-mail
             </button>
-            <div style={{ ...T.tiny, margin: '10px 0 0', textAlign: 'center' }}>
+            <div style={{ ...T.tiny, margin: '12px 0 0', textAlign: 'center' }}>
               В Telegram — открывается через бота @roomiorent_bot.{' '}
               <button style={{ ...demoBtn, fontSize: 13 }} onClick={() => setPolicyOpen(true)}>Политика конфиденциальности</button>
             </div>
@@ -271,7 +271,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
               Код придёт на e-mail один раз, дальше входы — без кода.
             </div>
             <Hint text="Если вы уже пользуетесь приложением в Telegram — входите с той же почтой, все данные подтянутся." />
-            <div style={{ height: 10 }} />
+            <div style={{ height: 12 }} />
             <input
               style={inp}
               value={email}
@@ -284,7 +284,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
               <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} style={{ marginTop: 2 }} />
               <span>Согласен на обработку персональных данных согласно <button style={{ border: 'none', background: 'transparent', color: '#0071e3', fontSize: 13, cursor: 'pointer', padding: 0 }} onClick={() => setPolicyOpen(true)}>политике конфиденциальности</button></span>
             </label>
-            <button disabled={busy} onClick={sendCode} style={{ width: '100%', padding: 13, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 17, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>
+            <button disabled={busy} onClick={sendCode} style={{ width: '100%', padding: 13, borderRadius: 12, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 17, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>
               {busy ? 'Отправка…' : 'Получить код'}
             </button>
             <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
@@ -295,14 +295,14 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
           <>
             <input style={inp} value={code} onChange={(e) => setCode(e.target.value)} placeholder="Код из письма" inputMode="numeric" autoComplete="off" />
             <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-              <button disabled={busy} onClick={verify} style={{ flex: 1, padding: 13, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 17, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>
+              <button disabled={busy} onClick={verify} style={{ flex: 1, padding: 13, borderRadius: 12, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 17, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>
                 {busy ? 'Проверка…' : 'Войти'}
               </button>
-              <button onClick={() => setStage('email')} style={{ flex: 1, padding: 13, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 17, cursor: 'pointer' }}>
+              <button onClick={() => setStage('email')} style={{ flex: 1, padding: 13, borderRadius: 12, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 17, cursor: 'pointer' }}>
                 Другой e-mail
               </button>
             </div>
-            <div style={{ ...T.tiny, margin: '10px 0 0', textAlign: 'center' }}>Письмо могло попасть в «Спам» — проверьте папку.</div>
+            <div style={{ ...T.tiny, margin: '12px 0 0', textAlign: 'center' }}>Письмо могло попасть в «Спам» — проверьте папку.</div>
           </>
         )}
       </div>
