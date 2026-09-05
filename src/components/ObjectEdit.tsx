@@ -222,12 +222,12 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
       )}
       <div style={S.lab}>Адрес</div>
       <input style={S.inp} value={eAddress} onChange={(e) => setEAddress(e.target.value)} />
-      <div style={S.lab}>Арендодатель (имя для документов)</div>
-      <input style={S.inp} value={eDocName} onChange={(e) => setEDocName(e.target.value)} placeholder="Иванов Иван Иванович" />
+      <div style={S.lab}>Арендодатель </div>
+      <input style={S.inp} value={eDocName} onChange={(e) => setEDocName(e.target.value)} placeholder="Фамилия Имя Отчество" />
       <div style={S.lab}>Заметка</div>
-      <input style={S.inp} value={eNotes} onChange={(e) => setENotes(e.target.value)} />
-      <div style={S.lab}>Арендатор (имя)</div>
-      <input style={S.inp} value={eName} onChange={(e) => setEName(e.target.value)} placeholder="Имя Фамилия" />
+      <input style={S.inp} value={eNotes} onChange={(e) => setENotes(e.target.value)} placeholder="по доверенности №" />
+      <div style={S.lab}>Арендатор </div>
+      <input style={S.inp} value={eName} onChange={(e) => setEName(e.target.value)} placeholder="Фамилия Имя Отчество" />
       <div style={S.lab}>Телефон арендатора</div>
       <input style={S.inp} value={ePhone} onChange={(e) => setEPhone(formatPhoneInput(e.target.value))} inputMode="tel" />
       <div style={S.lab}>Начало договора</div>
