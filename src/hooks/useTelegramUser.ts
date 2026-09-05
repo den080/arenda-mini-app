@@ -89,7 +89,9 @@ export function useTelegramUser() {
   }, [resolve])
 
   useEffect(() => {
-    const { data: sub } = supabase.auth.onAuthStateChange(() => { resolve() })
+    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') resolve()
+    })
     return () => { sub?.subscription?.unsubscribe() }
   }, [resolve])
 
