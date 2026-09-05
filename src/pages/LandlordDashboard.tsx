@@ -219,7 +219,8 @@ export function LandlordDashboard() {
           for (const p of allPays) allHistory.push({ ...p, objId: obj.id, address: obj.address })
           const fRows = fRowsBy[contract.id] || []
           const graceMonth = String(contract.created_at || '').slice(0, 7) === periodISO.slice(0, 7)
-          if (!graceMonth && readingsMode === 'manual' && contract.meter_deadline_day && contractStarted && (!startMonthISO || periodISO >= startMonthISO)) {
+          const retro = !!(contract.created_at && contract.start_date && String(contract.created_at).slice(0, 10) > String(contract.start_date).slice(0, 10))
+          if (!graceMonth && !retro && readingsMode === 'manual' && contract.meter_deadline_day && contractStarted && (!startMonthISO || periodISO >= startMonthISO)) {
             const rr = (rulesBy[contract.id] || []).find((r: any) => r.violation_type === 'readings_overdue')
             const rRate = rr ? Number(rr.rate) || 0 : 0
             if (rRate > 0) {

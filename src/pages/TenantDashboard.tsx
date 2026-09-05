@@ -340,8 +340,8 @@ export function TenantDashboard() {
                 <div style={T.card}>
                   <div style={T.h2}>Счёт за {monthLabel}</div>
                   <div style={T.row}><span style={iosMuted}>Аренда</span><span style={valMoney}>{Number(payment.base_amount || 0).toFixed(0)} ₽</span></div>
-                  {Number(payment.penalty_amount || 0) > 0 && <div style={T.row}><span style={iosMuted}>Штраф</span><span style={valMoney}>{Number(payment.penalty_amount).toFixed(0)} ₽</span></div>}
-                  {Number(payment.utilities_amount || 0) > 0 && <div style={T.row}><span style={iosMuted}>Ресурсы</span><span style={valMoney}>{Number(payment.utilities_amount).toFixed(0)} ₽</span></div>}
+                  <div style={T.row}><span style={iosMuted}>Коммунальные</span><span style={valMoney}>{Number(payment.utilities_amount || 0).toFixed(0)} ₽</span></div>
+                  <div style={T.row}><span style={iosMuted}>Штраф</span><span style={valMoney}>{Number(payment.penalty_amount || 0).toFixed(0)} ₽</span></div>
                   <div style={T.row}><span style={{ ...valText, fontWeight: 700 }}>Итого</span><span style={valMoney}>{total.toFixed(0)} ₽</span></div>
                   <div style={{ ...T.row, borderBottom: 'none' }}>
                     <span style={iosMuted}>Срок</span>
@@ -386,7 +386,10 @@ export function TenantDashboard() {
               <div style={T.card}>
                 <div style={T.h2}>История платежей</div>
                 {payments.length === 0 && <div style={{ ...T.small, margin: '8px 0' }}>Платежей пока нет.</div>}
-                {payments.slice(0, 8).map((p: any) => (
+                {payments.filter((p: any) => {
+                  const firstOpen = payments.filter((x: any) => !x.confirmed_by_landlord).map((x: any) => x.period).sort()[0]
+                  return !(!p.confirmed_by_landlord && firstOpen && p.period > firstOpen)
+                }).slice(0, 8).map((p: any) => (
                   <div key={p.id} style={{ padding: '10px 0', borderBottom: '1px solid rgba(60,60,67,0.12)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
                       <span style={{ fontSize: 17, fontWeight: 600, color: '#1d1d1f' }}>{parseDate(p.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}</span>
