@@ -14,7 +14,7 @@ import TeamManager from '../components/TeamManager'
 import ContactsEditor from '../components/ContactsEditor'
 import { ensureNextPayment } from '../lib/nextPayment'
 import { setAnalyticsUser, trackOpen, trackScreen } from '../lib/analytics'
-import { BottomNav, Modal, PromptNumber, Progress, ConfirmDelete, showToast, SkeletonList, PullToRefresh, Hint } from '../components/ui'
+import { import { BottomNav, Modal, PromptNumber, Progress, ConfirmDelete, showToast, SkeletonList, PullToRefresh, Hint } from '../components/ui'
 import { T } from '../theme'
 import type { Object as PropertyObject, Contract, NotificationLog, User } from '../types/database'
 
@@ -65,6 +65,7 @@ export function LandlordDashboard() {
   const [error, setError] = useState<string | null>(null)
   const [notifications, setNotifications] = useState<NotificationLog[]>([])
   const [utilInputs, setUtilInputs] = useState<Record<string, string>>({})
+  const [utilSaved, setUtilSaved] = useState<string | null>(null)
   const [history, setHistory] = useState<any[]>([])
   const [openId, setOpenId] = useState<string | null>(null)
   const [tab, setTab] = useState('pay')
@@ -91,7 +92,10 @@ export function LandlordDashboard() {
   const [massBusy, setMassBusy] = useState(false)
   const [massSel, setMassSel] = useState<Record<string, boolean>>({})
 
-  useEffect(() => { setEarlyPayOpen(false) }, [openId])
+    useEffect(() => {
+    setEarlyPayOpen(false)
+    setUtilSaved(null)
+  }, [openId])
 
   useEffect(() => {
     if (!user) return
@@ -406,31 +410,53 @@ export function LandlordDashboard() {
   }
 
   async function saveUtilities(paymentId: string, value: string) {
-    const { error } = await supabase.from('payments').update({ utilities_amount: Number(value) || 0 }).eq('id', paymentId)
-    if (error) showToast('Ошибка: ' + error.message); else { showToast('✅ Ресурсы добавлены к платежу'); window.dispatchEvent(new Event('rentflow-refresh')) }
+    const amount = Number(String(value).replace(',', '.')) || 0
+    const { error } = await supabase.from('payments').update({ utilities_amount: amount }).eq('id', paymentId)
+    if (error) {
+      showToast('Ошибка: ' + error.message)
+      return
+    }
+    setUtilSaved(`Ресурсы ${amount.toFixed(0)} ₽ добавлены к текущему платежу`)
+    window.dispatchEvent(new Event('rentflow-refresh'))
   }
 
   async function saveUtilitiesNext(value: string) {
     if (!contract) return
-    const amount = Number(value) || 0
+
+    const amount = Number(String(value).replace(',', '.')) || 0
+
     const { data: openPays } = await supabase
       .from('payments').select('*')
       .eq('contract_id', contract.id).eq('confirmed_by_landlord', false)
       .order('period', { ascending: false })
-    if (openPays && openPays.length > 0) {
-      await saveUtilities(openPays[openPays.length - 1].id, String(amount))
+
+    const targetPaymentId = current?.paymentId || (openPays && openPays[0]?.id)
+
+    if (targetPaymentId) {
+      await saveUtilities(targetPaymentId, String(amount))
     } else {
       const { data: lastp } = await supabase.from('payments').select('*').eq('contract_id', contract.id).order('period', { ascending: false }).limit(1)
       const base = lastp && lastp[0] ? parseDate(lastp[0].period) : parseDate((contract as any).start_date || new Date().toISOString())
       const nextPeriod = new Date(base.getFullYear(), base.getMonth() + 1, 1)
       const due = new Date(nextPeriod.getFullYear(), nextPeriod.getMonth(), clampDay(nextPeriod.getFullYear(), nextPeriod.getMonth(), Number(contract.payment_day) || 1))
+
       const { error } = await supabase.from('payments').insert({
-        contract_id: contract.id, period: toISO(nextPeriod), due_date: toISO(due),
-        base_amount: Number(contract.rent_amount) || 0, penalty_amount: 0, utilities_amount: amount,
+        contract_id: contract.id,
+        period: toISO(nextPeriod),
+        due_date: toISO(due),
+        base_amount: Number(contract.rent_amount) || 0,
+        penalty_amount: 0,
+        utilities_amount: amount,
       })
-      if (error) { showToast('Ошибка: ' + error.message); return }
-      showToast('✅ Счёт создан вместе с ресурсами')
+
+      if (error) {
+        showToast('Ошибка: ' + error.message)
+        return
+      }
+
+      setUtilSaved(`Создан счёт, ресурсы ${amount.toFixed(0)} ₽ добавлены`)
     }
+
     if (current) setUtilInputs(prev => ({ ...prev, [current.id]: String(amount) }))
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
@@ -953,6 +979,12 @@ export function LandlordDashboard() {
                 <div style={T.row}>
                   <span style={iosMuted}>Баланс (переплата)</span>
                   <span style={valMoney}>{contractBalance.toFixed(0)} ₽</span>
+                </div>
+              )}
+              {Number(current.payment?.utilities_amount || current.utilitiesAmount || 0) > 0 && (
+                <div style={T.row}>
+                  <span style={iosMuted}>Ресурсы</span>
+                  <span style={valMoney}>{Number(current.payment?.utilities_amount || current.utilitiesAmount || 0).toFixed(0)} ₽</span>
                 </div>
               )}
               <div style={T.row}>
