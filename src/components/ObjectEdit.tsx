@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { ensureNextPayment } from '../lib/nextPayment'
 import { T } from '../theme'
@@ -37,19 +37,6 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
   const [eRemind, setERemind] = useState('')
   const [eDetails, setEDetails] = useState<PayDetail[]>([])
   const [editDetailsErr, setEditDetailsErr] = useState<string | null>(null)
-  const [showBar, setShowBar] = useState(false)
-  const barAnchor = useRef<HTMLDivElement | null>(null)
-
-  useEffect(() => {
-    function onScroll() {
-      const el = barAnchor.current
-      if (!el) { setShowBar(false); return }
-      setShowBar(el.getBoundingClientRect().top < 0)
-    }
-    window.addEventListener('scroll', onScroll, { passive: true })
-    onScroll()
-    return () => window.removeEventListener('scroll', onScroll)
-  }, [ready])
 
   useEffect(() => {
     (async () => {
@@ -229,27 +216,17 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
       style={T.card}
       onKeyDown={(e: any) => { if (e.key === 'Enter' && e.target && (e.target as any).blur) (e.target as any).blur() }}
     >
-      <div ref={barAnchor} />
       <div style={T.h2}>Объект и договор</div>
-      {showBar && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 120, background: 'rgba(242,242,247,0.95)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(60,60,67,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '10px 16px', boxSizing: 'border-box' }}>
-          <span style={{ fontSize: 15, fontWeight: 600, color: '#8e8e93' }}>Объект и договор</span>
-          <button
-            style={{ border: 'none', background: 'transparent', color: '#0071e3', fontWeight: 600, fontSize: 17, cursor: 'pointer', padding: 4, flexShrink: 0 }}
-            onClick={() => { try { (document.activeElement as any)?.blur?.() } catch {} saveEdit() }}
-          >Сохранить изменения</button>
-        </div>
-      )}
-      && (
+      {locked && (
         <div style={T.note}>Платежи начались — ключевые условия (аренда, депозит, день оплаты, дата начала, штрафы) защищены от изменений. Остальные поля можно редактировать.</div>
       )}
       <div style={S.lab}>Адрес</div>
       <input style={S.inp} value={eAddress} onChange={(e) => setEAddress(e.target.value)} />
-      <div style={S.lab}>Арендодатель </div>
+      <div style={S.lab}>Арендодатель (имя для документов)</div>
       <input style={S.inp} value={eDocName} onChange={(e) => setEDocName(e.target.value)} placeholder="Фамилия Имя Отчество" />
       <div style={S.lab}>Заметка</div>
       <input style={S.inp} value={eNotes} onChange={(e) => setENotes(e.target.value)} placeholder="по доверенности №" />
-      <div style={S.lab}>Арендатор </div>
+      <div style={S.lab}>Арендатор</div>
       <input style={S.inp} value={eName} onChange={(e) => setEName(e.target.value)} placeholder="Фамилия Имя Отчество" />
       <div style={S.lab}>Телефон арендатора</div>
       <input style={S.inp} value={ePhone} onChange={(e) => setEPhone(formatPhoneInput(e.target.value))} inputMode="tel" />
@@ -291,7 +268,7 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
       )}
       <div style={S.lab}>Напоминать за сколько дней</div>
       <input style={S.inp} value={eRemind} onChange={(e) => setERemind(e.target.value)} inputMode="numeric" />
-      <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 4px' }}>
+      <div style={S.btnRow}>
         <button style={S.red} onClick={() => setDelOpen(true)}>Удалить объект</button>
       </div>
       <div style={{ borderTop: '1px solid rgba(60,60,67,0.12)', paddingTop: 12, marginTop: 4 }}>
