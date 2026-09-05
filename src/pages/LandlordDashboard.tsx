@@ -1013,13 +1013,19 @@ export function LandlordDashboard() {
               {!current.payment?.card_claimed && !current.hasConfirmedCashMeeting && (
                 daysToPay <= 7 || pcPaid > 0 ? (
                   <>
-                    <Hint text="Арендатор не отмечал оплату в приложении? Если деньги получены наличными или переводом напрямую — подтвердите здесь, заявка арендатора не нужна." />
                     <button style={T.btn} onClick={() => { setPayConfirmOk(false); setPayConfirm({ kind: 'full' }) }}>{pcPaid > 0 ? `Подтвердить получение остатка за ${pcMonth} (${Math.max(0, pcSum - pcPaid).toFixed(0)} ₽)` : `Получил оплату за ${pcMonth} вне приложения`}</button>
+                    <Hint text="Арендатор не отмечал оплату в приложении? Если деньги получены наличными или переводом напрямую — подтвердите здесь, заявка арендатора не нужна." />
                   </>
                 ) : (
                   <>
-                    <Hint text={`До оплаты ещё ${daysToPay} дн. Если деньги уже получены досрочно — отметьте это здесь.`} />
                     {!earlyPayOpen ? (
+                      <div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0' }}>
+                        <button style={actBlue} onClick={() => setEarlyPayOpen(true)}>Отметить оплату вне приложения (досрочно)</button>
+                      </div>
+                    ) : (
+                      <button style={T.btn} onClick={() => { setPayConfirmOk(false); setPayConfirm({ kind: 'full' }) }}>Получил оплату за {pcMonth} вне приложения</button>
+                    )}
+                    <Hint text={`До оплаты ещё ${daysToPay} дн. Если деньги уже получены досрочно — отметьте это здесь.`} />
                       <div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0' }}>
                         <button style={actBlue} onClick={() => setEarlyPayOpen(true)}>Отметить оплату вне приложения (досрочно)</button>
                       </div>
