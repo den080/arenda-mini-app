@@ -582,14 +582,8 @@ export function TenantDashboard() {
                           href={`tel:${String(c.phone || '').replace(/[^\d+]/g, '')}`}
                           onClick={(e) => {
                             e.preventDefault()
-                            const raw = String(c.phone || '')
-                            const tel = 'tel:' + raw.replace(/[^\d+]/g, '')
-                            try { navigator.clipboard?.writeText(raw) } catch {}
-                            const tg: any = (window as any).Telegram?.WebApp
-                            let opened = false
-                            try { if (tg && tg.openLink) { tg.openLink(tel); opened = true } } catch {}
-                            if (!opened) { try { window.location.href = tel } catch {} }
-                            showToast('Открываем набор номера… номер также скопирован')
+                            try { navigator.clipboard?.writeText(String(c.phone || '')) } catch {}
+                            showToast('✅ Номер скопирован')
                           }}
                           onContextMenu={(e) => {
                             e.preventDefault()
