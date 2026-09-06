@@ -265,7 +265,7 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
       )}
       <div style={S.lab}>Адрес</div>
       <input style={inpE(false)} value={eAddress} disabled={disE(false)} onChange={(e) => setEAddress(e.target.value)} />
-      <div style={S.lab}>Арендодатель (имя для документов)</div>
+      <div style={S.lab}>Арендодатель</div>
       <input style={inpE(false)} value={eDocName} disabled={disE(false)} onChange={(e) => setEDocName(e.target.value)} placeholder="Фамилия Имя Отчество" />
       <div style={S.lab}>Заметка</div>
       <input style={inpE(false)} value={eNotes} disabled={disE(false)} onChange={(e) => setENotes(e.target.value)} placeholder="по доверенности №" />
