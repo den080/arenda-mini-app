@@ -350,6 +350,20 @@ export function TenantDashboard() {
                     </span>
                   </div>
                   {Number(payment.paid_amount || 0) > 0 && <div style={T.tiny}>Получено: {Number(payment.paid_amount).toFixed(0)} ₽</div>}
+                  {tenantChoseCard && (((contract as any).payment_details || []).length > 0 || (contract as any).card_number) && (
+                    <div style={{ border: '1px solid #e3e3e8', borderRadius: 12, padding: 12, margin: '10px 0 4px' }}>
+                      <div style={{ fontSize: 13, color: '#8e8e93', marginBottom: 6 }}>Куда платить</div>
+                      {((contract as any).payment_details || []).map((d: any, i: number) => (
+                        <div key={i} style={{ padding: '6px 0' }}>
+                          <div style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f' }}>{d.bank || 'Банк'}</div>
+                          <div style={{ fontFamily: 'monospace', fontSize: 15, background: 'rgba(120,120,128,0.08)', borderRadius: 8, padding: '8px 10px', marginTop: 6, color: '#1d1d1f' }}>{d.number}</div>
+                        </div>
+                      ))}
+                      {((contract as any).payment_details || []).length === 0 && (contract as any).card_number && (
+                        <div style={{ fontFamily: 'monospace', fontSize: 15, background: 'rgba(120,120,128,0.08)', borderRadius: 8, padding: '8px 10px', color: '#1d1d1f' }}>{(contract as any).card_number}</div>
+                      )}
+                    </div>
+                  )}
                   {tenantChoseCard && !payment.card_claimed && (
                     <button style={T.btn} onClick={claimCard}>Я оплатил</button>
                   )}
@@ -370,6 +384,17 @@ export function TenantDashboard() {
               {!payment && (
                 <div style={T.card}>
                   <div style={{ ...T.small, margin: '8px 0' }}>Открытых счетов нет — следующий счёт создастся автоматически после подтверждения оплаты.</div>
+                </div>
+              )}
+              {tenantChoseCash && (
+                <div>
+                  <div style={secHead}>Оплата наличными</div>
+                  <CashNegotiation
+                    contractId={contract.id}
+                    myRole="tenant"
+                    tenantId={user!.id}
+                    landlordId={obj?.landlord_id || contract.object?.landlord_id}
+                  />
                 </div>
               )}
               {tenantChoseCash && (
