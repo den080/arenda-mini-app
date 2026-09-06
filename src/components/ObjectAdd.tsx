@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useTelegramUser } from '../hooks/useTelegramUser'
 import { useTeam } from '../hooks/useTeam'
@@ -15,6 +15,7 @@ export function ObjectAdd() {
   const { teamId } = useTeam()
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
+  const savingRef = useRef(false)
   const [paywall, setPaywall] = useState(false)
   const [address, setAddress] = useState('')
   const [notes, setNotes] = useState('')
@@ -37,12 +38,10 @@ export function ObjectAdd() {
 
   async function checkLimit(): Promise<boolean> {
     if (!user) return false
-    // Админы и тестеры из «Доступ» — безлимит
     const dig = (v: string) => (v || '').replace(/\D/g, '').slice(-10)
     const { data: ac } = await supabase.from('access_control').select('phone, role').in('role', ['tester', 'admin'])
     const isPrivileged = (ac || []).some((r: any) => dig(r.phone) === dig(user.phone || ''))
     if (isPrivileged) return true
-    // Обычные пользователи — Pro или 1 объект
     const { data: s } = await supabase.from('subscriptions').select('until_date').eq('owner_id', user.id).order('until_date', { ascending: false }).maybeSingle()
     const hasPro = s && s.until_date >= iso(new Date())
     if (hasPro) return true
@@ -58,37 +57,38 @@ export function ObjectAdd() {
   }
 
   async function save() {
-    if (saving) return
-    if (!user || !address) { showToast('Укажите адрес объекта'); return }
-    if (!validPhone(phone)) { showToast('Проверьте номер телефона арендатора'); return }
-    if (method !== 'cash' && details.length === 0) { setAddDetailsErr('Добавьте хотя бы один способ безналичной оплаты'); return }
-    setAddDetailsErr(null)
-    const rentN = moneyOk(rent)
-    if (rentN === null || rentN <= 0) { showToast('Сумма аренды — число больше 0'); return }
-    const depN = moneyOk(deposit)
-    if (depN === null) { showToast('Депозит — число не меньше 0'); return }
-    const payDayN = Math.round(Number(paymentDay) || 1)
-    if (payDayN < 1 || payDayN > 31) { showToast('День платежа — число от 1 до 31'); return }
-    const meterDayN = Math.round(Number(meterDay) || 15)
-    if (meterDayN < 1 || meterDayN > 31) { showToast('День показаний — число от 1 до 31'); return }
-    const penPayN = moneyOk(penPay)
-    if (penPayN === null) { showToast('Штраф за просрочку оплаты — число не меньше 0'); return }
-    const penReadN = moneyOk(penRead)
-    if (penReadN === null) { showToast('Штраф за показания — число не меньше 0'); return }
-    const remindN = Math.round(Number(remind) || 3)
-    if (remindN < 0 || remindN > 30) { showToast('Напоминание — от 0 до 30 дней'); return }
-    if (endDate && pdate(endDate) <= pdate(startDate || iso(new Date()))) { showToast('Окончание договора должно быть позже начала'); return }
-    if (method !== 'cash') {
-      for (const d of details) {
-        if (!d.bank || !d.bank.trim()) { showToast('Укажите название банка в способах оплаты'); return }
-        const dg = (d.number || '').replace(/\D/g, '')
-        if (d.type === 'card' ? dg.length !== 16 : dg.length !== 11) { showToast('Проверьте номер карты или СБП в способах оплаты'); return }
-      }
-    }
-    const allowed = await checkLimit()
-    if (!allowed) { setPaywall(true); return }
+    if (savingRef.current) return
+    savingRef.current = true
     setSaving(true)
     try {
+      if (!user || !address) { showToast('Укажите адрес объекта'); return }
+      if (!validPhone(phone)) { showToast('Проверьте номер телефона арендатора'); return }
+      if (method !== 'cash' && details.length === 0) { setAddDetailsErr('Добавьте хотя бы один способ безналичной оплаты'); return }
+      setAddDetailsErr(null)
+      const rentN = moneyOk(rent)
+      if (rentN === null || rentN <= 0) { showToast('Сумма аренды — число больше 0'); return }
+      const depN = moneyOk(deposit)
+      if (depN === null) { showToast('Депозит — число не меньше 0'); return }
+      const payDayN = Math.round(Number(paymentDay) || 1)
+      if (payDayN < 1 || payDayN > 31) { showToast('День платежа — число от 1 до 31'); return }
+      const meterDayN = Math.round(Number(meterDay) || 15)
+      if (meterDayN < 1 || meterDayN > 31) { showToast('День показаний — число от 1 до 31'); return }
+      const penPayN = moneyOk(penPay)
+      if (penPayN === null) { showToast('Штраф за просрочку оплаты — число не меньше 0'); return }
+      const penReadN = moneyOk(penRead)
+      if (penReadN === null) { showToast('Штраф за показания — число не меньше 0'); return }
+      const remindN = Math.round(Number(remind) || 3)
+      if (remindN < 0 || remindN > 30) { showToast('Напоминание — от 0 до 30 дней'); return }
+      if (endDate && pdate(endDate) <= pdate(startDate || iso(new Date()))) { showToast('Окончание договора должно быть позже начала'); return }
+      if (method !== 'cash') {
+        for (const d of details) {
+          if (!d.bank || !d.bank.trim()) { showToast('Укажите название банка в способах оплаты'); return }
+          const dg = (d.number || '').replace(/\D/g, '')
+          if (d.type === 'card' ? dg.length !== 16 : dg.length !== 11) { showToast('Проверьте номер карты или СБП в способах оплаты'); return }
+        }
+      }
+      const allowed = await checkLimit()
+      if (!allowed) { setPaywall(true); return }
       const normalizedPhone = phone ? normalizePhone(phone) : null
       let counter: any = null
       if (normalizedPhone) counter = await findCounterparty(normalizedPhone)
@@ -161,6 +161,7 @@ export function ObjectAdd() {
       setAddress(''); setNotes(''); setName(''); setPhone(''); setRent(''); setDeposit(''); setStartDate(''); setPaymentDay(''); setMeterDay('15'); setDetails([]); setReadingsMode('manual'); setMethod('both'); setOldContract(false)
       window.dispatchEvent(new Event('rentflow-refresh'))
     } finally {
+      savingRef.current = false
       setSaving(false)
     }
   }
@@ -230,7 +231,7 @@ export function ObjectAdd() {
           )}
           <div style={S.lab}>Напоминать за сколько дней до срока</div>
           <input style={S.inp} value={remind} onChange={(e) => setRemind(e.target.value)} placeholder="3" inputMode="numeric" />
-          <button style={T.btn} onClick={save}>{saving ? 'Сохранение…' : 'Сохранить'}</button>
+          <button style={{ ...T.btn, opacity: saving ? 0.6 : 1 }} disabled={saving} onClick={save}>{saving ? 'Сохранение…' : 'Сохранить'}</button>
         </div>
       )}
       <Modal open={paywall} title="Лимит тарифа Free" onClose={() => setPaywall(false)}>
