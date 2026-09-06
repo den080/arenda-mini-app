@@ -214,11 +214,20 @@ export function TenantDashboard() {
 
   async function setTenantPayMethod(m: 'card' | 'cash') {
     if (!contract) return
-    const { error } = await supabase.from('contracts').update({ tenant_pay_method: m }).eq('id', contract.id)
-    if (error) { showToast('Ошибка: ' + error.message); return }
-    showToast('✅ Способ оплаты сохранён')
-    window.dispatchEvent(new Event('rentflow-refresh'))
-    loadData()
+    try {
+      let error: any = null
+      for (let i = 0; i < 2; i++) {
+        const res = await supabase.from('contracts').update({ tenant_pay_method: m }).eq('id', contract.id)
+        error = res.error
+        if (!error) break
+        if (!String(error.message || '').includes('Load failed')) break
+        await new Promise(r => setTimeout(r, 400))
+      }
+      if (error) { showToast('Не удалось переключить: ' + error.message); return }
+      await loadData()
+    } catch {
+      showToast('Не удалось переключить способ оплаты. Проверьте связь и нажмите ещё раз.')
+    }
   }
 
   if (userLoading || loading) return (
@@ -301,13 +310,15 @@ export function TenantDashboard() {
   const openPays = payments.filter((p: any) => !p.confirmed_by_landlord)
   const payment = openPays.length ? openPays[openPays.length - 1] : null
   const monthLabel = payment ? parseDate(payment.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : ''
-  const total = payment ? Number(payment.base_amount || 0) + Number(payment.penalty_amount || 0) + Number(payment.utilities_amount || 0) : 0
+  const basePlusUtil = payment ? Number(payment.base_amount || 0) + Number(payment.utilities_amount || 0) : 0
   const due = payment ? parseDate(payment.due_date) : null
   const todayMid = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const daysLeft = due ? Math.round((due.getTime() - todayMid.getTime()) / 86400000) : 0
   const paymentOverdueRule = rules.find((r: any) => r.violation_type === 'payment_overdue')
   const penaltyRate = paymentOverdueRule ? Number(paymentOverdueRule.rate) : 500
   const accrued = payment && daysLeft < 0 && penaltyRate > 0 ? (-daysLeft) * penaltyRate : 0
+  const shownPenalty = payment ? Math.max(Number(payment.penalty_amount || 0), accrued) : 0
+  const total = basePlusUtil + shownPenalty
   const readingsRule = rules.find((r: any) => r.violation_type === 'readings_overdue')
   const lastDeferral = defs && defs[0] ? defs[0] : null
   const deferralPending = !!(lastDeferral && lastDeferral.status === 'proposed' && payment && String(lastDeferral.payment_id) === String(payment.id))
@@ -347,21 +358,16 @@ export function TenantDashboard() {
                 <div style={T.card}>
                   <div style={T.h2}>Счёт за {monthLabel}</div>
                   <div style={T.row}><span style={iosMuted}>Аренда</span><span style={valMoney}>{Number(payment.base_amount || 0).toFixed(0)} ₽</span></div>
-                  <div style={T.row}><span style={iosMuted}>Коммунальные</span><span style={valMoney}>{Number(payment.utilities_amount || 0).toFixed(0)} ₽</span></div>
-                  <div style={T.row}><span style={iosMuted}>Штраф</span><span style={valMoney}>{Number(payment.penalty_amount || 0).toFixed(0)} ₽</span></div>
-                  <div style={T.row}><span style={{ ...valText, fontWeight: 700 }}>Итого</span><span style={valMoney}>{total.toFixed(0)} ₽</span></div>
+                  <div style={T.row}> <span style={{ ...iosMuted, color: shownPenalty > 0 ? '#ff3b30' : iosMuted.color }}>Штраф</span> <span style={{ ...valMoney, color: shownPenalty > 0 ? '#ff3b30' : valMoney.color }}>{shownPenalty.toFixed(0)} ₽</span> </div>
+                  <div style={T.row}> <span style={{ ...valText, fontWeight: 700 }}>Итого</span> <span style={valMoney}>{total.toFixed(0)} ₽</span> </div>
+                  <div style={{ ...T.row, borderBottom: 'none' }}>
                   <div style={{ ...T.row, borderBottom: accrued > 0 ? '1px solid rgba(60,60,67,0.12)' : 'none' }}>
                     <span style={iosMuted}>Срок</span>
                     <span style={{ fontSize: 15, fontWeight: 600, color: daysLeft < 0 ? '#ff3b30' : daysLeft <= 3 ? '#b25000' : '#1e7e34' }}>
                       {daysLeft < 0 ? `просрочка ${-daysLeft} дн.` : daysLeft === 0 ? 'сегодня' : `ещё ${daysLeft} дн. (${due!.toLocaleDateString('ru-RU')})`}
                     </span>
                   </div>
-                  {accrued > 0 && (
-                    <div style={{ ...T.row, borderBottom: 'none' }}>
-                      <span style={{ color: '#ff3b30', fontSize: 15, fontWeight: 600 }}>Пени за просрочку · {-daysLeft} дн. × {penaltyRate} ₽</span>
-                      <span style={{ ...valMoney, color: '#ff3b30' }}>+{accrued.toFixed(0)} ₽</span>
-                    </div>
-                  )}
+
                   {accrued > 0 && <Hint text="Пени начисляются каждый день просрочки и растут до момента оплаты." />}
                   {Number(payment.paid_amount || 0) > 0 && <div style={T.tiny}>Получено: {Number(payment.paid_amount).toFixed(0)} ₽</div>}
                   {tenantChoseCard && !payment.card_claimed && (
@@ -370,9 +376,7 @@ export function TenantDashboard() {
                   {tenantChoseCard && payment.card_claimed && (
                     <div style={T.noteGreen}>Заявка отправлена — арендодатель подтвердит получение.</div>
                   )}
-                  {tenantChoseCash && (
-                    <div style={T.note}>Оплата наличными — согласуйте встречу в блоке ниже.</div>
-                  )}
+
                   {Number(payment.penalty_amount || 0) > 0 && !deferralPending && (
                     <div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0 8px' }}>
                       <button style={actBlue} onClick={requestDeferral}>Попросить отсрочку штрафа</button>
@@ -432,7 +436,6 @@ export function TenantDashboard() {
               )}
               {tenantChoseCash && (
                 <div>
-                  <div style={secHead}>Оплата наличными</div>
                   <CashNegotiation
                     contractId={contract.id}
                     myRole="tenant"
