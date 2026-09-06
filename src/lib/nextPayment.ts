@@ -4,10 +4,8 @@ function parseDate(d: any): Date { const [y, m, dd] = String(d).slice(0, 10).spl
 function toISO(d: Date): string { const m = String(d.getMonth() + 1).padStart(2, '0'); const dd = String(d.getDate()).padStart(2, '0'); return `${d.getFullYear()}-${m}-${dd}` }
 function clampDay(y: number, m: number, d: number): number { const last = new Date(y, m + 1, 0).getDate(); return Math.min(Math.max(1, d), last) }
 
-// Последний счёт по договору — за месяц ПЕРЕД месяцем окончания:
-// оплата за него закрывает аренду до конца договора.
-// Счёт за месяц окончания создаётся ТОЛЬКО после пролонгации.
-// Коммунальные в новом счёте всегда 0 — до ввода квитанции.
+// Счета создаются не раньше месяца начала и не позже месяца ДО месяца окончания.
+// Счёт за месяц окончания появляется только после пролонгации, коммунальные — всегда 0.
 export async function ensureNextPayment(contractId: string) {
   try {
     const { data: con } = await supabase.from('contracts').select('*').eq('id', contractId).maybeSingle()
@@ -28,7 +26,6 @@ export async function ensureNextPayment(contractId: string) {
       parseDate(p.period).getTime() >= lastPeriod.getTime()
     )
 
-    // уборка: счета за месяц окончания и дальше, созданные до пролонгации, не нужны
     for (const p of list) {
       if (isBeyondEnd(p)) await supabase.from('payments').delete().eq('id', p.id)
     }
