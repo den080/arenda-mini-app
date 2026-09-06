@@ -4,7 +4,7 @@ import { useTelegramUser } from '../hooks/useTelegramUser'
 import CashNegotiation from '../components/CashNegotiation'
 import BillReview from '../components/BillReview'
 import Chat from '../components/Chat'
-import { BottomNav, showToast, SkeletonList, PullToRefresh, Hint, Modal } from './ui'
+import { BottomNav, showToast, SkeletonList, PullToRefresh, Hint, Modal } from '../components/ui'
 import { T } from '../theme'
 
 const TABS = [
