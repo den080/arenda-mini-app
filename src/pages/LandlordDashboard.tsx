@@ -1195,19 +1195,18 @@ export function LandlordDashboard() {
               </div>
             ))}
             {contract.payment_method === 'both' && <Hint text="Способ оплаты выбирает арендатор: карта или наличные." />}
-        {(((contract as any).payment_details || []) as any[]).length > 0 && (
-          <div style={{ marginTop: 8, borderTop: '1px solid rgba(60,60,67,0.12)' }}>
-            {(((contract as any).payment_details || []) as any[]).map((d: any, i: number) => (
-              <div key={i} style={{ padding: '8px 0' }}>
-                <div style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f' }}>{d.type === 'sbp' ? 'СБП по телефону' : 'Карта'}{d.bank ? ` · ${d.bank}` : ''}</div>
-                <div style={{ ...valText, marginTop: 2 }}>{d.number}</div>
-                <div style={{ fontSize: 13, color: '#8e8e93', marginTop: 2 }}>Получатель: {d.recipient || '—'}</div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-          </div>
+             ((contract as any).payment_details || []) as any[]).length  > 0  & & (
+             <div style={{ marginTop: 8, borderTop: '1px solid rgba(60,60,67,0.12)' }} >
+             {(((contract as any).payment_details || []) as any[]).map((d: any, i: number) = > (
+             <div key={i} style={{ padding: '8px 0' }} >
+              <div style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f' }} >{d.type === 'sbp' ? 'СБП по телефону' : 'Карта'}{d.bank ?  `· ${d.bank}`  : ''} </div >
+              <div style={{ ...valText, marginTop: 2 }} >{d.number} </div >
+              <div style={{ fontSize: 13, color: '#8e8e93', marginTop: 2 }} >Получатель: {d.recipient || '—'} </div >
+             </div >
+               ))}
+              </div >
+                )}
+                </div >
                     {contract && current.landlord_id === user?.id && (
             <div style={T.card}>
               <div style={T.h2}>Совместный доступ к объекту</div>
