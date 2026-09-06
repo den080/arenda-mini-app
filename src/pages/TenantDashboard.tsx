@@ -524,7 +524,7 @@ export function TenantDashboard() {
             <>
               <div style={T.card}>
                 <div style={T.h2}>Договор</div>
-                <div style={T.row}><span style={iosMuted}>Арендодатель</span><span style={valText}>{(obj as any)?.landlord_doc_name || landlord?.full_name || '—'}</span></div>
+                <div style={T.row}><span style={iosMuted}>Арендодатель</span><span style={{ ...valText, textAlign: 'right' }}>{(obj as any)?.landlord_doc_name || landlord?.full_name || '—'}</span></div>
                 {contract.start_date && contract.end_date && (
                   <div style={T.row}><span style={iosMuted}>Срок</span><span style={valText}>{parseDate(contract.start_date).toLocaleDateString('ru-RU')} — {parseDate(contract.end_date).toLocaleDateString('ru-RU')}</span></div>
                 )}
