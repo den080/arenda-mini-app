@@ -417,7 +417,7 @@ export function TenantDashboard() {
                         {d.type === 'sbp' ? 'СБП по телефону' : d.type === 'card' ? 'Карта' : 'Перевод'}{d.bank ? ` · ${d.bank}` : ''}
                       </div>
                       <div style={{ ...valText, marginTop: 4 }}>{d.number}</div>
-                      <div style={{ fontSize: 13, color: '#8e8e93', marginTop: 2 }}>Получатель: {(obj as any)?.landlord_doc_name || landlord?.full_name || '—'}</div>
+                      <div style={{ fontSize: 13, color: '#8e8e93', marginTop: 2 }}>Получатель: {d.recipient || (obj as any)?.landlord_doc_name || landlord?.full_name || '—'}</div>
                     </div>
                   ))}
                   {payDetails.length === 0 && (contract as any).card_number && (
@@ -453,14 +453,14 @@ export function TenantDashboard() {
                       <span style={valMoney}>{(Number(p.base_amount || 0) + Number(p.penalty_amount || 0) + Number(p.utilities_amount || 0)).toFixed(0)} ₽</span>
                     </div>
                     <div style={{ marginTop: 2 }}>
-                      <span style={{ fontSize: 13, color: p.confirmed_by_landlord ? '#1e7e34' : '#b25000' }}>{p.confirmed_by_landlord ? 'оплачен' : 'ожидает'}</span>
+                      <span style={{ fontSize: 13, color: p.confirmed_by_landlord ? '#1e7e34' : '#b25000' }}>{p.confirmed_by_landlord ? `оплачен ${p.confirmed_at ? parseDate(String(p.confirmed_at).slice(0, 10)).toLocaleDateString('ru-RU') : ''}` : 'ожидает'}</span>
                     </div>
                   </div>
                 ))}
                 {histList.length > 1 && (
                   <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 2px' }}>
                     <button style={actBlue} onClick={() => setPayHistOpen(!payHistOpen)}>
-                      {payHistOpen ? 'Свернуть историю' : `Показать историю (${histList.length})`}
+                      {payHistOpen ? 'Свернуть историю' : 'Показать историю'}
                     </button>
                   </div>
                 )}
