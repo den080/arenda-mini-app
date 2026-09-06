@@ -224,6 +224,7 @@ export function TenantDashboard() {
         await new Promise(r => setTimeout(r, 400))
       }
       if (error) { showToast('Не удалось переключить: ' + error.message); return }
+      setContracts(prev => prev.map(c => c.id === contract.id ? { ...c, tenant_pay_method: m } : c))
       await loadData()
     } catch {
       showToast('Не удалось переключить способ оплаты. Проверьте связь и нажмите ещё раз.')
