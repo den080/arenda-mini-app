@@ -554,7 +554,17 @@ export function TenantDashboard() {
                           <div style={{ fontSize: 17, fontWeight: 500, color: '#1d1d1f' }}>{c.label}</div>
                           {c.note && <div style={{ fontSize: 13, color: '#8e8e93', marginTop: 2 }}>{c.note}</div>}
                         </div>
-                        <a href={`tel:${String(c.phone || '').replace(/[^\d+]/g, '')}`} style={{ color: '#0071e3', fontSize: 17, fontWeight: 600, textDecoration: 'none', flexShrink: 0 }}>{c.phone}</a>
+                                  <a
+                                   href={`tel:${String(c.phone || '').replace(/[^\d+]/g, '')}`}
+                                    onClick={(e) => {
+                                     e.preventDefault()
+                                    const tel = 'tel:' + String(c.phone || '').replace(/[^\d+]/g, '')
+                                  const tg: any = (window as any).Telegram?.WebApp
+                                  try { if (tg && tg.openLink) { tg.openLink(tel); return } } catch {}
+                                 window.location.href = tel
+                                   }}
+            style={{ color: '#0071e3', fontSize: 17, fontWeight: 600, textDecoration: 'none', flexShrink: 0 }}
+          >{c.phone}</a>
                       </div>
                     </div>
                   ))}
