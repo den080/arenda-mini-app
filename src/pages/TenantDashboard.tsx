@@ -214,10 +214,10 @@ export function TenantDashboard() {
     loadData()
   }
 
-    async function sendEndChoice(kind: 'renew' | 'exit') {
+  async function sendEndChoice(kind: 'renew' | 'exit') {
     if (!contract) return
     setEndChoice(kind)
-    await notify(data?.obj?.landlord_id, kind === 'renew' ? 'renewal_requested' : 'termination_requested', kind === 'renew' ? '🔄 Предложение арендатора: продлить договор (условия можно пересмотреть)' : '🏁 Предложение арендатора: завершить договор в срок', contract.id)
+    await notify(data?.obj?.landlord_id, kind === 'renew' ? 'renewal_requested' : 'termination_requested', kind === 'renew' ? '🔄 Предложение арендатора: продлить договор (условия можно пересмотреть)' : '🏁 Предложение арендателя: завершить договор в срок', contract.id)
     showToast(kind === 'renew' ? '✅ Предложение о продлении отправлено' : '✅ Предложение о завершении отправлено')
   }
 
@@ -317,7 +317,8 @@ export function TenantDashboard() {
   const contacts = data?.contacts || []
   const frozen = data?.frozen || []
   const readingsMode = contract.readings_mode || 'manual'
-  const openPays = payments.filter((p: any) => !p.confirmed_by_landlord)
+  const endMonthStart = contract.end_date ? (() => { const ed = parseDate(contract.end_date); return new Date(ed.getFullYear(), ed.getMonth(), 1) })() : null
+  const openPays = payments.filter((p: any) => !p.confirmed_by_landlord && !(endMonthStart && parseDate(p.period).getTime() >= endMonthStart.getTime()))
   const payment = openPays.length ? openPays[openPays.length - 1] : null
   const monthLabel = payment ? parseDate(payment.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : ''
   const basePlusUtil = payment ? Number(payment.base_amount || 0) + Number(payment.utilities_amount || 0) : 0
@@ -348,6 +349,7 @@ export function TenantDashboard() {
         ? 'confirmed'
         : 'proposed'
   const histList = payments.filter((p: any) => {
+    if (!p.confirmed_by_landlord && endMonthStart && parseDate(p.period).getTime() >= endMonthStart.getTime()) return false
     const firstOpen = payments.filter((x: any) => !x.confirmed_by_landlord).map((x: any) => x.period).sort()[0]
     return !(!p.confirmed_by_landlord && firstOpen && p.period > firstOpen)
   })
@@ -391,7 +393,7 @@ export function TenantDashboard() {
               )}
               {!payment && (
                 <div style={T.card}>
-                 <div style={{ ...T.small, margin: '8px 0' }}>{lastMonth ? 'Все счета по текущему договору оплачены до конца срока. Новый счёт появится, если арендодатель примет решение о продлении.' : 'Открытых счетов нет — следующий счёт создастся автоматически после подтверждения оплаты.'}</div>
+                  <div style={{ ...T.small, margin: '8px 0' }}>{lastMonth ? 'Все счета по текущему договору оплачены до конца срока. Новый счёт появится, если арендодатель примет решение о продлении.' : 'Открытых счетов нет — следующий счёт создастся автоматически после подтверждения оплаты.'}</div>
                 </div>
               )}
               <div style={T.card}>
@@ -486,7 +488,7 @@ export function TenantDashboard() {
                 {histList.length > 1 && (
                   <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 2px' }}>
                     <button style={actBlue} onClick={() => setPayHistOpen(!payHistOpen)}>
-                     {payHistOpen ? 'Свернуть историю' : 'Показать историю'}
+                      {payHistOpen ? 'Свернуть историю' : 'Показать историю'}
                     </button>
                   </div>
                 )}
