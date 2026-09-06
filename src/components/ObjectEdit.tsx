@@ -10,6 +10,7 @@ import {
 
 export function ObjectEdit({ objectId }: { objectId: string }) {
   const [ready, setReady] = useState(false)
+  const [editing, setEditing] = useState(false)
   const [delOpen, setDelOpen] = useState(false)
   const [repairOpen, setRepairOpen] = useState(false)
   const [repairOk, setRepairOk] = useState(false)
@@ -39,6 +40,10 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
   const [editDetailsErr, setEditDetailsErr] = useState<string | null>(null)
   const [showBar, setShowBar] = useState(false)
   const barAnchor = useRef<HTMLDivElement | null>(null)
+
+  const ro = !editing
+  const inpE = (lockable: boolean) => (ro || lockable) ? S.inpLocked : S.inp
+  const disE = (lockable: boolean) => ro || lockable
 
   useEffect(() => {
     (async () => {
@@ -90,6 +95,13 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
     return () => window.removeEventListener('scroll', onScroll)
   }, [ready])
 
+  async function onBarAction() {
+    try { (document.activeElement as any)?.blur?.() } catch {}
+    if (!editing) { setEditing(true); return }
+    const ok = await saveEdit()
+    if (ok) setEditing(false)
+  }
+
   async function doRepair() {
     if (!editContractId || repairing) return
     setRepairing(true)
@@ -128,38 +140,38 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
     }
   }
 
-  async function saveEdit() {
-    if (!validPhone(ePhone)) { showToast('Проверьте номер телефона арендатора'); return }
-    if (eMethod !== 'cash' && eDetails.length === 0) { setEditDetailsErr('Добавьте хотя бы один способ безналичной оплаты'); return }
+  async function saveEdit(): Promise<boolean> {
+    if (!validPhone(ePhone)) { showToast('Проверьте номер телефона арендатора'); return false }
+    if (eMethod !== 'cash' && eDetails.length === 0) { setEditDetailsErr('Добавьте хотя бы один способ безналичной оплаты'); return false }
     setEditDetailsErr(null)
     const eRentRaw = locked ? Number(eRent) || 0 : moneyOk(eRent)
-    if (!locked && (eRentRaw === null || eRentRaw <= 0)) { showToast('Сумма аренды — число больше 0'); return }
+    if (!locked && (eRentRaw === null || eRentRaw <= 0)) { showToast('Сумма аренды — число больше 0'); return false }
     const eRentN = eRentRaw ?? 0
     const eDepRaw = locked ? Number(eDeposit) || 0 : moneyOk(eDeposit)
-    if (!locked && eDepRaw === null) { showToast('Депозит — число не меньше 0'); return }
+    if (!locked && eDepRaw === null) { showToast('Депозит — число не меньше 0'); return false }
     const eDepN = eDepRaw ?? 0
     const ePayDayN = Math.round(Number(ePaymentDay) || 1)
-    if (!locked && (ePayDayN < 1 || ePayDayN > 31)) { showToast('День платежа — число от 1 до 31'); return }
+    if (!locked && (ePayDayN < 1 || ePayDayN > 31)) { showToast('День платежа — число от 1 до 31'); return false }
     const eMeterDayN = Math.round(Number(eMeterDay) || 15)
-    if (eMeterDayN < 1 || eMeterDayN > 31) { showToast('День показаний — число от 1 до 31'); return }
+    if (eMeterDayN < 1 || eMeterDayN > 31) { showToast('День показаний — число от 1 до 31'); return false }
     const ePenPayRaw = locked ? Number(ePenPay) || 0 : moneyOk(ePenPay)
-    if (!locked && ePenPayRaw === null) { showToast('Штраф за просрочку оплаты — число не меньше 0'); return }
+    if (!locked && ePenPayRaw === null) { showToast('Штраф за просрочку оплаты — число не меньше 0'); return false }
     const ePenPayN = ePenPayRaw ?? 0
     const ePenReadRaw = locked ? Number(ePenRead) || 0 : moneyOk(ePenRead)
-    if (!locked && ePenReadRaw === null) { showToast('Штраф за показания — число не меньше 0'); return }
+    if (!locked && ePenReadRaw === null) { showToast('Штраф за показания — число не меньше 0'); return false }
     const ePenReadN = ePenReadRaw ?? 0
     const eRemindN = Math.round(Number(eRemind) || 3)
-    if (eRemindN < 0 || eRemindN > 30) { showToast('Напоминание — от 0 до 30 дней'); return }
-    if (eStartDate && eEndDate && pdate(eEndDate) <= pdate(eStartDate)) { showToast('Окончание договора должно быть позже начала'); return }
+    if (eRemindN < 0 || eRemindN > 30) { showToast('Напоминание — от 0 до 30 дней'); return false }
+    if (eStartDate && eEndDate && pdate(eEndDate) <= pdate(eStartDate)) { showToast('Окончание договора должно быть позже начала'); return false }
     if (eMethod !== 'cash') {
       for (const d of eDetails) {
-        if (!d.bank || !d.bank.trim()) { showToast('Укажите название банка в способах оплаты'); return }
+        if (!d.bank || !d.bank.trim()) { showToast('Укажите название банка в способах оплаты'); return false }
         const dg = (d.number || '').replace(/\D/g, '')
-        if (d.type === 'card' ? dg.length !== 16 : dg.length !== 11) { showToast('Проверьте номер карты или СБП в способах оплаты'); return }
+        if (d.type === 'card' ? dg.length !== 16 : dg.length !== 11) { showToast('Проверьте номер карты или СБП в способах оплаты'); return false }
       }
     }
     const { error: oe } = await supabase.from('objects').update({ address: eAddress, notes: eNotes || null, landlord_doc_name: eDocName.trim() || null }).eq('id', objectId)
-    if (oe) { showToast('Ошибка: ' + oe.message); return }
+    if (oe) { showToast('Ошибка: ' + oe.message); return false }
     if (editContractId) {
       const firstCard = eDetails.find(d => d.type === 'card')
       const upd: any = {
@@ -178,7 +190,7 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
         upd.start_date = eStartDate || null
       }
       const { error: ce } = await supabase.from('contracts').update(upd).eq('id', editContractId)
-      if (ce) { showToast('Ошибка: ' + ce.message); return }
+      if (ce) { showToast('Ошибка: ' + ce.message); return false }
       if (!locked) {
         const rules: Array<['payment_overdue' | 'readings_overdue', number]> = [
           ['payment_overdue', ePenPayN],
@@ -200,6 +212,7 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
     }
     showToast('✅ Изменения сохранены')
     window.dispatchEvent(new Event('rentflow-refresh'))
+    return true
   }
 
   async function doRemove() {
@@ -224,6 +237,15 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
   }
 
   if (!ready) return null
+  const barContent = (
+    <>
+      <span style={{ fontSize: 13, color: '#8e8e93', textTransform: 'uppercase', letterSpacing: 0.3 }}>Договор</span>
+      <button
+        style={{ border: 'none', background: 'transparent', color: '#0071e3', fontWeight: 600, fontSize: 17, cursor: 'pointer', padding: 4, flexShrink: 0 }}
+        onClick={onBarAction}
+      >{editing ? 'Готово (заблокировать)' : 'Внести изменения'}</button>
+    </>
+  )
   return (
     <div
       style={T.card}
@@ -232,65 +254,67 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
       <div ref={barAnchor} />
       {showBar && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 150, background: '#f2f2f7', borderBottom: '1px solid rgba(60,60,67,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '10px 16px', boxSizing: 'border-box' }}>
-          <span style={{ fontSize: 13, color: '#8e8e93', textTransform: 'uppercase', letterSpacing: 0.3 }}>Договор</span>
-          <button
-            style={{ border: 'none', background: 'transparent', color: '#0071e3', fontWeight: 600, fontSize: 17, cursor: 'pointer', padding: 4, flexShrink: 0 }}
-            onClick={() => { try { (document.activeElement as any)?.blur?.() } catch {} saveEdit() }}
-          >Сохранить изменения</button>
+          {barContent}
         </div>
       )}
-      <div style={T.h2}>Объект и договор</div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '2px 0 10px', marginBottom: 10, borderBottom: '1px solid rgba(60,60,67,0.12)' }}>
+        {barContent}
+      </div>
       {locked && (
         <div style={T.note}>Платежи начались — ключевые условия (аренда, депозит, день оплаты, дата начала, штрафы) защищены от изменений. Остальные поля можно редактировать.</div>
       )}
       <div style={S.lab}>Адрес</div>
-      <input style={S.inp} value={eAddress} onChange={(e) => setEAddress(e.target.value)} />
+      <input style={inpE(false)} value={eAddress} disabled={disE(false)} onChange={(e) => setEAddress(e.target.value)} />
       <div style={S.lab}>Арендодатель (имя для документов)</div>
-      <input style={S.inp} value={eDocName} onChange={(e) => setEDocName(e.target.value)} placeholder="Фамилия Имя Отчество" />
+      <input style={inpE(false)} value={eDocName} disabled={disE(false)} onChange={(e) => setEDocName(e.target.value)} placeholder="Фамилия Имя Отчество" />
       <div style={S.lab}>Заметка</div>
-      <input style={S.inp} value={eNotes} onChange={(e) => setENotes(e.target.value)} placeholder="по доверенности №" />
+      <input style={inpE(false)} value={eNotes} disabled={disE(false)} onChange={(e) => setENotes(e.target.value)} placeholder="по доверенности №" />
       <div style={S.lab}>Арендатор</div>
-      <input style={S.inp} value={eName} onChange={(e) => setEName(e.target.value)} placeholder="Фамилия Имя Отчество" />
+      <input style={inpE(false)} value={eName} disabled={disE(false)} onChange={(e) => setEName(e.target.value)} placeholder="Фамилия Имя Отчество" />
       <div style={S.lab}>Телефон арендатора</div>
-      <input style={S.inp} value={ePhone} onChange={(e) => setEPhone(formatPhoneInput(e.target.value))} inputMode="tel" />
+      <input style={inpE(false)} value={ePhone} disabled={disE(false)} onChange={(e) => setEPhone(formatPhoneInput(e.target.value))} inputMode="tel" />
       <div style={S.lab}>Начало договора</div>
-      <input style={locked ? S.inpLocked : S.inp} type="date" value={eStartDate} disabled={locked} onChange={(e) => { const v = e.target.value; setEStartDate(v); const d = Number(v.slice(8, 10)); if (d >= 1 && d <= 31) setEPaymentDay(String(d)) }} />
+      <input style={inpE(locked)} type="date" value={eStartDate} disabled={disE(locked)} onChange={(e) => { const v = e.target.value; setEStartDate(v); const d = Number(v.slice(8, 10)); if (d >= 1 && d <= 31) setEPaymentDay(String(d)) }} />
       <div style={S.lab}>Сумма аренды, руб</div>
-      <input style={locked ? S.inpLocked : S.inp} value={eRent} disabled={locked} onChange={(e) => setERent(e.target.value)} inputMode="numeric" />
+      <input style={inpE(locked)} value={eRent} disabled={disE(locked)} onChange={(e) => setERent(e.target.value)} inputMode="numeric" />
       {!locked && <div style={{ ...T.tiny, margin: '4px 0 0' }}>Новая аренда действует со следующего счёта.</div>}
       <div style={S.lab}>Залоговый депозит, руб</div>
-      <input style={locked ? S.inpLocked : S.inp} value={eDeposit} disabled={locked} onChange={(e) => setEDeposit(e.target.value)} inputMode="numeric" />
+      <input style={inpE(locked)} value={eDeposit} disabled={disE(locked)} onChange={(e) => setEDeposit(e.target.value)} inputMode="numeric" />
       <div style={S.lab}>День платежа</div>
-      <input style={locked ? S.inpLocked : S.inp} value={ePaymentDay} disabled={locked} onChange={(e) => setEPaymentDay(e.target.value)} inputMode="numeric" />
+      <input style={inpE(locked)} value={ePaymentDay} disabled={disE(locked)} onChange={(e) => setEPaymentDay(e.target.value)} inputMode="numeric" />
       <div style={S.lab}>Режим показаний счётчиков</div>
-      <ReadingsModeSelect value={eReadingsMode} onChange={setEReadingsMode} />
+      <div style={{ pointerEvents: ro ? 'none' : 'auto', opacity: ro ? 0.6 : 1 }}>
+        <ReadingsModeSelect value={eReadingsMode} onChange={setEReadingsMode} />
+      </div>
       {eReadingsMode === 'manual' && (
         <div>
           <div style={S.lab}>Крайний день показаний</div>
-          <input style={S.inp} value={eMeterDay} onChange={(e) => setEMeterDay(e.target.value)} inputMode="numeric" />
+          <input style={inpE(false)} value={eMeterDay} disabled={disE(false)} onChange={(e) => setEMeterDay(e.target.value)} inputMode="numeric" />
         </div>
       )}
       <div style={S.lab}>Окончание договора</div>
-      <input style={S.inp} type="date" value={eEndDate} onChange={(e) => setEEndDate(e.target.value)} />
+      <input style={inpE(false)} type="date" value={eEndDate} disabled={disE(false)} onChange={(e) => setEEndDate(e.target.value)} />
       <div style={S.lab}>Способ оплаты</div>
-      <select style={S.sel} value={eMethod} onChange={(e) => setEMethod(e.target.value)}>{methodOptions}</select>
+      <div style={{ pointerEvents: ro ? 'none' : 'auto', opacity: ro ? 0.6 : 1 }}>
+        <select style={S.sel} value={eMethod} disabled={ro} onChange={(e) => setEMethod(e.target.value)}>{methodOptions}</select>
+      </div>
       {eMethod !== 'cash' && (
-        <div>
+        <div style={{ pointerEvents: ro ? 'none' : 'auto', opacity: ro ? 0.6 : 1 }}>
           <div style={S.lab}>Способы оплаты (карта или СБП) *</div>
           <DetailsEditor list={eDetails} onChange={(v) => { setEDetails(v); if (v.length > 0) setEditDetailsErr(null) }} />
           {editDetailsErr && <div style={T.noteRed}>{editDetailsErr}</div>}
         </div>
       )}
       <div style={S.lab}>Штраф за просрочку оплаты, руб/день</div>
-      <input style={locked ? S.inpLocked : S.inp} value={ePenPay} disabled={locked} onChange={(e) => setEPenPay(e.target.value)} inputMode="numeric" />
+      <input style={inpE(locked)} value={ePenPay} disabled={disE(locked)} onChange={(e) => setEPenPay(e.target.value)} inputMode="numeric" />
       {eReadingsMode === 'manual' && (
         <div>
           <div style={S.lab}>Штраф за просрочку показаний, руб/день</div>
-          <input style={locked ? S.inpLocked : S.inp} value={ePenRead} disabled={locked} onChange={(e) => setEPenRead(e.target.value)} inputMode="numeric" />
+          <input style={inpE(locked)} value={ePenRead} disabled={disE(locked)} onChange={(e) => setEPenRead(e.target.value)} inputMode="numeric" />
         </div>
       )}
       <div style={S.lab}>Напоминать за сколько дней</div>
-      <input style={S.inp} value={eRemind} onChange={(e) => setERemind(e.target.value)} inputMode="numeric" />
+      <input style={inpE(false)} value={eRemind} disabled={disE(false)} onChange={(e) => setERemind(e.target.value)} inputMode="numeric" />
       <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 4px' }}>
         <button style={S.red} onClick={() => setDelOpen(true)}>Удалить объект</button>
       </div>
