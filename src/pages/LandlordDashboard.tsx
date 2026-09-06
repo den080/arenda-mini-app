@@ -87,6 +87,7 @@ export function LandlordDashboard() {
   const [archiveFrozen, setArchiveFrozen] = useState<any[]>([])
   const [showTeam, setShowTeam] = useState(false)
   const [earlyPayOpen, setEarlyPayOpen] = useState(false)
+  const [prolongMonths, setProlongMonths] = useState(11)
   const [isPro, setIsPro] = useState(false)
   const [massOpen, setMassOpen] = useState(false)
   const [massOk, setMassOk] = useState(false)
@@ -659,10 +660,10 @@ export function LandlordDashboard() {
     showToast('✅ Штраф заморожен')
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
-  async function prolongContract() {
+  async function prolongContract(months: number) {
     if (!contract) return
     const ed = parseDate((contract as any).end_date)
-    const newEnd = new Date(ed.getFullYear() + 1, ed.getMonth(), ed.getDate())
+    const newEnd = new Date(ed.getFullYear(), ed.getMonth() + months, ed.getDate())
     const isoEnd = `${newEnd.getFullYear()}-${String(newEnd.getMonth() + 1).padStart(2, '0')}-${String(newEnd.getDate()).padStart(2, '0')}`
     const { error } = await supabase.from('contracts').update({ end_date: isoEnd }).eq('id', contract.id)
     if (error) { showToast('Ошибка: ' + error.message); return }
@@ -1216,7 +1217,16 @@ export function LandlordDashboard() {
              <div style={T.card}>
                 <div style={T.h2}>Договор заканчивается</div>
                 <div style={{ ...T.small, margin: '0 0 10px' }}>Последний счёт — за текущий месяц. Вилка: пролонгация или завершение.</div>
-                <button style={{ width: '100%', padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }} onClick={prolongContract}>Продлить на 12 месяцев</button>
+                                  <select
+                    value={prolongMonths}
+                    onChange={(e) => setProlongMonths(Number(e.target.value))}
+                    style={{ width: '100%', padding: 12, borderRadius: 10, border: '1px solid #ddd', fontSize: 16, background: '#fff', marginBottom: 8, boxSizing: 'border-box' }}
+                  >
+                    {Array.from({ length: 11 }, (_, i) => i + 1).map((m) => (
+                      <option key={m} value={m}>{m === 1 ? '1 месяц' : m < 5 ? `${m} месяца` : `${m} месяцев`}</option>
+                    ))}
+                  </select>
+                  <button style={{ width: '100%', padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }} onClick={() => prolongContract(prolongMonths)}>Продлить договор</button>
                 <Hint text="Для завершения — блок «Завершение договора» ниже: депозит, замороженные штрафы и открытые счета будут учтены в итоговом расчёте." />
               </div>
             )}
