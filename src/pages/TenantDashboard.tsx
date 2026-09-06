@@ -370,12 +370,6 @@ export function TenantDashboard() {
                   </div>
                   {accrued > 0 && <Hint text="Штраф начисляется каждый день просрочки и растёт до момента оплаты." />}
                   {Number(payment.paid_amount || 0) > 0 && <div style={T.tiny}>Получено: {Number(payment.paid_amount).toFixed(0)} ₽</div>}
-                  {tenantChoseCard && !payment.card_claimed && (
-                    <button style={T.btn} onClick={claimCard}>Я оплатил</button>
-                  )}
-                  {tenantChoseCard && payment.card_claimed && (
-                    <div style={T.noteGreen}>Заявка отправлена — арендодатель подтвердит получение.</div>
-                  )}
                   {Number(payment.penalty_amount || 0) > 0 && !deferralPending && (
                     <div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0 8px' }}>
                       <button style={actBlue} onClick={requestDeferral}>Попросить отсрочку штрафа</button>
@@ -431,6 +425,12 @@ export function TenantDashboard() {
                     </div>
                   )}
                   <Hint text="Оплатите по этим реквизитам и нажмите «Я оплатил» — арендодатель подтвердит получение." />
+                  {tenantChoseCard && !payment.card_claimed && (
+                    <button style={{ ...T.btn, marginTop: 10 }} onClick={claimCard}>Я оплатил</button>
+                  )}
+                  {tenantChoseCard && payment.card_claimed && (
+                    <div style={{ ...T.noteGreen, marginTop: 10 }}>Заявка отправлена — арендодатель подтвердит получение.</div>
+                  )}
                 </div>
               )}
               {tenantChoseCash && (
