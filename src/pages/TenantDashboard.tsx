@@ -217,8 +217,8 @@ export function TenantDashboard() {
     async function sendEndChoice(kind: 'renew' | 'exit') {
     if (!contract) return
     setEndChoice(kind)
-    await notify(data?.obj?.landlord_id, kind === 'renew' ? 'renewal_requested' : 'termination_requested', kind === 'renew' ? '🔄 Арендатор хочет продлить договор ещё на год' : '🏁 Арендатор планирует съезд в конце договора', contract.id)
-    showToast(kind === 'renew' ? '✅ Заявка на продление отправлена' : '✅ Вы предупредили о завершении договора')
+    await notify(data?.obj?.landlord_id, kind === 'renew' ? 'renewal_requested' : 'termination_requested', kind === 'renew' ? '🔄 Предложение арендатора: продлить договор (условия можно пересмотреть)' : '🏁 Предложение арендатора: завершить договор в срок', contract.id)
+    showToast(kind === 'renew' ? '✅ Предложение о продлении отправлено' : '✅ Предложение о завершении отправлено')
   }
 
   async function setTenantPayMethod(m: 'card' | 'cash') {
@@ -391,7 +391,7 @@ export function TenantDashboard() {
               )}
               {!payment && (
                 <div style={T.card}>
-                  <div style={{ ...T.small, margin: '8px 0' }}>Открытых счетов нет — следующий счёт создастся автоматически после подтверждения оплаты.</div>
+                 <div style={{ ...T.small, margin: '8px 0' }}>{lastMonth ? 'Все счета по текущему договору оплачены до конца срока. Новый счёт появится, если арендодатель примет решение о продлении.' : 'Открытых счетов нет — следующий счёт создастся автоматически после подтверждения оплаты.'}</div>
                 </div>
               )}
               <div style={T.card}>
@@ -456,16 +456,16 @@ export function TenantDashboard() {
               {lastMonth && (
                 <div style={T.card}>
                   <div style={T.h2}>Договор заканчивается</div>
-                  <div style={{ ...T.small, margin: '0 0 10px' }}>Срок до {contract.end_date ? parseDate(contract.end_date).toLocaleDateString('ru-RU') : '—'}. Последний счёт — за {monthLabel}. Выберите: продление или завершение.</div>
+                  <div style={{ ...T.small, margin: '0 0 10px' }}>Срок до {contract.end_date ? parseDate(contract.end_date).toLocaleDateString('ru-RU') : '—'}. Оплаченные счета закрывают аренду до конца срока. Ваш выбор — предложение арендодателю: он примет решение и при продлении может изменить стоимость и условия.</div>
                   {endChoice === '' ? (
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }} onClick={() => sendEndChoice('renew')}>Продлить договор</button>
-                      <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 15, cursor: 'pointer' }} onClick={() => sendEndChoice('exit')}>Завершить договор</button>
+                      <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }} onClick={() => sendEndChoice('renew')}>Отправить предложение о продлении</button>
+                      <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 15, cursor: 'pointer' }} onClick={() => sendEndChoice('exit')}>Отправить предложение о завершении</button>
                     </div>
                   ) : endChoice === 'renew' ? (
-                    <div style={T.noteGreen}>Заявка на продление отправлена арендодателю.</div>
+                    <div style={T.noteGreen}>Предложение о продлении отправлено арендодателю.</div>
                   ) : (
-                    <div style={T.noteGreen}>Вы предупредили о завершении. Арендодатель подготовит расчёт при съезде.</div>
+                    <div style={T.noteGreen}>Предложение о завершении отправлено. Арендодатель подготовит расчёт при съезде.</div>
                   )}
                 </div>
               )}
