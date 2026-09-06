@@ -108,7 +108,7 @@ export function TenantDashboard() {
   async function loadData() {
     if (!contract) return
     const [objRes, metersRes, typesRes, readRes, paysRes, rulesRes, defRes, contactsRes, frozenRes] = await Promise.all([
-      supabase.from('objects').select('*, landlord:users(id, full_name, phone)').eq('id', contract.object_id).maybeSingle(),
+      supabase.from('objects').select('*, landlord_doc_name, landlord:users(id, full_name, phone)').eq('id', contract.object_id).maybeSingle(),
       supabase.from('object_meters').select('*').eq('object_id', contract.object_id).eq('is_active', true),
       supabase.from('meter_types').select('*'),
       supabase.from('meter_readings').select('*').eq('contract_id', contract.id).order('submitted_at', { ascending: false }),
@@ -414,7 +414,7 @@ export function TenantDashboard() {
                 <div style={T.card}>
                   <div style={T.h2}>Куда платить</div>
                   {payDetails.map((d: any, i: number) => (
-                    <div key={i} style={{ padding: '8px 0', borderBottom: i < payDetails.length - 1 ? hair : 'none' }}>
+                    <div key={i} style={{ padding: '8px 0', borderBottom: i < payDetails.length - 1 ? '1px solid rgba(60,60,67,0.12)' : 'none' }} >
                       <div style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f' }}>
                         {d.type === 'sbp' ? 'СБП по телефону' : d.type === 'card' ? 'Карта' : 'Перевод'}{d.bank ? ` · ${d.bank}` : ''}
                       </div>
