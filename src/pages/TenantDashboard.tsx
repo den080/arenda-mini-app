@@ -462,8 +462,8 @@ export function TenantDashboard() {
                   <div style={{ ...T.small, margin: '0 0 10px' }}>Срок до {contract.end_date ? parseDate(contract.end_date).toLocaleDateString('ru-RU') : '—'}. Оплаченные счета закрывают аренду до конца срока. Ваш выбор — предложение арендодателю: он примет решение и при продлении может изменить стоимость и условия.</div>
                   {endChoice === '' ? (
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }} onClick={() => sendEndChoice('renew')}>Отправить предложение о продлении</button>
-                      <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 15, cursor: 'pointer' }} onClick={() => sendEndChoice('exit')}>Отправить предложение о завершении</button>
+                      <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }} onClick={() => setEndConfirm('renew')}>Отправить предложение о продлении</button>
+                      <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 15, cursor: 'pointer' }} onClick={() => setEndConfirm('exit')}>Отправить предложение о завершении</button>
                     </div>
                   ) : endChoice === 'renew' ? (
                     <div style={T.noteGreen}>Предложение о продлении отправлено арендодателю.</div>
@@ -624,6 +624,17 @@ export function TenantDashboard() {
           )}
         </>
       )}
+            <Modal open={!!endConfirm} title={endConfirm === 'renew' ? 'Предложение о продлении' : 'Предложение о завершении'} onClose={() => setEndConfirm('')}>
+        <div style={{ fontSize: 15, color: '#555', marginBottom: 12 }}>
+          {endConfirm === 'renew'
+            ? 'Отправить арендодателю предложение продлить договор? Он примет решение и при продлении может изменить стоимость и условия.'
+            : 'Отправить арендодателю предложение завершить договор в срок? Он подготовит расчёт при съезде.'}
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 16, cursor: 'pointer' }} onClick={() => { const k = endConfirm; setEndConfirm(''); if (k) sendEndChoice(k) }}>Да, отправить</button>
+          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 16, cursor: 'pointer' }} onClick={() => setEndConfirm('')}>Отмена</button>
+        </div>
+      </Modal>
       <Modal open={payClaimOpen} title="Подтверждение оплаты" onClose={() => setPayClaimOpen(false)}>
         <div style={{ fontSize: 15, color: '#555', marginBottom: 12 }}>Вы действительно оплатили {total.toFixed(0)} ₽ за {monthLabel}? Арендодатель получит уведомление.</div>
         <div style={{ display: 'flex', gap: 8 }}>
