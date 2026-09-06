@@ -46,7 +46,7 @@ export async function acceptRenewal(offer: any, oldContract: any): Promise<{ err
 
     const { data: rules } = await supabase.from('penalty_rules').select('*').eq('contract_id', oldContract.id)
     if (rules && rules.length) {
-      await supabase.from('penalty_rules').insert(rules.map((r: any) => ({ contract_id: nc.id, violation_type: r.violation_type, rate: r.rate, rate_unit: r.rate_unit, starts_after_days: r.starts_after_days }))
+    await supabase.from('penalty_rules').insert(rules.map((r: any) => ({ contract_id: nc.id, violation_type: r.violation_type, rate: r.rate, rate_unit: r.rate_unit, starts_after_days: r.starts_after_days })))
     }
 
     await supabase.from('frozen_penalties').update({ contract_id: nc.id }).eq('contract_id', oldContract.id)
