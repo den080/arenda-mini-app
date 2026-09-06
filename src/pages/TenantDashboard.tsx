@@ -34,7 +34,6 @@ const iosBlue: React.CSSProperties = { border: 'none', background: 'transparent'
 const actBlue: React.CSSProperties = { ...iosBlue, fontSize: 15 }
 const iosMuted: React.CSSProperties = { color: '#8e8e93', fontSize: 15 }
 const valText: React.CSSProperties = { fontSize: 17, fontWeight: 500, color: '#1d1d1f' }
-const valRight: React.CSSProperties = { fontSize: 17, fontWeight: 600, color: '#1d1d1f', textAlign: 'right' }
 const valMoney: React.CSSProperties = { fontSize: 17, fontWeight: 600, color: '#1d1d1f', whiteSpace: 'nowrap' }
 const secHead: React.CSSProperties = { fontSize: 13, color: '#8e8e93', margin: '14px 16px 6px', textTransform: 'uppercase', letterSpacing: 0.3 }
 const rightInput: React.CSSProperties = { width: 110, border: 'none', outline: 'none', background: 'rgba(120,120,128,0.08)', borderRadius: 8, padding: '8px 10px', fontSize: 17, fontWeight: 600, textAlign: 'right', color: '#1d1d1f', boxSizing: 'border-box' }
@@ -405,7 +404,7 @@ export function TenantDashboard() {
                   ))
                 ) : (
                   <div style={{ ...T.row, borderBottom: 'none' }}>
-                    <span style={{ ...valText, fontWeight: 600 }}>{contract.payment_method === 'cash' ? 'Наличные' : 'Безналичный расчёт'}</span>
+                    <span style={valText}>{contract.payment_method === 'cash' ? 'Наличные' : 'Безналичный расчёт'}</span>
                   </div>
                 )}
               </div>
@@ -418,7 +417,7 @@ export function TenantDashboard() {
                         {d.type === 'sbp' ? 'СБП по телефону' : d.type === 'card' ? 'Карта' : 'Перевод'}{d.bank ? ` · ${d.bank}` : ''}
                       </div>
                       <div style={{ ...valText, marginTop: 4 }}>{d.number}</div>
-                      <div style={{ fontSize: 13, color: '#8e8e93', marginTop: 2 }}>Получатель: {d.recipient || (obj as any)?.landlord_doc_name || landlord?.full_name || '—'}</div>
+                      <div style={{ fontSize: 13, color: '#8e8e93', marginTop: 2 }}>Получатель: {(obj as any)?.landlord_doc_name || landlord?.full_name || '—'}</div>
                     </div>
                   ))}
                   {payDetails.length === 0 && (contract as any).card_number && (
@@ -429,7 +428,7 @@ export function TenantDashboard() {
                   )}
                   <Hint text="Оплатите по этим реквизитам и нажмите «Я оплатил» — арендодатель подтвердит получение." />
                   {tenantChoseCard && !payment.card_claimed && (
-                    <button style={{ ...T.btn, marginTop: 10 }} onClick={() => setPayClaimOpen(true)}>Я оплатил</button>
+                    <button style={T.btn} onClick={() => setPayClaimOpen(true)}>Я оплатил</button>
                   )}
                   {tenantChoseCard && payment.card_claimed && (
                     <div style={{ ...T.noteGreen, marginTop: 10 }}>Заявка отправлена — арендодатель подтвердит получение.</div>
@@ -454,14 +453,14 @@ export function TenantDashboard() {
                       <span style={valMoney}>{(Number(p.base_amount || 0) + Number(p.penalty_amount || 0) + Number(p.utilities_amount || 0)).toFixed(0)} ₽</span>
                     </div>
                     <div style={{ marginTop: 2 }}>
-                      <span style={{ fontSize: 13, color: p.confirmed_by_landlord ? '#1e7e34' : '#b25000' }}>{p.confirmed_by_landlord ? `оплачен ${p.confirmed_at ? parseDate(String(p.confirmed_at).slice(0, 10)).toLocaleDateString('ru-RU') : ''}` : 'ожидает'}</span>
+                      <span style={{ fontSize: 13, color: p.confirmed_by_landlord ? '#1e7e34' : '#b25000' }}>{p.confirmed_by_landlord ? 'оплачен' : 'ожидает'}</span>
                     </div>
                   </div>
                 ))}
                 {histList.length > 1 && (
                   <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 2px' }}>
                     <button style={actBlue} onClick={() => setPayHistOpen(!payHistOpen)}>
-                      {payHistOpen ? 'Свернуть историю' : 'Показать историю'}
+                      {payHistOpen ? 'Свернуть историю' : `Показать историю (${histList.length})`}
                     </button>
                   </div>
                 )}
@@ -528,13 +527,12 @@ export function TenantDashboard() {
             <>
               <div style={T.card}>
                 <div style={T.h2}>Договор</div>
-                <div style={T.row}><span style={iosMuted}>Арендодатель</span><span style={valRight}>{(obj as any)?.landlord_doc_name || landlord?.full_name || '—'}</span></div>
+                <div style={T.row}><span style={iosMuted}>Арендодатель</span><span style={{ ...valText, textAlign: 'right' }}>{(obj as any)?.landlord_doc_name || landlord?.full_name || '—'}</span></div>
                 {contract.start_date && contract.end_date && (
-                  <div style={T.row}><span style={iosMuted}>Срок</span><span style={valRight}>{parseDate(contract.start_date).toLocaleDateString('ru-RU')} — {parseDate(contract.end_date).toLocaleDateString('ru-RU')}</span></div>
+                  <div style={T.row}><span style={iosMuted}>Срок</span><span style={valText}>{parseDate(contract.start_date).toLocaleDateString('ru-RU')} — {parseDate(contract.end_date).toLocaleDateString('ru-RU')}</span></div>
                 )}
                 <div style={T.row}><span style={iosMuted}>Аренда</span><span style={valMoney}>{Number(contract.rent_amount).toFixed(0)} ₽/мес</span></div>
-                <div style={T.row}><span style={iosMuted}>Оплата</span><span style={valRight}>до {contract.payment_day} числа</span></div>
-                <div style={T.row}><span style={iosMuted}>Показания</span><span style={valRight}>{readingsMode === 'manual' ? `вручную до ${contract.meter_deadline_day || 15} числа` : readingsMode === 'auto' ? 'автоматически' : 'самостоятельно'}</span></div>
+                <div style={T.row}><span style={iosMuted}>Оплата</span><span style={valText}>до {contract.payment_day} числа</span></div>
                 {Number(contract.deposit_amount || 0) > 0 && (
                   <div style={T.row}><span style={iosMuted}>Депозит</span><span style={valMoney}>{Number(contract.deposit_paid || 0).toFixed(0)} из {Number(contract.deposit_amount || 0).toFixed(0)} ₽</span></div>
                 )}
@@ -554,17 +552,25 @@ export function TenantDashboard() {
                           <div style={{ fontSize: 17, fontWeight: 500, color: '#1d1d1f' }}>{c.label}</div>
                           {c.note && <div style={{ fontSize: 13, color: '#8e8e93', marginTop: 2 }}>{c.note}</div>}
                         </div>
-                                  <a
-                                   href={`tel:${String(c.phone || '').replace(/[^\d+]/g, '')}`}
-                                    onClick={(e) => {
-                                     e.preventDefault()
-                                    const tel = 'tel:' + String(c.phone || '').replace(/[^\d+]/g, '')
-                                  const tg: any = (window as any).Telegram?.WebApp
-                                  try { if (tg && tg.openLink) { tg.openLink(tel); return } } catch {}
-                                 window.location.href = tel
-                                   }}
-            style={{ color: '#0071e3', fontSize: 17, fontWeight: 600, textDecoration: 'none', flexShrink: 0 }}
-          >{c.phone}</a>
+                        <a
+                          href={`tel:${String(c.phone || '').replace(/[^\d+]/g, '')}`}
+                          onClick={(e) => {
+                            e.preventDefault()
+                            const raw = String(c.phone || '')
+                            const tel = 'tel:' + raw.replace(/[^\d+]/g, '')
+                            try { navigator.clipboard?.writeText(raw) } catch {}
+                            const tg: any = (window as any).Telegram?.WebApp
+                            let opened = false
+                            try { if (tg && tg.openLink) { tg.openLink(tel); opened = true } } catch {}
+                            if (!opened) { try { window.location.href = tel } catch {} }
+                            showToast('Открываем набор номера… номер также скопирован')
+                          }}
+                          onContextMenu={(e) => {
+                            e.preventDefault()
+                            try { navigator.clipboard?.writeText(String(c.phone || '')); showToast('✅ Номер скопирован') } catch {}
+                          }}
+                          style={{ color: '#0071e3', fontSize: 17, fontWeight: 600, textDecoration: 'none', flexShrink: 0 }}
+                        >{c.phone}</a>
                       </div>
                     </div>
                   ))}
