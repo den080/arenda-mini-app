@@ -350,7 +350,7 @@ export function TenantDashboard() {
                   <div style={T.row}><span style={iosMuted}>Коммунальные</span><span style={valMoney}>{Number(payment.utilities_amount || 0).toFixed(0)} ₽</span></div>
                   <div style={T.row}><span style={iosMuted}>Штраф</span><span style={valMoney}>{Number(payment.penalty_amount || 0).toFixed(0)} ₽</span></div>
                   <div style={T.row}><span style={{ ...valText, fontWeight: 700 }}>Итого</span><span style={valMoney}>{total.toFixed(0)} ₽</span></div>
-                  <div style={{ ...T.row, borderBottom: accrued > 0 ? hair : 'none' }}>
+                  <div style={{ ...T.row, borderBottom: accrued > 0 ? '1px solid rgba(60,60,67,0.12)' : 'none' }}>
                     <span style={iosMuted}>Срок</span>
                     <span style={{ fontSize: 15, fontWeight: 600, color: daysLeft < 0 ? '#ff3b30' : daysLeft <= 3 ? '#b25000' : '#1e7e34' }}>
                       {daysLeft < 0 ? `просрочка ${-daysLeft} дн.` : daysLeft === 0 ? 'сегодня' : `ещё ${daysLeft} дн. (${due!.toLocaleDateString('ru-RU')})`}
