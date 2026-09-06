@@ -724,6 +724,7 @@ export function LandlordDashboard() {
   const iosMuted: React.CSSProperties = { color: '#8e8e93', fontSize: 15 }
   const valText: React.CSSProperties = { fontSize: 17, fontWeight: 500, color: '#1d1d1f' }
   const valMoney: React.CSSProperties = { fontSize: 17, fontWeight: 600, color: '#1d1d1f', whiteSpace: 'nowrap' }
+  const valRight: React.CSSProperties = { fontSize: 17, fontWeight: 600, color: '#1d1d1f', textAlign: 'right' }
   const secHead: React.CSSProperties = { fontSize: 13, color: '#8e8e93', margin: '14px 16px 6px', textTransform: 'uppercase', letterSpacing: 0.3 }
   const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProperties
 
@@ -771,9 +772,9 @@ export function LandlordDashboard() {
         <h1 style={T.h1}>{arch.object?.address || 'Объект'}</h1>
         <div style={T.card}>
           <div style={T.h2}>Договор завершён · архив</div>
-          <div style={T.row}><span style={iosMuted}>Арендатор</span><span style={valText}>{arch.tenant?.full_name || '—'}</span></div>
+          <div style={T.row}> <span style={iosMuted}>Арендатор</span> <span style={valRight}>{(contract as any).tenant?.full_name || '—'}</span> </div>
           {arch.tenant?.phone && <div style={T.row}><span style={iosMuted}>Телефон</span><span style={valText}>{arch.tenant.phone}</span></div>}
-          <div style={T.row}><span style={iosMuted}>Срок</span><span style={valText}>{arch.start_date ? parseDate(arch.start_date).toLocaleDateString('ru-RU') : '—'} — {arch.terminated_at ? new Date(arch.terminated_at).toLocaleDateString('ru-RU') : '—'}</span></div>
+          <div style={T.row}> <span style={iosMuted}>Срок</span> <span style={valRight}>{parseDate((contract as any).start_date).toLocaleDateString('ru-RU')} — {parseDate((contract as any).end_date).toLocaleDateString('ru-RU')}</span> </div>
           <div style={T.row}><span style={iosMuted}>Аренда</span><span style={valMoney}>{Number(arch.rent_amount || 0).toFixed(0)} ₽/мес</span></div>
           {arch.termination_note && <div style={T.row}><span style={iosMuted}>Примечание</span><span style={valText}>{arch.termination_note}</span></div>}
           {archSettlement.deposit_paid != null && <div style={T.row}><span style={iosMuted}>Депозит внесён</span><span style={valMoney}>{Number(archSettlement.deposit_paid).toFixed(0)} ₽</span></div>}
@@ -1207,12 +1208,12 @@ export function LandlordDashboard() {
             )}
             <div style={T.row}><span style={iosMuted}>Аренда</span><span style={valMoney}>{Number(contract.rent_amount).toFixed(0)} ₽/мес</span></div>
             {(contract as any).amendment_at && (
-              <div style={T.row}><span style={iosMuted}>Допсоглашение</span><span style={valText}>{Number(contract.rent_amount).toFixed(0)} ₽ с {(contract as any).amendment_from ? new Date((contract as any).amendment_from).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : new Date((contract as any).amendment_at).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })} · со следующего счёта</span></div>
+             <div style={T.row}> <span style={iosMuted}>Допсоглашение</span> <span style={valRight}>{Number(contract.rent_amount).toFixed(0)} ₽ с {(contract as any).amendment_from ? new Date((contract as any).amendment_from).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : new Date((contract as any).amendment_at).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })} · со следующего счёта</span> </div>
             )}
             {contractBalance > 0 && (
               <div style={T.row}><span style={iosMuted}>Баланс (переплата)</span><span style={valMoney}>{contractBalance.toFixed(0)} ₽</span></div>
             )}
-            <div style={T.row}><span style={iosMuted}>Оплата</span><span style={valText}>до {contract.payment_day} числа</span></div>
+            <div style={T.row}> <span style={iosMuted}>Оплата</span> <span style={valRight}>до {contract.payment_day} числа</span> </div>
             {deposit > 0 && (
               <div style={{ padding: '8px 0 4px' }}>
                 <Progress value={depositPaid} max={deposit} />
