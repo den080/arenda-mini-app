@@ -54,6 +54,7 @@ export function TenantDashboard() {
   const [payHistOpen, setPayHistOpen] = useState(false)
   const [payClaimOpen, setPayClaimOpen] = useState(false)
   const [endChoice, setEndChoice] = useState<'' | 'renew' | 'exit'>('')
+  const [endConfirm, setEndConfirm] = useState<'' | 'renew' | 'exit'>('')
   const [claimPhone, setClaimPhone] = useState('')
   const [claimBusy, setClaimBusy] = useState(false)
   const [claimMsg, setClaimMsg] = useState('')
@@ -439,10 +440,10 @@ export function TenantDashboard() {
                     </div>
                   )}
                   <Hint text="Оплатите по этим реквизитам и нажмите «Я оплатил» — арендодатель подтвердит получение." />
-                  {tenantChoseCard && !payment.card_claimed && (
+                  {payment && tenantChoseCard && !payment.card_claimed && (
                     <button style={T.btn} onClick={() => setPayClaimOpen(true)}>Я оплатил</button>
                   )}
-                  {tenantChoseCard && payment.card_claimed && (
+                  {payment && tenantChoseCard && payment.card_claimed && (
                     <div style={{ ...T.noteGreen, marginTop: 10 }}>Заявка отправлена — арендодатель подтвердит получение.</div>
                   )}
                 </div>
