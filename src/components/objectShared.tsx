@@ -4,7 +4,7 @@ export const OWNER_PHONE = '+79057674225'
 export const PRO_PRICE = 299
 export const SBP_PHONE = '+7 905 767-42-25'
 
-export interface PayDetail { type: 'card' | 'sbp'; bank: string; number: string }
+export interface PayDetail { type: 'card' | 'sbp'; bank: string; number: string; recipient?: string }
 
 export const S: Record<string, React.CSSProperties> = {
   lab: { fontSize: 13, color: '#8e8e93', margin: '12px 0 2px' },
@@ -114,18 +114,25 @@ export function DetailsEditor({ list, onChange }: { list: PayDetail[]; onChange:
               placeholder="Название банка"
               style={{ ...S.inp, flex: 1, borderBottom: 'none', background: 'rgba(120,120,128,0.08)', borderRadius: 8, padding: '9px 10px' }}
             />
-          </div>
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 8 }}>
-            <input
-              value={d.number}
-              onChange={e => { const v = [...list]; v[i] = { ...v[i], number: d.type === 'card' ? formatCardInput(e.target.value) : formatPhoneInput(e.target.value) }; onChange(v) }}
-              placeholder={d.type === 'card' ? '0000 0000 0000 0000' : '+7 000 000 00-00'}
-              style={{ ...S.inp, flex: 1 }}
-              inputMode="numeric"
-            />
-            <button style={S.red} onClick={() => onChange(list.filter((_, x) => x !== i))}>удалить</button>
-          </div>
+           </div>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 8 }}>
+          <input
+          value={d.number}
+          onChange={e => { const v = [...list]; v[i] = { ...v[i], number: d.type === 'card' ? formatCardInput(e.target.value) : formatPhoneInput(e.target.value) }; onChange(v) }}
+          placeholder={d.type === 'card' ? '0000 0000 0000 0000' : '+7 000 000 00-00'}
+          style={{ ...S.inp, flex: 1 }}
+          inputMode="numeric"
+          />
+        <button style={S.red} onClick={() => onChange(list.filter((_, x) => x !== i))}>удалить</button>
         </div>
+      <input
+        value={d.recipient || ''}
+        onChange={e => { const v = [...list]; v[i] = { ...v[i], recipient: e.target.value }; onChange(v) }}
+        placeholder="ФИО получателя"
+        style={{ ...S.inp, marginTop: 8 }}
+      />
+    </div>
+  ))}
       ))}
       <div style={{ padding: '10px 0' }}>
         <button style={S.blue} onClick={() => onChange([...list, { type: 'sbp', bank: '', number: '' }])}>+ Добавить способ оплаты</button>
