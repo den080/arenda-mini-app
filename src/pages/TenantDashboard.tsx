@@ -513,6 +513,7 @@ export function TenantDashboard() {
                 )}
                 <div style={T.row}><span style={iosMuted}>Аренда</span><span style={valMoney}>{Number(contract.rent_amount).toFixed(0)} ₽/мес</span></div>
                 <div style={T.row}><span style={iosMuted}>Оплата</span><span style={valText}>до {contract.payment_day} числа</span></div>
+                <div style={T.row}><span style={iosMuted}>Показания</span><span style={valText}>{readingsMode === 'manual' ? `вручную до ${contract.meter_deadline_day || 15} числа` : readingsMode === 'auto' ? 'автоматически' : 'самостоятельно'}</span></div>
                 {Number(contract.deposit_amount || 0) > 0 && (
                   <div style={T.row}><span style={iosMuted}>Депозит</span><span style={valMoney}>{Number(contract.deposit_paid || 0).toFixed(0)} из {Number(contract.deposit_amount || 0).toFixed(0)} ₽</span></div>
                 )}
