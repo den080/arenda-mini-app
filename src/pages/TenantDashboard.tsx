@@ -53,6 +53,7 @@ export function TenantDashboard() {
   const [historyOpen, setHistoryOpen] = useState<Record<string, boolean>>({})
   const [payHistOpen, setPayHistOpen] = useState(false)
   const [payClaimOpen, setPayClaimOpen] = useState(false)
+  const [endChoice, setEndChoice] = useState<'' | 'renew' | 'exit'>('')
   const [claimPhone, setClaimPhone] = useState('')
   const [claimBusy, setClaimBusy] = useState(false)
   const [claimMsg, setClaimMsg] = useState('')
@@ -213,6 +214,13 @@ export function TenantDashboard() {
     loadData()
   }
 
+    async function sendEndChoice(kind: 'renew' | 'exit') {
+    if (!contract) return
+    setEndChoice(kind)
+    await notify(data?.obj?.landlord_id, kind === 'renew' ? 'renewal_requested' : 'termination_requested', kind === 'renew' ? '🔄 Арендатор хочет продлить договор ещё на год' : '🏁 Арендатор планирует съезд в конце договора', contract.id)
+    showToast(kind === 'renew' ? '✅ Заявка на продление отправлена' : '✅ Вы предупредили о завершении договора')
+  }
+
   async function setTenantPayMethod(m: 'card' | 'cash') {
     if (!contract) return
     try {
@@ -321,6 +329,8 @@ export function TenantDashboard() {
   const accrued = payment && daysLeft < 0 && penaltyRate > 0 ? (-daysLeft) * penaltyRate : 0
   const shownPenalty = payment ? Math.max(Number(payment.penalty_amount || 0), accrued) : 0
   const total = basePlusUtil + shownPenalty
+  const daysToEnd = contract.end_date ? Math.round((parseDate(contract.end_date).getTime() - todayMid.getTime()) / 86400000) : null
+  const lastMonth = daysToEnd !== null && daysToEnd >= 0 && daysToEnd <= 31
   const readingsRule = rules.find((r: any) => r.violation_type === 'readings_overdue')
   const lastDeferral = defs && defs[0] ? defs[0] : null
   const deferralPending = !!(lastDeferral && lastDeferral.status === 'proposed' && payment && String(lastDeferral.payment_id) === String(payment.id))
@@ -417,7 +427,7 @@ export function TenantDashboard() {
                         {d.type === 'sbp' ? 'СБП по телефону' : d.type === 'card' ? 'Карта' : 'Перевод'}{d.bank ? ` · ${d.bank}` : ''}
                       </div>
                       <div style={{ ...valText, marginTop: 4 }}>{d.number}</div>
-                      <div style={{ fontSize: 13, color: '#8e8e93', marginTop: 2 }}>Получатель: {(obj as any)?.landlord_doc_name || landlord?.full_name || '—'}</div>
+                      <div style={{ fontSize: 13, color: '#8e8e93', marginTop: 2 }}>Получатель: {d.recipient || (obj as any)?.landlord_doc_name || landlord?.full_name || '—'}</div>
                     </div>
                   ))}
                   {payDetails.length === 0 && (contract as any).card_number && (
@@ -443,6 +453,22 @@ export function TenantDashboard() {
                   landlordId={obj?.landlord_id || contract.object?.landlord_id}
                 />
               )}
+              {lastMonth && (
+                <div style={T.card}>
+                  <div style={T.h2}>Договор заканчивается</div>
+                  <div style={{ ...T.small, margin: '0 0 10px' }}>Срок до {contract.end_date ? parseDate(contract.end_date).toLocaleDateString('ru-RU') : '—'}. Последний счёт — за {monthLabel}. Выберите: продление или завершение.</div>
+                  {endChoice === '' ? (
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }} onClick={() => sendEndChoice('renew')}>Продлить договор</button>
+                      <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 15, cursor: 'pointer' }} onClick={() => sendEndChoice('exit')}>Завершить договор</button>
+                    </div>
+                  ) : endChoice === 'renew' ? (
+                    <div style={T.noteGreen}>Заявка на продление отправлена арендодателю.</div>
+                  ) : (
+                    <div style={T.noteGreen}>Вы предупредили о завершении. Арендодатель подготовит расчёт при съезде.</div>
+                  )}
+                </div>
+              )}
               <div style={T.card}>
                 <div style={T.h2}>История платежей</div>
                 {histList.length === 0 && <div style={{ ...T.small, margin: '8px 0' }}>Платежей пока нет.</div>}
@@ -460,7 +486,7 @@ export function TenantDashboard() {
                 {histList.length > 1 && (
                   <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 2px' }}>
                     <button style={actBlue} onClick={() => setPayHistOpen(!payHistOpen)}>
-                      {payHistOpen ? 'Свернуть историю' : `Показать историю (${histList.length})`}
+                     {payHistOpen ? 'Свернуть историю' : 'Показать историю'}
                     </button>
                   </div>
                 )}

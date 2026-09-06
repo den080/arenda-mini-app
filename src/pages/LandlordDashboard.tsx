@@ -659,7 +659,17 @@ export function LandlordDashboard() {
     showToast('✅ Штраф заморожен')
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
-
+  async function prolongContract() {
+    if (!contract) return
+    const ed = parseDate((contract as any).end_date)
+    const newEnd = new Date(ed.getFullYear() + 1, ed.getMonth(), ed.getDate())
+    const isoEnd = `${newEnd.getFullYear()}-${String(newEnd.getMonth() + 1).padStart(2, '0')}-${String(newEnd.getDate()).padStart(2, '0')}`
+    const { error } = await supabase.from('contracts').update({ end_date: isoEnd }).eq('id', contract.id)
+    if (error) { showToast('Ошибка: ' + error.message); return }
+    await supabase.from('notifications_log').insert({ user_id: contract.tenant_id, type: 'contract_prolonged', related_id: contract.id, message: `🔄 Договор продлён до ${newEnd.toLocaleDateString('ru-RU')}`, sent_at: new Date().toISOString() })
+    showToast(`✅ Договор продлён до ${newEnd.toLocaleDateString('ru-RU')}`)
+    window.dispatchEvent(new Event('rentflow-refresh'))
+  }
   async function updatePaymentMethod(contractId: string, method: 'card' | 'cash' | 'both') {
     const updateData: any = { payment_method: method }
     if (method === 'cash') updateData.cash_slots = []
@@ -739,6 +749,9 @@ export function LandlordDashboard() {
   const lastConfirmedIsFirst = !!(contract && current?.payment && current.payment.confirmed_by_landlord && isFirstPeriod(current.payment.period, sd))
   const showUtilities = !!(contract && current?.paymentId && current.readingsMode !== 'self' && (openPay ? !firstMonthCurrent : lastConfirmedIsFirst))
   const tenantChoseCash = contract && (contract.payment_method === 'cash' || (contract.payment_method === 'both' && (contract as any).tenant_pay_method === 'cash'))
+  const todayMid0 = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate())
+  const daysToEnd = (contract as any)?.end_date ? Math.round((parseDate((contract as any).end_date).getTime() - todayMid0.getTime()) / 86400000) : null
+  const lastMonth = daysToEnd !== null && daysToEnd >= 0 && daysToEnd <= 31
 
   const objHistoryRaw = history.filter(h => h.objId === current?.id)
   const firstOpenPeriod = objHistoryRaw.filter((h: any) => !h.confirmed_by_landlord).map((h: any) => h.period).sort()[0]
@@ -1199,6 +1212,14 @@ export function LandlordDashboard() {
       {tab === 'contract' && contract && (
         <>
           <div style={T.card}>
+            {lastMonth && (
+             <div style={T.card}>
+                <div style={T.h2}>Договор заканчивается</div>
+                <div style={{ ...T.small, margin: '0 0 10px' }}>Последний счёт — за текущий месяц. Вилка: пролонгация или завершение.</div>
+                <button style={{ width: '100%', padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }} onClick={prolongContract}>Продлить на 12 месяцев</button>
+                <Hint text="Для завершения — блок «Завершение договора» ниже: депозит, замороженные штрафы и открытые счета будут учтены в итоговом расчёте." />
+              </div>
+            )}
             <div style={T.h2}>Договор</div>
             <div style={T.row}><span style={iosMuted}>Арендатор</span><span style={valText}>{(contract as any).tenant?.full_name || '—'}</span></div>
             {(contract as any).tenant?.phone && <div style={T.row}><span style={iosMuted}>Телефон</span><span style={valText}>{(contract as any).tenant.phone}</span></div>}
