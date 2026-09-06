@@ -6,12 +6,14 @@ import BillReview from '../components/BillReview'
 import Chat from '../components/Chat'
 import { BottomNav, showToast, SkeletonList, PullToRefresh, Hint, Modal } from '../components/ui'
 import { T } from '../theme'
+
 const TABS = [
   { id: 'pay', l: 'Оплата' },
   { id: 'meters', l: 'Счётчики' },
   { id: 'contract', l: 'Договор' },
   { id: 'chat', l: 'Чат' },
 ]
+
 function parseDate(d: any): Date { const [y, m, dd] = String(d).slice(0, 10).split('-').map(Number); return new Date(y, (m || 1) - 1, dd || 1) }
 function fmt(v: any): string { const x = Number(v); if (!isFinite(x)) return String(v ?? ''); return String(Math.round(x * 1000) / 1000) }
 function formatPhone(v: string): string {
@@ -27,16 +29,19 @@ function formatPhone(v: string): string {
   }
   return v
 }
+
 const iosBlue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 17, fontWeight: 600, cursor: 'pointer', padding: 4, flexShrink: 0 }
 const actBlue: React.CSSProperties = { ...iosBlue, fontSize: 15 }
 const iosMuted: React.CSSProperties = { color: '#8e8e93', fontSize: 15 }
 const valText: React.CSSProperties = { fontSize: 17, fontWeight: 500, color: '#1d1d1f' }
+const valRight: React.CSSProperties = { fontSize: 17, fontWeight: 600, color: '#1d1d1f', textAlign: 'right' }
 const valMoney: React.CSSProperties = { fontSize: 17, fontWeight: 600, color: '#1d1d1f', whiteSpace: 'nowrap' }
 const secHead: React.CSSProperties = { fontSize: 13, color: '#8e8e93', margin: '14px 16px 6px', textTransform: 'uppercase', letterSpacing: 0.3 }
 const rightInput: React.CSSProperties = { width: 110, border: 'none', outline: 'none', background: 'rgba(120,120,128,0.08)', borderRadius: 8, padding: '8px 10px', fontSize: 17, fontWeight: 600, textAlign: 'right', color: '#1d1d1f', boxSizing: 'border-box' }
 const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProperties
 const inp: React.CSSProperties = { width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 17, boxSizing: 'border-box', outline: 'none' }
 const rowBtn: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 56, border: 'none', background: 'transparent', cursor: 'pointer', padding: '4px 0', textAlign: 'left', boxSizing: 'border-box' }
+
 export function TenantDashboard() {
   const { user, loading: userLoading } = useTelegramUser()
   const [contracts, setContracts] = useState<any[]>([])
@@ -53,8 +58,10 @@ export function TenantDashboard() {
   const [claimBusy, setClaimBusy] = useState(false)
   const [claimMsg, setClaimMsg] = useState('')
   const [busy, setBusy] = useState(false)
+
   const now = new Date()
   const period = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+
   async function load() {
     const { data: cs } = await supabase
       .from('contracts').select('*, object:objects(id, address, landlord_id)')
@@ -89,6 +96,7 @@ export function TenantDashboard() {
     setNotifications(ns || [])
     setLoading(false)
   }
+
   useEffect(() => {
     if (!user) return
     load()
@@ -96,7 +104,9 @@ export function TenantDashboard() {
     window.addEventListener('rentflow-refresh', on)
     return () => window.removeEventListener('rentflow-refresh', on)
   }, [user?.id])
+
   const contract = contracts.find(c => c.id === openId) || null
+
   async function loadData() {
     if (!contract) return
     const [objRes, metersRes, typesRes, readRes, paysRes, rulesRes, defRes, contactsRes, frozenRes] = await Promise.all([
@@ -129,13 +139,16 @@ export function TenantDashboard() {
       frozen: frozenRes.data || [],
     })
   }
+
   useEffect(() => {
     if (openId && contract) { setData(null); loadData(); setPayHistOpen(false) }
   }, [openId])
+
   async function notify(landlordId: string | undefined, type: string, message: string, relatedId?: string) {
     if (!landlordId) return
     await supabase.from('notifications_log').insert({ user_id: landlordId, type, related_id: relatedId || null, message, sent_at: new Date().toISOString() })
   }
+
   async function claim() {
     setClaimBusy(true); setClaimMsg('')
     try {
@@ -151,6 +164,7 @@ export function TenantDashboard() {
       }
     } finally { setClaimBusy(false) }
   }
+
   async function submitReadings() {
     if (!contract || !data) return
     const rows = (data.meters || []).filter((m: any) => String(vals[m.id] || '').trim() !== '')
@@ -177,6 +191,7 @@ export function TenantDashboard() {
       loadData()
     } finally { setBusy(false) }
   }
+
   async function claimCard() {
     if (!contract || !payment) return
     const { error } = await supabase.from('payments').update({ card_claimed: true }).eq('id', payment.id)
@@ -186,6 +201,7 @@ export function TenantDashboard() {
     window.dispatchEvent(new Event('rentflow-refresh'))
     loadData()
   }
+
   async function requestDeferral() {
     if (!contract || !payment) return
     const amount = Number(payment.penalty_amount || 0)
@@ -197,6 +213,7 @@ export function TenantDashboard() {
     window.dispatchEvent(new Event('rentflow-refresh'))
     loadData()
   }
+
   async function setTenantPayMethod(m: 'card' | 'cash') {
     if (!contract) return
     try {
@@ -215,12 +232,14 @@ export function TenantDashboard() {
       showToast('Не удалось переключить способ оплаты. Проверьте связь и нажмите ещё раз.')
     }
   }
+
   if (userLoading || loading) return (
     <div style={T.page}>
       <h1 style={T.h1}>Моя аренда</h1>
       <SkeletonList count={3} />
     </div>
   )
+
   if (!contract) {
     return (
       <PullToRefresh onRefresh={async () => { window.dispatchEvent(new Event('rentflow-refresh')); await new Promise(r => setTimeout(r, 600)) }}>
@@ -279,6 +298,7 @@ export function TenantDashboard() {
       </PullToRefresh>
     )
   }
+
   const obj = data?.obj
   const landlord = data?.landlord
   const meters = data?.meters || []
@@ -324,6 +344,7 @@ export function TenantDashboard() {
   })
   const payBadge = !!payment
   const metersBadge = readingsMode === 'manual' && meters.length > 0 && overallReading !== 'confirmed'
+
   return (
     <div style={{ ...T.page, paddingBottom: 90 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 0 8px' }}>
@@ -384,7 +405,7 @@ export function TenantDashboard() {
                   ))
                 ) : (
                   <div style={{ ...T.row, borderBottom: 'none' }}>
-                    <span style={valText}>{contract.payment_method === 'cash' ? 'Наличные' : 'Безналичный расчёт'}</span>
+                    <span style={{ ...valText, fontWeight: 600 }}>{contract.payment_method === 'cash' ? 'Наличные' : 'Безналичный расчёт'}</span>
                   </div>
                 )}
               </div>
@@ -507,13 +528,13 @@ export function TenantDashboard() {
             <>
               <div style={T.card}>
                 <div style={T.h2}>Договор</div>
-                <div style={T.row}><span style={iosMuted}>Арендодатель</span><span style={{ ...valText, textAlign: 'right' }}>{(obj as any)?.landlord_doc_name || landlord?.full_name || '—'}</span></div>
+                <div style={T.row}><span style={iosMuted}>Арендодатель</span><span style={valRight}>{(obj as any)?.landlord_doc_name || landlord?.full_name || '—'}</span></div>
                 {contract.start_date && contract.end_date && (
-                  <div style={T.row}><span style={iosMuted}>Срок</span><span style={valText}>{parseDate(contract.start_date).toLocaleDateString('ru-RU')} — {parseDate(contract.end_date).toLocaleDateString('ru-RU')}</span></div>
+                  <div style={T.row}><span style={iosMuted}>Срок</span><span style={valRight}>{parseDate(contract.start_date).toLocaleDateString('ru-RU')} — {parseDate(contract.end_date).toLocaleDateString('ru-RU')}</span></div>
                 )}
                 <div style={T.row}><span style={iosMuted}>Аренда</span><span style={valMoney}>{Number(contract.rent_amount).toFixed(0)} ₽/мес</span></div>
-                <div style={T.row}><span style={iosMuted}>Оплата</span><span style={valText}>до {contract.payment_day} числа</span></div>
-                <div style={T.row}><span style={iosMuted}>Показания</span><span style={valText}>{readingsMode === 'manual' ? `вручную до ${contract.meter_deadline_day || 15} числа` : readingsMode === 'auto' ? 'автоматически' : 'самостоятельно'}</span></div>
+                <div style={T.row}><span style={iosMuted}>Оплата</span><span style={valRight}>до {contract.payment_day} числа</span></div>
+                <div style={T.row}><span style={iosMuted}>Показания</span><span style={valRight}>{readingsMode === 'manual' ? `вручную до ${contract.meter_deadline_day || 15} числа` : readingsMode === 'auto' ? 'автоматически' : 'самостоятельно'}</span></div>
                 {Number(contract.deposit_amount || 0) > 0 && (
                   <div style={T.row}><span style={iosMuted}>Депозит</span><span style={valMoney}>{Number(contract.deposit_paid || 0).toFixed(0)} из {Number(contract.deposit_amount || 0).toFixed(0)} ₽</span></div>
                 )}
@@ -575,4 +596,5 @@ export function TenantDashboard() {
     </div>
   )
 }
+
 export default TenantDashboard
