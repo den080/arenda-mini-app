@@ -4,7 +4,7 @@ import { useTelegramUser } from '../hooks/useTelegramUser'
 import CashNegotiation from '../components/CashNegotiation'
 import BillReview from '../components/BillReview'
 import Chat from '../components/Chat'
-import { BottomNav, showToast, SkeletonList, PullToRefresh, Hint } from '../components/ui'
+import { BottomNav, showToast, SkeletonList, PullToRefresh, Hint, Modal } from './ui'
 import { T } from '../theme'
 
 const TABS = [
@@ -52,6 +52,7 @@ export function TenantDashboard() {
   const [vals, setVals] = useState<Record<string, string>>({})
   const [historyOpen, setHistoryOpen] = useState<Record<string, boolean>>({})
   const [payHistOpen, setPayHistOpen] = useState(false)
+  const [payClaimOpen, setPayClaimOpen] = useState(false)
   const [claimPhone, setClaimPhone] = useState('')
   const [claimBusy, setClaimBusy] = useState(false)
   const [claimMsg, setClaimMsg] = useState('')
@@ -416,6 +417,7 @@ export function TenantDashboard() {
                         {d.type === 'sbp' ? 'СБП по телефону' : d.type === 'card' ? 'Карта' : 'Перевод'}{d.bank ? ` · ${d.bank}` : ''}
                       </div>
                       <div style={{ ...valText, marginTop: 4 }}>{d.number}</div>
+                      <div style={{ fontSize: 13, color: '#8e8e93', marginTop: 2 }}>Получатель: {(obj as any)?.landlord_doc_name || landlord?.full_name || '—'}</div>
                     </div>
                   ))}
                   {payDetails.length === 0 && (contract as any).card_number && (
@@ -426,7 +428,7 @@ export function TenantDashboard() {
                   )}
                   <Hint text="Оплатите по этим реквизитам и нажмите «Я оплатил» — арендодатель подтвердит получение." />
                   {tenantChoseCard && !payment.card_claimed && (
-                    <button style={{ ...T.btn, marginTop: 10 }} onClick={claimCard}>Я оплатил</button>
+                    <button style={T.btn} onClick={() => setPayClaimOpen(true)}>Я оплатил</button>
                   )}
                   {tenantChoseCard && payment.card_claimed && (
                     <div style={{ ...T.noteGreen, marginTop: 10 }}>Заявка отправлена — арендодатель подтвердит получение.</div>
@@ -581,6 +583,13 @@ export function TenantDashboard() {
           )}
         </>
       )}
+      <Modal open={payClaimOpen} title="Подтверждение оплаты" onClose={() => setPayClaimOpen(false)}>
+        <div style={{ fontSize: 15, color: '#555', marginBottom: 12 }}>Вы действительно оплатили {total.toFixed(0)} ₽ за {monthLabel}? Арендодатель получит уведомление.</div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 16, cursor: 'pointer' }} onClick={() => { setPayClaimOpen(false); claimCard() }}>Да, я оплатил</button>
+          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 16, cursor: 'pointer' }} onClick={() => setPayClaimOpen(false)}>Отмена</button>
+        </div>
+      </Modal>
       <BottomNav tabs={TABS} tab={tab} setTab={setTab} badges={{ pay: payBadge, meters: metersBadge }} />
     </div>
   )
