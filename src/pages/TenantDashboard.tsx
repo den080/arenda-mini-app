@@ -358,17 +358,16 @@ export function TenantDashboard() {
                 <div style={T.card}>
                   <div style={T.h2}>Счёт за {monthLabel}</div>
                   <div style={T.row}><span style={iosMuted}>Аренда</span><span style={valMoney}>{Number(payment.base_amount || 0).toFixed(0)} ₽</span></div>
-                  <div style={T.row}> <span style={{ ...iosMuted, color: shownPenalty > 0 ? '#ff3b30' : iosMuted.color }}>Штраф</span> <span style={{ ...valMoney, color: shownPenalty > 0 ? '#ff3b30' : valMoney.color }}>{shownPenalty.toFixed(0)} ₽</span> </div>
-                  <div style={T.row}> <span style={{ ...valText, fontWeight: 700 }}>Итого</span> <span style={valMoney}>{total.toFixed(0)} ₽</span> </div>
+                  <div style={T.row}><span style={iosMuted}>Коммунальные</span><span style={valMoney}>{Number(payment.utilities_amount || 0).toFixed(0)} ₽</span></div>
+                  <div style={T.row}><span style={{ ...iosMuted, color: shownPenalty > 0 ? '#ff3b30' : iosMuted.color }}>Штраф</span><span style={{ ...valMoney, color: shownPenalty > 0 ? '#ff3b30' : valMoney.color }}>{shownPenalty.toFixed(0)} ₽</span></div>
+                  <div style={T.row}><span style={{ ...valText, fontWeight: 700 }}>Итого</span><span style={valMoney}>{total.toFixed(0)} ₽</span></div>
                   <div style={{ ...T.row, borderBottom: 'none' }}>
-                  <div style={{ ...T.row, borderBottom: accrued > 0 ? '1px solid rgba(60,60,67,0.12)' : 'none' }}>
                     <span style={iosMuted}>Срок</span>
                     <span style={{ fontSize: 15, fontWeight: 600, color: daysLeft < 0 ? '#ff3b30' : daysLeft <= 3 ? '#b25000' : '#1e7e34' }}>
                       {daysLeft < 0 ? `просрочка ${-daysLeft} дн.` : daysLeft === 0 ? 'сегодня' : `ещё ${daysLeft} дн. (${due!.toLocaleDateString('ru-RU')})`}
                     </span>
                   </div>
-
-                  {accrued > 0 && <Hint text="Пени начисляются каждый день просрочки и растут до момента оплаты." />}
+                  {accrued > 0 && <Hint text="Штраф начисляется каждый день просрочки и растёт до момента оплаты." />}
                   {Number(payment.paid_amount || 0) > 0 && <div style={T.tiny}>Получено: {Number(payment.paid_amount).toFixed(0)} ₽</div>}
                   {tenantChoseCard && !payment.card_claimed && (
                     <button style={T.btn} onClick={claimCard}>Я оплатил</button>
@@ -376,7 +375,6 @@ export function TenantDashboard() {
                   {tenantChoseCard && payment.card_claimed && (
                     <div style={T.noteGreen}>Заявка отправлена — арендодатель подтвердит получение.</div>
                   )}
-
                   {Number(payment.penalty_amount || 0) > 0 && !deferralPending && (
                     <div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0 8px' }}>
                       <button style={actBlue} onClick={requestDeferral}>Попросить отсрочку штрафа</button>
@@ -418,7 +416,7 @@ export function TenantDashboard() {
                 <div style={T.card}>
                   <div style={T.h2}>Куда платить</div>
                   {payDetails.map((d: any, i: number) => (
-                    <div key={i} style={{ padding: '8px 0', borderBottom: i < payDetails.length - 1 ? '1px solid rgba(60,60,67,0.12)' : 'none' }} >
+                    <div key={i} style={{ padding: '8px 0', borderBottom: i < payDetails.length - 1 ? '1px solid rgba(60,60,67,0.12)' : 'none' }}>
                       <div style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f' }}>
                         {d.type === 'sbp' ? 'СБП по телефону' : d.type === 'card' ? 'Карта' : 'Перевод'}{d.bank ? ` · ${d.bank}` : ''}
                       </div>
@@ -435,14 +433,12 @@ export function TenantDashboard() {
                 </div>
               )}
               {tenantChoseCash && (
-                <div>
-                  <CashNegotiation
-                    contractId={contract.id}
-                    myRole="tenant"
-                    tenantId={user!.id}
-                    landlordId={obj?.landlord_id || contract.object?.landlord_id}
-                  />
-                </div>
+                <CashNegotiation
+                  contractId={contract.id}
+                  myRole="tenant"
+                  tenantId={user!.id}
+                  landlordId={obj?.landlord_id || contract.object?.landlord_id}
+                />
               )}
               <div style={T.card}>
                 <div style={T.h2}>История платежей</div>
