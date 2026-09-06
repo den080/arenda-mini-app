@@ -13,6 +13,7 @@ import { ObjectAdd, ObjectEdit } from '../components/ObjectManager'
 import TeamManager from '../components/TeamManager'
 import ContactsEditor from '../components/ContactsEditor'
 import { ensureNextPayment } from '../lib/nextPayment'
+import { addOffer, markOffer, acceptRenewal } from '../lib/renewal'
 import { setAnalyticsUser, trackOpen, trackScreen } from '../lib/analytics'
 import { BottomNav, Modal, PromptNumber, Progress, ConfirmDelete, showToast, SkeletonList, PullToRefresh, Hint } from '../components/ui'
 import { T } from '../theme'
@@ -92,11 +93,24 @@ export function LandlordDashboard() {
   const [massOpen, setMassOpen] = useState(false)
   const [massOk, setMassOk] = useState(false)
   const [massBusy, setMassBusy] = useState(false)
-  const [massSel, setMassSel] = useState<Record<string, boolean>>({})
+  const [massSel, setMassSel] = useState <Record <string, boolean > >({})
+  const [renewOffer, setRenewOffer] = useState<any>(null)
+  const [renewForm, setRenewForm] = useState(false)
+  const [offRent, setOffRent] = useState('')
+  const [offMonths, setOffMonths] = useState(11)
+  const [offStart, setOffStart] = useState('')
 
   useEffect(() => {
-    setEarlyPayOpen(false)
-    setUtilSaved(null)
+  setEarlyPayOpen(false)
+  setUtilSaved(null)
+  }, [openId])
+  useEffect(() => {
+    if (!openId) return
+    ;(async () => {
+      const { data } = await supabase.from('renewal_offers').select('*').eq('contract_id', openId).order('created_at', { ascending: false }).limit(1).maybeSingle()
+      setRenewOffer(data)
+      setRenewForm(false)
+    })()
   }, [openId])
 
   useEffect(() => {
@@ -671,6 +685,38 @@ export function LandlordDashboard() {
     showToast(`✅ Договор продлён до ${newEnd.toLocaleDateString('ru-RU')}`)
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
+    async function landlordSendOffer() {
+    if (!contract) return
+    const rentN = Number(String(offRent).replace(',', '.'))
+    if (!rentN || rentN <= 0) { showToast('Укажите сумму аренды'); return }
+    if (!offStart) { showToast('Укажите дату начала'); return }
+    if (renewOffer) await markOffer(renewOffer.id, 'countered')
+    await addOffer({ contract_id: contract.id, offered_by: 'landlord', rent_amount: rentN, months: offMonths, start_date: offStart, round: (renewOffer?.round || 0) + 1 })
+    setRenewForm(false)
+    await supabase.from('notifications_log').insert({ user_id: contract.tenant_id, type: 'renewal_offered', related_id: contract.id, message: `📨 Арендодатель предложил условия продления: ${rentN.toFixed(0)} ₽/мес, ${offMonths} мес.`, sent_at: new Date().toISOString() })
+    showToast('✅ Предложение отправлено арендатору')
+    const { data } = await supabase.from('renewal_offers').select('*').eq('contract_id', contract.id).order('created_at', { ascending: false }).limit(1).maybeSingle()
+    setRenewOffer(data)
+    window.dispatchEvent(new Event('rentflow-refresh'))
+  }
+
+  async function landlordAccept() {
+    if (!contract || !renewOffer) return
+    const res = await acceptRenewal(renewOffer, contract)
+    if (res.error) { showToast('Ошибка: ' + res.error); return }
+    await supabase.from('notifications_log').insert({ user_id: contract.tenant_id, type: 'renewal_accepted', related_id: contract.id, message: '🤝 Арендодатель согласился на ваши условия — договор продлён', sent_at: new Date().toISOString() })
+    showToast('✅ Договор продлён')
+    window.dispatchEvent(new Event('rentflow-refresh'))
+  }
+
+  async function landlordDecline() {
+    if (!contract || !renewOffer) return
+    await markOffer(renewOffer.id, 'declined')
+    await supabase.from('notifications_log').insert({ user_id: contract.tenant_id, type: 'renewal_declined', related_id: contract.id, message: '🏁 Арендодатель отклонил продление — договор завершится в срок', sent_at: new Date().toISOString() })
+    showToast('✅ Продление отклонено')
+    setRenewOffer({ ...renewOffer, status: 'declined' })
+  }
+
   async function updatePaymentMethod(contractId: string, method: 'card' | 'cash' | 'both') {
     const updateData: any = { payment_method: method }
     if (method === 'cash') updateData.cash_slots = []
@@ -1254,9 +1300,55 @@ export function LandlordDashboard() {
                 </div>
               </div>
             )}
-          </div>
-
-          <div style={secHead}>Экстренные контакты</div>
+           </div >
+ {(renewOffer || ((contract as any)?.end_date && (() => { const ed = parseDate((contract as any).end_date); const t = new Date(); const mid = new Date(t.getFullYear(), t.getMonth(), t.getDate()); const d = Math.round((ed.getTime() - mid.getTime()) / 86400000); return d >= 0 && d <= 31 })())) && (
+  <div style={T.card} >
+   <div style={T.h2} >Продление договора </div >
+   {renewOffer && renewOffer.status === 'accepted' && <div style={{ ...T.noteGreen, margin: '0 0 8px' }} >Договор продлён новым договором. </div >}
+   {renewOffer && renewOffer.status === 'declined' && <div style={{ ...T.noteGreen, margin: '0 0 8px' }} >Продление отклонено — договор завершится в срок. </div >}
+   {renewOffer && renewOffer.status === 'countered' && <div style={{ ...T.small, margin: '0 0 8px' }} >Идёт обсуждение условий. </div >}
+   {renewOffer && renewOffer.status === 'proposed' && renewOffer.offered_by === 'landlord' && (
+    <div style={{ ...T.small, margin: '0 0 8px' }} >Ваше предложение: {Number(renewOffer.rent_amount).toFixed(0)} ₽/мес, {renewOffer.months} мес. с {parseDate(renewOffer.start_date).toLocaleDateString('ru-RU')}. Ждём ответ арендатора. </div >
+   )}
+   {renewOffer && renewOffer.status === 'proposed' && renewOffer.offered_by === 'tenant' && (
+    <>
+     {(renewOffer.round || 1) > 1
+      ? <div style={{ ...T.small, margin: '0 0 8px' }} >Встречное предложение арендатора: {Number(renewOffer.rent_amount).toFixed(0)} ₽/мес, {renewOffer.months} мес. с {parseDate(renewOffer.start_date).toLocaleDateString('ru-RU')}. </div >
+      : <div style={{ ...T.small, margin: '0 0 8px' }} >Арендатор просит продлить договор. Предложите свои условия: </div >}
+     {!renewForm ? (
+      <div style={{ display: 'flex', gap: 8 }} >
+       <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }} onClick={() => { setOffRent(String(contract.rent_amount)); setOffMonths(11); const ed = parseDate((contract as any).end_date); const ds = new Date(ed.getFullYear(), ed.getMonth(), ed.getDate() + 1); setOffStart(`${ds.getFullYear()}-${String(ds.getMonth() + 1).padStart(2, '0')}-${String(ds.getDate()).padStart(2, '0')}`); setRenewForm(true) }} >
+        {(renewOffer.round || 1) > 1 ? 'Контрпредложение' : 'Предложить условия'}
+       </button >
+       {(renewOffer.round || 1) > 1 && (
+        <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }} onClick={landlordAccept} >Согласен </button >
+       )}
+      </div >
+     ) : (
+      <div >
+       <div style={{ fontSize: 13, color: '#8e8e93', margin: '4px 0 2px' }} >Аренда, ₽/мес </div >
+       <input style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 17, boxSizing: 'border-box' }} value={offRent} onChange={(e) => setOffRent(e.target.value)} inputMode= "numeric" / >
+       <div style={{ fontSize: 13, color: '#8e8e93', margin: '8px 0 2px' }} >Срок, месяцев (1–11) </div >
+       <select style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 17, boxSizing: 'border-box' }} value={offMonths} onChange={(e) => setOffMonths(Number(e.target.value))} >
+        {Array.from({ length: 11 }, (_, i) => i + 1).map((m) => <option key={m} value={m} >{m} </option >)}
+       </select >
+       <div style={{ fontSize: 13, color: '#8e8e93', margin: '8px 0 2px' }} >Начало нового договора (можно сделать разрыв) </div >
+       <input style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 17, boxSizing: 'border-box' }} type= "date" value={offStart} onChange={(e) => setOffStart(e.target.value)} / >
+       <div style={{ display: 'flex', gap: 8, marginTop: 10 }} >
+        <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }} onClick={landlordSendOffer} >Отправить предложение </button >
+        <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 15, cursor: 'pointer' }} onClick={() => setRenewForm(false)} >Отмена </button >
+       </div >
+      </div >
+     )}
+     <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 0' }} >
+      <button style={{ ...actBlue, color: '#ff3b30' }} onClick={landlordDecline} >Отказать и завершить в срок </button >
+     </div >
+    </>
+   )}
+   {!renewOffer && <div style={{ ...T.small, margin: 0 }} >Арендатор пока не отправил предложение. Когда выберет продление — запрос появится здесь, и вы сможете предложить новые условия. </div >}
+  </div >
+ )}
+ <div style={secHead} >Экстренные контакты </div >
           <ContactsEditor objId={current.id} />
 
           <div style={T.card}>

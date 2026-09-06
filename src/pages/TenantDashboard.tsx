@@ -6,6 +6,7 @@ import BillReview from '../components/BillReview'
 import Chat from '../components/Chat'
 import { BottomNav, showToast, SkeletonList, PullToRefresh, Hint, Modal } from '../components/ui'
 import { T } from '../theme'
+import { addOffer, markOffer, acceptRenewal } from '../lib/renewal'
 
 const TABS = [
   { id: 'pay', l: 'Оплата' },
@@ -54,6 +55,11 @@ export function TenantDashboard() {
   const [payHistOpen, setPayHistOpen] = useState(false)
   const [payClaimOpen, setPayClaimOpen] = useState(false)
   const [endChoice, setEndChoice] = useState<'' | 'renew' | 'exit'>('')
+  const [renewOffer, setRenewOffer] = useState<any>(null)
+  const [renewForm, setRenewForm] = useState(false)
+  const [myRent, setMyRent] = useState('')
+  const [myMonths, setMyMonths] = useState(11)
+  const [myStart, setMyStart] = useState('')
   const [endConfirm, setEndConfirm] = useState<'' | 'renew' | 'exit'>('')
   const [claimPhone, setClaimPhone] = useState('')
   const [claimBusy, setClaimBusy] = useState(false)
@@ -139,6 +145,9 @@ export function TenantDashboard() {
       contacts: contactsRes.data || [],
       frozen: frozenRes.data || [],
     })
+    const { data: off } = await supabase.from('renewal_offers').select('*').eq('contract_id', contract.id).order('created_at', { ascending: false }).limit(1).maybeSingle()
+    setRenewOffer(off)
+    setRenewForm(false)
   }
 
   useEffect(() => {
@@ -215,11 +224,48 @@ export function TenantDashboard() {
     loadData()
   }
 
-  async function sendEndChoice(kind: 'renew' | 'exit') {
+    async function sendEndChoice(kind: 'renew' | 'exit') {
     if (!contract) return
     setEndChoice(kind)
-    await notify(data?.obj?.landlord_id, kind === 'renew' ? 'renewal_requested' : 'termination_requested', kind === 'renew' ? '🔄 Предложение арендатора: продлить договор (условия можно пересмотреть)' : '🏁 Предложение арендателя: завершить договор в срок', contract.id)
+    if (kind === 'renew') {
+      const ed = contract.end_date ? parseDate(contract.end_date) : new Date()
+      const ds = new Date(ed.getFullYear(), ed.getMonth(), ed.getDate() + 1)
+      await addOffer({ contract_id: contract.id, offered_by: 'tenant', rent_amount: Number(contract.rent_amount) || 0, months: 11, start_date: `${ds.getFullYear()}-${String(ds.getMonth() + 1).padStart(2, '0')}-${String(ds.getDate()).padStart(2, '0')}`, round: 1 })
+    }
+    await notify(data?.obj?.landlord_id, kind === 'renew' ? 'renewal_requested' : 'termination_requested', kind === 'renew' ? '🔄 Предложение арендатора: продлить договор (условия можно пересмотреть)' : '🏁 Предложение арендатора: завершить договор в срок', contract.id)
     showToast(kind === 'renew' ? '✅ Предложение о продлении отправлено' : '✅ Предложение о завершении отправлено')
+    loadData()
+  }
+
+  async function tenantAccept() {
+    if (!contract || !renewOffer) return
+    const res = await acceptRenewal(renewOffer, contract)
+    if (res.error) { showToast('Ошибка: ' + res.error); return }
+    await notify(data?.obj?.landlord_id, 'renewal_accepted', '🤝 Арендатор согласился на продление', contract.id)
+    showToast('✅ Договор продлён')
+    window.dispatchEvent(new Event('rentflow-refresh'))
+    loadData()
+  }
+
+  async function tenantCounter() {
+    if (!contract || !renewOffer) return
+    const rentN = Number(String(myRent).replace(',', '.'))
+    if (!rentN || rentN <= 0) { showToast('Укажите сумму аренды'); return }
+    await markOffer(renewOffer.id, 'countered')
+    await addOffer({ contract_id: contract.id, offered_by: 'tenant', rent_amount: rentN, months: myMonths, start_date: myStart || renewOffer.start_date, round: (renewOffer.round || 1) + 1 })
+    setRenewForm(false)
+    await notify(data?.obj?.landlord_id, 'renewal_countered', `🔄 Арендатор предложил свои условия: ${rentN.toFixed(0)} ₽/мес, ${myMonths} мес.`, contract.id)
+    showToast('✅ Ваше предложение отправлено')
+    loadData()
+  }
+
+  async function tenantDecline() {
+    if (!contract || !renewOffer) return
+    await markOffer(renewOffer.id, 'declined')
+    setEndChoice('exit')
+    await notify(data?.obj?.landlord_id, 'renewal_declined', '🏁 Арендатор отказался от продления', contract.id)
+    showToast('✅ Вы отказались от продления')
+    loadData()
   }
 
   async function setTenantPayMethod(m: 'card' | 'cash') {
@@ -456,19 +502,51 @@ export function TenantDashboard() {
                   landlordId={obj?.landlord_id || contract.object?.landlord_id}
                 />
               )}
-              {lastMonth && (
+                            {lastMonth && (
                 <div style={T.card}>
                   <div style={T.h2}>Договор заканчивается</div>
-                  <div style={{ ...T.small, margin: '0 0 10px' }}>Срок до {contract.end_date ? parseDate(contract.end_date).toLocaleDateString('ru-RU') : '—'}. Оплаченные счета закрывают аренду до конца срока. Ваш выбор — предложение арендодателю: он примет решение и при продлении может изменить стоимость и условия.</div>
-                  {endChoice === '' ? (
+                  <div style={{ ...T.small, margin: '0 0 10px' }}>Срок до {contract.end_date ? parseDate(contract.end_date).toLocaleDateString('ru-RU') : '—'}. Ваш выбор — предложение арендодателю: он примет решение и при продлении может изменить стоимость и условия.</div>
+                  {!renewOffer && endChoice === '' && (
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }} onClick={() => setEndConfirm('renew')}>Отправить предложение о продлении</button>
-                      <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 15, cursor: 'pointer' }} onClick={() => setEndConfirm('exit')}>Отправить предложение о завершении</button>
+                      <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }} onClick={() => sendEndChoice('renew')}>Отправить предложение о продлении</button>
+                      <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 15, cursor: 'pointer' }} onClick={() => sendEndChoice('exit')}>Отправить предложение о завершении</button>
                     </div>
-                  ) : endChoice === 'renew' ? (
-                    <div style={T.noteGreen}>Предложение о продлении отправлено арендодателю.</div>
-                  ) : (
-                    <div style={T.noteGreen}>Предложение о завершении отправлено. Арендодатель подготовит расчёт при съезде.</div>
+                  )}
+                  {!renewOffer && endChoice === 'renew' && <div style={T.noteGreen}>Предложение о продлении отправлено арендодателю.</div>}
+                  {!renewOffer && endChoice === 'exit' && <div style={T.noteGreen}>Предложение о завершении отправлено. Арендодатель подготовит расчёт при съезде.</div>}
+                  {renewOffer && renewOffer.status === 'accepted' && <div style={T.noteGreen}>Договор продлён — новый договор уже в списке.</div>}
+                  {renewOffer && renewOffer.status === 'declined' && <div style={T.noteGreen}>Предложение отклонено — договор движется к завершению.</div>}
+                  {renewOffer && renewOffer.status === 'countered' && <div style={T.noteGreen}>Идёт обсуждение условий — ждём новое предложение.</div>}
+                  {renewOffer && renewOffer.status === 'proposed' && renewOffer.offered_by === 'tenant' && <div style={T.noteGreen}>Предложение отправлено. Ждём ответ арендодателя.</div>}
+                  {renewOffer && renewOffer.status === 'proposed' && renewOffer.offered_by === 'landlord' && (
+                    <>
+                      <div style={T.row}><span style={iosMuted}>Аренда</span><span style={valMoney}>{Number(renewOffer.rent_amount).toFixed(0)} ₽/мес</span></div>
+                      <div style={T.row}><span style={iosMuted}>Новый договор</span><span style={valText}>{renewOffer.months} мес. с {parseDate(renewOffer.start_date).toLocaleDateString('ru-RU')}</span></div>
+                      {!renewForm ? (
+                        <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }} onClick={tenantAccept}>Согласен</button>
+                          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 15, cursor: 'pointer' }} onClick={() => { setMyRent(String(renewOffer.rent_amount)); setMyMonths(renewOffer.months || 11); setMyStart(renewOffer.start_date); setRenewForm(true) }}>Свои условия</button>
+                        </div>
+                      ) : (
+                        <div style={{ marginTop: 8 }}>
+                          <div style={{ fontSize: 13, color: '#8e8e93', margin: '4px 0 2px' }}>Ваша аренда, ₽/мес</div>
+                          <input style={inp} value={myRent} onChange={(e) => setMyRent(e.target.value)} inputMode="numeric" />
+                          <div style={{ fontSize: 13, color: '#8e8e93', margin: '8px 0 2px' }}>Срок, месяцев</div>
+                          <select style={{ ...inp, padding: '8px 10px' }} value={myMonths} onChange={(e) => setMyMonths(Number(e.target.value))}>
+                            {Array.from({ length: 11 }, (_, i) => i + 1).map((m) => <option key={m} value={m}>{m}</option>)}
+                          </select>
+                          <div style={{ fontSize: 13, color: '#8e8e93', margin: '8px 0 2px' }}>Начало нового договора</div>
+                          <input style={inp} type="date" value={myStart} onChange={(e) => setMyStart(e.target.value)} />
+                          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                            <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }} onClick={tenantCounter}>Отправить встречное</button>
+                            <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 15, cursor: 'pointer' }} onClick={() => setRenewForm(false)}>Отмена</button>
+                          </div>
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 0' }}>
+                        <button style={{ ...actBlue, color: '#ff3b30' }} onClick={tenantDecline}>Отказаться от продления</button>
+                      </div>
+                    </>
                   )}
                 </div>
               )}
