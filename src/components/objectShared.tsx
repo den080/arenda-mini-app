@@ -12,7 +12,6 @@ export const S: Record<string, React.CSSProperties> = {
   red: { border: 'none', background: 'transparent', color: '#ff3b30', fontSize: 14, cursor: 'pointer', padding: 4 },
   btnRow: { display: 'flex', gap: 16, alignItems: 'center', margin: '14px 0 8px' },
 }
-}
 export function normalizePhone(input: string): string {
   let cleaned = input.replace(/[\s-()]/g, '')
   if (cleaned.startsWith('8') && cleaned.length === 11) cleaned = '+7' + cleaned.slice(1)
