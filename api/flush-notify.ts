@@ -2,6 +2,20 @@ import { createClient } from '@supabase/supabase-js'
 
 let lastRun = 0
 
+// Москва = UTC+3
+function mskHour(): number {
+  return new Date(Date.now() + 3 * 3600 * 1000).getUTCHours()
+}
+// Тихие часы: до 10:00 и с 20:00 по Москве
+function isQuiet(): boolean {
+  const h = mskHour()
+  return h < 10 || h >= 20
+}
+// «О платежах» — этим можно и ночью
+function paymentFilter(): string {
+  return 'message.ilike.%оплат%,message.ilike.%платеж%,message.ilike.%взнос%,message.ilike.%депозит%,message.ilike.%получен%'
+}
+
 export default async function handler(req: any, res: any) {
   const now = Date.now()
   if (now - lastRun < 30000) return res.status(200).json({ ok: true, skipped: true })
@@ -14,50 +28,53 @@ export default async function handler(req: any, res: any) {
     process.env.SUPABASE_URL || '',
     process.env.SUPABASE_SERVICE_ROLE_KEY || ''
   )
+  const quiet = isQuiet()
 
-  // ===== 1) Напоминания о просрочке (1, 3, 7, 14, 30 дней) =====
-  try {
-    const today = new Date()
-    const todayMid = new Date(today.getFullYear(), today.getMonth(), today.getDate())
-    const steps = [1, 3, 7, 14, 30]
-    const { data: rows } = await supabase
-      .from('payments')
-      .select('id, due_date, overdue_notified_day, base_amount, penalty_amount, utilities_amount, contract:contracts(status, object:objects(address, landlord_id))')
-      .eq('confirmed_by_landlord', false)
-
-    for (const p of rows || []) {
-      const c: any = (p as any).contract
-      if (!c || c.status !== 'active' || !c.object?.landlord_id) continue
-      const due = new Date(String(p.due_date).slice(0, 10) + 'T00:00:00')
-      const days = Math.round((todayMid.getTime() - due.getTime()) / 86400000)
-      if (days <= 0) continue
-
-      const notifiedDay = Number(p.overdue_notified_day || 0)
-      const lastStep = steps.filter((s) => notifiedDay >= s).pop() || 0
-      const curStep = steps.filter((s) => days >= s).pop() || 0
-      if (curStep <= lastStep) continue
-
-      const sum = Number(p.base_amount || 0) + Number(p.penalty_amount || 0) + Number(p.utilities_amount || 0)
-      await supabase.rpc('send_telegram_notification', {
-        p_user_id: c.object.landlord_id,
-        p_event_type: 'overdue_reminder',
-        p_message:
-          `⚠️ <b>Просрочка ${days} дн.</b>` + '\n' +
-          `Объект: ${c.object.address || '—'}` + '\n' +
-          `Сумма: ${sum.toFixed(0)} ₽` + '\n' +
-          'Зайдите в приложение и свяжитесь с арендатором.',
-      })
-      await supabase.from('payments').update({ overdue_notified_day: days }).eq('id', p.id)
-    }
-  } catch {}
+  // ===== 1) Напоминания о просрочке (1, 3, 7, 14, 30 дней) — только 10:00–20:00 МСК =====
+  if (!quiet) {
+    try {
+      const today = new Date()
+      const todayMid = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+      const steps = [1, 3, 7, 14, 30]
+      const { data: rows } = await supabase
+        .from('payments')
+        .select('id, due_date, overdue_notified_day, base_amount, penalty_amount, utilities_amount, contract:contracts(status, object:objects(address, landlord_id))')
+        .eq('confirmed_by_landlord', false)
+      for (const p of rows || []) {
+        const c: any = (p as any).contract
+        if (!c || c.status !== 'active' || !c.object?.landlord_id) continue
+        const due = new Date(String(p.due_date).slice(0, 10) + 'T00:00:00')
+        const days = Math.round((todayMid.getTime() - due.getTime()) / 86400000)
+        if (days <= 0) continue
+        const notifiedDay = Number(p.overdue_notified_day || 0)
+        const lastStep = steps.filter((s) => notifiedDay >= s).pop() || 0
+        const curStep = steps.filter((s) => days >= s).pop() || 0
+        if (curStep <= lastStep) continue
+        const sum = Number(p.base_amount || 0) + Number(p.penalty_amount || 0) + Number(p.utilities_amount || 0)
+        await supabase.rpc('send_telegram_notification', {
+          p_user_id: c.object.landlord_id,
+          p_event_type: 'overdue_reminder',
+          p_message:
+            `⚠️ <b>Просрочка ${days} дн.</b>` + '\n' +
+            `Объект: ${c.object.address || '—'}` + '\n' +
+            `Сумма: ${sum.toFixed(0)} ₽` + '\n' +
+            'Зайдите в приложение и свяжитесь с арендатором.',
+        })
+        await supabase.from('payments').update({ overdue_notified_day: days }).eq('id', p.id)
+      }
+    } catch {}
+  }
 
   // ===== 2) Отправка очереди в Telegram =====
-  const { data: out } = await supabase
+  // Ночью — только сообщения «о платежах», остальные ждут до 10:00
+  let q = supabase
     .from('telegram_outbox')
     .select('*')
     .is('sent_at', null)
     .order('created_at', { ascending: true })
     .limit(20)
+  if (quiet) q = q.or(paymentFilter())
+  const { data: out } = await q
 
   let sent = 0
   for (const r of out || []) {
@@ -72,5 +89,5 @@ export default async function handler(req: any, res: any) {
     await supabase.from('telegram_outbox').update({ sent_at: new Date().toISOString() }).eq('id', r.id)
   }
 
-  res.status(200).json({ ok: true, sent })
+  res.status(200).json({ ok: true, sent, quiet })
 }
