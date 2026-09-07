@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useTelegramUser } from '../hooks/useTelegramUser'
 import { T } from '../theme'
-import { showToast } from './ui'
+import { showToast, Hint } from './ui'
 import { Media, billChip, billChipText } from './BillUploader'
 
 const iosBlue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: 4, flexShrink: 0 }
@@ -109,11 +109,17 @@ export function BillReview({ contractId, tenantId }: { contractId: string; tenan
       <div style={T.h2}>{isTenant ? 'Квитанции и подтверждения' : 'Квитанции и чеки арендатора'}</div>
       {!isTenant && (
         <div style={{ padding: '8px 0 12px' }}>
-          <div style={{ fontSize: 13, color: '#8e8e93', margin: '0 0 6px' }}>Квитанция от УК: PDF загружается без сжатия — QR-код для оплаты читается у арендатора.</div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <input type="month" value={period} onChange={(e) => setPeriod(e.target.value)} style={inpSmall} />
-            <input type="date" value={due} onChange={(e) => setDue(e.target.value)} style={inpSmall} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, color: '#8e8e93', margin: '0 0 2px' }}>Месяц квитанции</div>
+              <input type="month" value={period} onChange={(e) => setPeriod(e.target.value)} style={inpSmall} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, color: '#8e8e93', margin: '0 0 2px' }}>Срок оплаты</div>
+              <input type="date" value={due} onChange={(e) => setDue(e.target.value)} style={inpSmall} />
+            </div>
           </div>
+          <Hint text="Квитанция от УК: PDF загружается без сжатия — QR-код для оплаты читается у арендатора." />
           <input ref={billInput} type="file" accept="application/pdf,image/*" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadBill(f) }} />
           <button style={{ ...btnBlue, marginTop: 8 }} disabled={busy || !period} onClick={() => billInput.current?.click()}>{busy ? 'Загрузка…' : 'Загрузить квитанцию'}</button>
         </div>
