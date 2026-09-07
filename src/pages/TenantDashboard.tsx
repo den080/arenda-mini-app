@@ -214,7 +214,7 @@ export function TenantDashboard() {
 
   async function requestDeferral() {
     if (!contract || !payment) return
-    const amount = Number(payment.penalty_amount || 0)
+    const amount = Math.round(shownPenalty)
     if (amount <= 0) return
     const { error } = await supabase.from('deferred_requests').insert({ contract_id: contract.id, payment_id: payment.id, amount, status: 'proposed' })
     if (error) { showToast('Ошибка: ' + error.message); return }
@@ -430,12 +430,10 @@ export function TenantDashboard() {
                   </div>
                   {accrued > 0 && <Hint text="Штраф начисляется каждый день просрочки и растёт до момента оплаты." />}
                   {Number(payment.paid_amount || 0) > 0 && <div style={T.tiny}>Получено: {Number(payment.paid_amount).toFixed(0)} ₽</div>}
-                  {Number(payment.penalty_amount || 0) > 0 && !deferralPending && (
-                    <div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0 8px' }}>
-                      <button style={actBlue} onClick={requestDeferral}>Попросить отсрочку штрафа</button>
-                    </div>
+                  {shownPenalty > 0 && !deferralPending && (
+                    <button style={{ width: '100%', marginTop: 10, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }} onClick={requestDeferral}>Попросить отсрочку штрафа {shownPenalty.toFixed(0)} ₽</button>
                   )}
-                  {deferralPending && <div style={T.tiny}>Просьба об отсрочке отправлена арендодателю.</div>}
+                  {deferralPending && <div style={{ ...T.tiny, marginTop: 8 }}>Просьба об отсрочке отправлена арендодателю — он ответит в приложении.</div>}
                 </div>
               )}
               {!payment && (
