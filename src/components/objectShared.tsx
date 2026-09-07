@@ -4,13 +4,14 @@ export const PRO_PRICE = 299
 export const SBP_PHONE = '+7 905 767-42-25'
 export interface PayDetail { type: 'card' | 'sbp'; bank: string; number: string; recipient?: string }
 export const S: Record<string, React.CSSProperties> = {
-  lab: { fontSize: 13, color: '#8e8e93', margin: '12px 0 2px' },
-  inp: { width: '100%', padding: '8px 0', border: 'none', borderBottom: '1px solid rgba(60,60,67,0.12)', background: 'transparent', fontSize: 15, color: '#1d1d1f', outline: 'none', borderRadius: 0, boxSizing: 'border-box' },
-  inpLocked: { width: '100%', padding: '8px 0', border: 'none', borderBottom: '1px solid rgba(60,60,67,0.12)', background: 'transparent', fontSize: 15, color: '#8e8e93', outline: 'none', borderRadius: 0, boxSizing: 'border-box', opacity: 0.6 },
+  lab: { fontSize: 12, color: '#8e8e93', margin: '12px 0 2px' },
+  inp: { width: '100%', padding: '8px 0', border: 'none', borderBottom: '1px solid rgba(60,60,67,0.12)', background: 'transparent', fontSize: 16, color: '#1d1d1f', outline: 'none', borderRadius: 0, boxSizing: 'border-box' },
+  inpLocked: { width: '100%', padding: '8px 0', border: 'none', borderBottom: '1px solid rgba(60,60,67,0.12)', background: 'transparent', fontSize: 16, color: '#8e8e93', outline: 'none', borderRadius: 0, boxSizing: 'border-box', opacity: 0.6 },
   sel: { width: '100%', padding: '9px 10px', border: 'none', background: 'rgba(120,120,128,0.08)', borderRadius: 8, fontSize: 14, color: '#1d1d1f', outline: 'none', boxSizing: 'border-box' },
-  blue: { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: 4 },
-  red: { border: 'none', background: 'transparent', color: '#ff3b30', fontSize: 15, cursor: 'pointer', padding: 4 },
+  blue: { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 14, fontWeight: 600, cursor: 'pointer', padding: 4 },
+  red: { border: 'none', background: 'transparent', color: '#ff3b30', fontSize: 14, cursor: 'pointer', padding: 4 },
   btnRow: { display: 'flex', gap: 16, alignItems: 'center', margin: '14px 0 8px' },
+}
 }
 export function normalizePhone(input: string): string {
   let cleaned = input.replace(/[\s-()]/g, '')

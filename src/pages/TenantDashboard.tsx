@@ -31,15 +31,15 @@ function formatPhone(v: string): string {
   return v
 }
 
-const iosBlue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 17, fontWeight: 600, cursor: 'pointer', padding: 4, flexShrink: 0 }
-const actBlue: React.CSSProperties = { ...iosBlue, fontSize: 15 }
-const iosMuted: React.CSSProperties = { color: '#8e8e93', fontSize: 15 }
-const valText: React.CSSProperties = { fontSize: 17, fontWeight: 500, color: '#1d1d1f' }
-const valMoney: React.CSSProperties = { fontSize: 17, fontWeight: 600, color: '#1d1d1f', whiteSpace: 'nowrap' }
-const secHead: React.CSSProperties = { fontSize: 13, color: '#8e8e93', margin: '14px 16px 6px', textTransform: 'uppercase', letterSpacing: 0.3 }
-const rightInput: React.CSSProperties = { width: 110, border: 'none', outline: 'none', background: 'rgba(120,120,128,0.08)', borderRadius: 8, padding: '8px 10px', fontSize: 17, fontWeight: 600, textAlign: 'right', color: '#1d1d1f', boxSizing: 'border-box' }
+const iosBlue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 16, fontWeight: 600, cursor: 'pointer', padding: 4, flexShrink: 0 }
+const actBlue: React.CSSProperties = { ...iosBlue, fontSize: 14 }
+const iosMuted: React.CSSProperties = { color: '#8e8e93', fontSize: 14 }
+const valText: React.CSSProperties = { fontSize: 16, fontWeight: 500, color: '#1d1d1f' }
+const valMoney: React.CSSProperties = { fontSize: 16, fontWeight: 600, color: '#1d1d1f', whiteSpace: 'nowrap' }
+const secHead: React.CSSProperties = { fontSize: 12, color: '#8e8e93', margin: '14px 16px 6px', textTransform: 'uppercase', letterSpacing: 0.3 }
+const rightInput: React.CSSProperties = { width: 110, border: 'none', outline: 'none', background: 'rgba(120,120,128,0.08)', borderRadius: 8, padding: '8px 10px', fontSize: 16, fontWeight: 600, textAlign: 'right', color: '#1d1d1f', boxSizing: 'border-box' }
 const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProperties
-const inp: React.CSSProperties = { width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 17, boxSizing: 'border-box', outline: 'none' }
+const inp: React.CSSProperties = { width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box', outline: 'none' }
 const rowBtn: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 56, border: 'none', background: 'transparent', cursor: 'pointer', padding: '4px 0', textAlign: 'left', boxSizing: 'border-box' }
 
 export function TenantDashboard() {
