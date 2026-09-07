@@ -1,5 +1,5 @@
-// Roomio: дизайн-токены по шкале Apple HIG
-// Типографика: Large Title 34 / Title1 28 / Title2 22 / Headline+Body 17 / Callout 16 / Subhead 15 / Footnote 13 / Caption 12
+// Roomio: дизайн-токены, спокойная шкала (как в референсе: без огромных заголовков)
+// Типографика: заголовок экрана 26 / акцент 20 / заголовок карточки 17 / текст 16 / подпись 14 / мелочь 12
 export const C = {
   bg: '#f2f2f7',
   card: '#ffffff',
@@ -12,28 +12,24 @@ export const C = {
   gray: '#e9e9eb',
   sep: 'rgba(60,60,67,0.12)',
 }
-
 export const TYPE = {
-  largeTitle: 34,
-  title1: 28,
-  title2: 22,
+  largeTitle: 30,
+  title1: 26,
+  title2: 20,
   headline: 17,
-  body: 17,
-  callout: 16,
-  subhead: 15,
-  footnote: 13,
-  caption: 12,
+  body: 16,
+  callout: 15,
+  subhead: 14,
+  footnote: 12,
+  caption: 11,
 }
-
 // сетка отступов 8pt
 export const SPACE = { xs: 4, s: 8, m: 12, l: 16, xl: 20 }
-
 const hair = `1px solid ${C.sep}`
-
 export const T: Record<string, any> = {
   page: { minHeight: '100vh', background: C.bg, padding: '8px 16px 0', boxSizing: 'border-box', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif', color: C.text },
-  h1: { fontSize: TYPE.title1, fontWeight: 700, letterSpacing: -0.4, color: C.text, margin: '12px 0 12px' },
-  h2: { fontSize: TYPE.headline, fontWeight: 600, color: C.text, margin: '0 0 8px' },
+  h1: { fontSize: TYPE.title1, fontWeight: 700, letterSpacing: -0.3, color: C.text, margin: '10px 0 10px' },
+  h2: { fontSize: TYPE.headline, fontWeight: 600, color: C.text, margin: '0 0 6px' },
   card: { background: C.card, borderRadius: 16, margin: '0 0 12px', padding: '14px 16px', boxSizing: 'border-box', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' },
   row: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, minHeight: 48, padding: '10px 0', borderBottom: hair, boxSizing: 'border-box' },
   item: { padding: '10px 0', borderBottom: hair },
