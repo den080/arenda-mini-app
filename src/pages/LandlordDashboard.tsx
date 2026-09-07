@@ -976,11 +976,13 @@ const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProper
                   <div style={{ fontSize: 13, color: o.statusColor || '#8e8e93', marginTop: 4 }}>
                     {o.statusDetail}{o.amount > 0 ? ` · ${o.amount.toFixed(0)} ₽` : ''}
                   </div>
+                  {Number((o.contract as any)?.deposit_amount || 0) > 0 && (
+                    <div style={{ fontSize: 13, color: '#8e8e93', marginTop: 2 }}>
+                      депозит {Number((o.contract as any).deposit_paid || 0).toFixed(0)} из {Number((o.contract as any).deposit_amount).toFixed(0)} ₽
+                    </div>
+                  )}
                 </div>
-                {Number((o.contract as any)?.deposit_amount || 0) > 0 && (
-                  <span style={{ fontSize: 13, color: '#8e8e93', flexShrink: 0 }}>депозит {Number((o.contract as any).deposit_paid || 0).toFixed(0)}/{Number((o.contract as any).deposit_amount).toFixed(0)}</span>
-                )}
-                <span style={{ color: '#c7c7cc', fontSize: 18 }}>›</span>
+                <span style={{ color: '#c7c7cc', fontSize: 18, flexShrink: 0 }}>›</span>
               </button>
             </div>
           ))}
