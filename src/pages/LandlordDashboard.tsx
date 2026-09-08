@@ -61,7 +61,6 @@ export function LandlordDashboard() {
   const pool: string = teamHook.pool || 'own'
   const selectPool: (id: string) => void = teamHook.selectPool || (() => {})
   const teamRole: string | null = teamHook.role ?? null
-
   const [objects, setObjects] = useState<ObjectWithStatus[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -88,12 +87,11 @@ export function LandlordDashboard() {
   const [archiveFrozen, setArchiveFrozen] = useState<any[]>([])
   const [showTeam, setShowTeam] = useState(false)
   const [earlyPayOpen, setEarlyPayOpen] = useState(false)
-  const [prolongMonths, setProlongMonths] = useState(11)
   const [isPro, setIsPro] = useState(false)
   const [massOpen, setMassOpen] = useState(false)
   const [massOk, setMassOk] = useState(false)
   const [massBusy, setMassBusy] = useState(false)
-  const [massSel, setMassSel] = useState <Record <string, boolean > >({})
+  const [massSel, setMassSel] = useState<Record<string, boolean>>({})
   const [renewOffer, setRenewOffer] = useState<any>(null)
   const [renewForm, setRenewForm] = useState(false)
   const [offRent, setOffRent] = useState('')
@@ -101,8 +99,8 @@ export function LandlordDashboard() {
   const [offStart, setOffStart] = useState('')
 
   useEffect(() => {
-  setEarlyPayOpen(false)
-  setUtilSaved(null)
+    setEarlyPayOpen(false)
+    setUtilSaved(null)
   }, [openId])
   useEffect(() => {
     if (!openId) return
@@ -112,7 +110,6 @@ export function LandlordDashboard() {
       setRenewForm(false)
     })()
   }, [openId])
-
   useEffect(() => {
     if (!user) return
     ;(async () => {
@@ -132,7 +129,6 @@ export function LandlordDashboard() {
       setShowTeam(pro || priv)
     })()
   }, [user, teamId])
-
   useEffect(() => {
     if (!archiveId) return
     ;(async () => {
@@ -144,13 +140,11 @@ export function LandlordDashboard() {
       setArchiveFrozen(f.data || [])
     })()
   }, [archiveId])
-
   useEffect(() => {
     const go = () => setOpenId(null)
     window.addEventListener('rentflow-archive-done', go)
     return () => window.removeEventListener('rentflow-archive-done', go)
   }, [])
-
   useEffect(() => {
     if (!user) return
     async function fetchData() {
@@ -159,42 +153,30 @@ export function LandlordDashboard() {
         const todayMid = new Date(today.getFullYear(), today.getMonth(), today.getDate())
         const currentMonth = today.getMonth()
         const currentYear = today.getFullYear()
-
         const [notifRes, objRes] = await Promise.all([
           supabase.from('notifications_log').select('*').eq('user_id', user!.id).order('sent_at', { ascending: false }).limit(5),
           supabase.from('objects').select('*').eq(teamId ? 'team_id' : 'landlord_id', (teamId || user!.id) as string),
         ])
-
         if (notifRes.data) setNotifications(notifRes.data)
         const objectsData = objRes.data
-
         if (!objectsData || objectsData.length === 0) { setObjects([]); setHistory([]); setLoading(false); return }
-
         const objIds = objectsData.map((o: any) => o.id)
-
         const { data: contractsData } = await supabase
           .from('contracts').select('*, tenant:users!tenant_id(full_name, phone, email)')
           .in('object_id', objIds).eq('status', 'active')
-
         const contractByObj: Record<string, any> = {}
         for (const c of contractsData || []) contractByObj[c.object_id] = c
-
         const contractIds = (contractsData || []).map((c: any) => c.id)
-
         const { data: archData } = await supabase
           .from('contracts').select('*, object:objects(id, address), tenant:users(full_name, phone)')
           .in('object_id', objIds).eq('status', 'terminated')
           .order('terminated_at', { ascending: false })
-
         setArchived(archData || [])
-
         const terminatedByObj: Record<string, boolean> = {}
         for (const a of archData || []) terminatedByObj[a.object_id] = true
-
         if (contractIds.length) {
           await Promise.all(contractIds.map((id: string) => ensureNextPayment(id).catch(() => {})))
         }
-
         const [paysRes, dReqRes, fRowsRes, meetRes, readRes] = await Promise.all([
           supabase.from('payments').select('*').in('contract_id', contractIds).order('period', { ascending: false }),
           supabase.from('deferred_requests').select('*').in('contract_id', contractIds).eq('status', 'proposed'),
@@ -204,12 +186,9 @@ export function LandlordDashboard() {
             .gte('submitted_at', new Date(currentYear, currentMonth, 1).toISOString())
             .lt('submitted_at', new Date(currentYear, currentMonth + 1, 1).toISOString()),
         ])
-
         const periodISO = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`
-
         let rulesBy: Record<string, any[]> = {}
         let readPeriodBy: Record<string, any[]> = {}
-
         if (contractIds.length) {
           const [rulesRes, readPeriodRes] = await Promise.all([
             supabase.from('penalty_rules').select('*').in('contract_id', contractIds),
@@ -218,53 +197,39 @@ export function LandlordDashboard() {
           for (const r of rulesRes.data || []) { (rulesBy[r.contract_id] = rulesBy[r.contract_id] || []).push(r) }
           for (const r of readPeriodRes.data || []) { (readPeriodBy[r.contract_id] = readPeriodBy[r.contract_id] || []).push(r) }
         }
-
         const paysBy: Record<string, any[]> = {}
         for (const p of paysRes.data || []) { (paysBy[p.contract_id] = paysBy[p.contract_id] || []).push(p) }
-
         const dReqBy: Record<string, any[]> = {}
         for (const r of dReqRes.data || []) { (dReqBy[r.contract_id] = dReqBy[r.contract_id] || []).push(r) }
-
         const fRowsBy: Record<string, any[]> = {}
         for (const f of fRowsRes.data || []) { (fRowsBy[f.contract_id] = fRowsBy[f.contract_id] || []).push(f) }
-
         const meetBy: Record<string, any> = {}
         for (const m of meetRes.data || []) if (!meetBy[m.contract_id]) meetBy[m.contract_id] = m
-
         const readCountBy: Record<string, number> = {}
         for (const r of readRes.data || []) readCountBy[r.contract_id] = (readCountBy[r.contract_id] || 0) + 1
-
         const { data: omRows } = await supabase.from('object_meters').select('*, object_id, meter_types(code)').in('object_id', objIds).eq('is_active', true)
         const { data: skipRows } = await supabase.from('meter_skips').select('object_meter_id').eq('period', periodISO)
         const skipSet = new Set((skipRows || []).map((s: any) => s.object_meter_id))
-
         const metersByObj: Record<string, any[]> = {}
         for (const m of omRows || []) { (metersByObj[m.object_id] = metersByObj[m.object_id] || []).push(m) }
-
         const objectsWithStatus: ObjectWithStatus[] = []
         const allHistory: any[] = []
-
         for (const obj of objectsData) {
           const contract = contractByObj[obj.id]
-
           if (!contract) {
             if (terminatedByObj[obj.id]) continue
             objectsWithStatus.push({ ...obj, status: 'no_contract', amount: 0, paymentId: null, statusColor: '#888', statusDetail: 'Нет договора' }); continue
           }
-
           const readingsMode = contract.readings_mode || 'manual'
           const reminder = contract.reminder_days_before || 3
           const sd0 = contract.start_date ? parseDate(contract.start_date) : null
           const startMonthISO = contract.start_date ? `${String(contract.start_date).slice(0, 7)}-01` : null
           const contractStarted = !sd0 || todayMid.getTime() >= sd0.getTime()
-
           const allPays = paysBy[contract.id] || []
           for (const p of allPays) allHistory.push({ ...p, objId: obj.id, address: obj.address })
-
           const fRows = fRowsBy[contract.id] || []
           const graceMonth = String(contract.created_at || '').slice(0, 7) === periodISO.slice(0, 7)
           const retro = !!(contract.created_at && contract.start_date && String(contract.created_at).slice(0, 10) > String(contract.start_date).slice(0, 10))
-
           if (!graceMonth && !retro && readingsMode === 'manual' && contract.meter_deadline_day && contractStarted && (!startMonthISO || periodISO >= startMonthISO)) {
             const rr = (rulesBy[contract.id] || []).find((r: any) => r.violation_type === 'readings_overdue')
             const rRate = rr ? Number(rr.rate) || 0 : 0
@@ -276,7 +241,6 @@ export function LandlordDashboard() {
                 const metersP = metersByObj[obj.id] || []
                 const readSetP = new Set(periodReads.map((r: any) => r.object_meter_id))
                 const unexcusedP = metersP.filter((m: any) => !readSetP.has(m.id) && !((m.meter_types?.code === 'heat') && skipSet.has(m.id)))
-
                 if (!confirmed && unexcusedP.length > 0) {
                   let endT = todayMid.getTime()
                   if (periodReads.length) {
@@ -285,11 +249,9 @@ export function LandlordDashboard() {
                   }
                   const daysLate = Math.round((endT - deadline.getTime()) / 86400000)
                   const amount = Math.max(0, daysLate) * rRate
-
                   const isReadingsRow = (f: any) => String(f.note || '').includes('показаний')
                   const existing = fRows.find((f: any) => f.period === periodISO && isReadingsRow(f))
                   const wasAdjusted = fRows.some((f: any) => f.period === periodISO && isReadingsRow(f) && f.adjusted_at)
-
                   if (amount > 0 && !existing && !wasAdjusted) {
                     await supabase.from('frozen_penalties').insert({
                       contract_id: contract.id, payment_id: null, period: periodISO,
@@ -302,13 +264,10 @@ export function LandlordDashboard() {
               }
             }
           }
-
           const frozenTotal = fRows.reduce((s2: number, d: any) => s2 + Number(d.amount || 0), 0)
           const openPays = allPays.filter((p: any) => !p.confirmed_by_landlord)
           const payment = openPays.length ? openPays[openPays.length - 1] : allPays[0]
-
           if (!payment) { objectsWithStatus.push({ ...obj, status: 'no_payment', statusDetail: 'Платёж не создан', statusColor: '#a80', amount: contract.rent_amount, baseAmount: contract.rent_amount, penaltyAmount: 0, utilitiesAmount: 0, paymentId: null, contract, readingsMode, frozenTotal, frozenRows: fRows, deferredRequests: dReqBy[contract.id] || [] }); continue }
-
           const cashMeeting = meetBy[contract.id] || null
           const dueMid = parseDate(payment.due_date)
           const sd = contract.start_date ? parseDate(contract.start_date) : null
@@ -319,7 +278,6 @@ export function LandlordDashboard() {
           const penaltyAmount = payment.penalty_amount || 0
           const utilitiesAmount = Number(payment.utilities_amount || 0)
           const paymentId = String(payment.id)
-
           let waitingForReadings = false
           if (!graceMonth && readingsMode === 'manual' && contract.meter_deadline_day && contractStarted && today.getDate() > contract.meter_deadline_day) {
             const metersW = metersByObj[obj.id] || []
@@ -331,13 +289,10 @@ export function LandlordDashboard() {
               waitingForReadings = !(readCountBy[contract.id] > 0)
             }
           }
-
           const needUtilitiesReminder = !payment.confirmed_by_landlord && readingsMode !== 'self' && daysUntilDue >= 0 && daysUntilDue <= reminder && utilitiesAmount === 0
-
           let status: 'paid' | 'overdue' | 'pending' = 'pending'
           let statusDetail = ''
           let statusColor = '#a80'
-
           if (!payment.confirmed_by_landlord) {
             const paidPart = Number(payment.paid_amount || 0)
             if (firstMonth) {
@@ -365,16 +320,14 @@ export function LandlordDashboard() {
             else if (daysLeft <= reminder) { statusDetail = `${daysLeft} дн. до оплаты (${nextDue.toLocaleDateString('ru-RU')})`; statusColor = '#a80' }
             else { statusDetail = `${daysLeft} дн. до оплаты (${nextDue.toLocaleDateString('ru-RU')})`; statusColor = '#080' }
           }
-
           objectsWithStatus.push({ ...obj, status, statusDetail, statusColor, amount: baseAmount + penaltyAmount + utilitiesAmount, baseAmount, penaltyAmount, utilitiesAmount, paymentId, contract, payment, daysOverdue: isOverdue ? Math.round((todayMid.getTime() - dueMid.getTime()) / 86400000) : undefined, waitingForReadings, needUtilitiesReminder, readingsMode, frozenTotal, frozenRows: fRows, deferredRequests: dReqBy[contract.id] || [], hasConfirmedCashMeeting: !!cashMeeting })
         }
-
         setHistory(allHistory)
         const sortedObjects = objectsWithStatus.sort((a, b) => {
           const order: Record<string, number> = { overdue: 0, pending: 1, no_payment: 1.5, paid: 2, no_contract: 3 }
           const colorOrder = (o: ObjectWithStatus) => o.statusColor === '#c00' ? 0 : o.statusColor === '#a80' ? 1 : 2
           const so = (order[a.status] ?? 9) - (order[b.status] ?? 9)
-          return so !== 0 ? so : colorOrder(a) - colorOrder(b)
+          return so !== 0 ? colorOrder(a) - colorOrder(b) : 0
         })
         setObjects(sortedObjects)
       } catch (err) { setError(err instanceof Error ? err.message : 'Unknown error') } finally { setLoading(false) }
@@ -385,7 +338,6 @@ export function LandlordDashboard() {
     const interval = setInterval(() => fetchData(), 30000)
     return () => { window.removeEventListener('rentflow-refresh', onRefresh); clearInterval(interval) }
   }, [user, teamId, pool])
-
   useEffect(() => {
     if (user) { setAnalyticsUser(user); trackOpen('landlord') }
   }, [user])
@@ -399,7 +351,6 @@ export function LandlordDashboard() {
     return true
   })
   const current = objects.find(o => o.id === openId) || null
-
   useEffect(() => {
     const screen = arch ? 'archive_item' : archiveListOpen ? 'archive_list' : current ? `object_${tab}` : 'objects_list'
     trackScreen(screen)
@@ -408,7 +359,6 @@ export function LandlordDashboard() {
   function canUndo(h: any): boolean {
     return !!h.confirmed_by_landlord && !!h.confirmed_at && (Date.now() - new Date(h.confirmed_at).getTime()) < 24 * 3600 * 1000
   }
-
   async function undoConfirm(paymentId: string) {
     const { data: pay } = await supabase.from('payments').select('*').eq('id', paymentId).maybeSingle()
     if (!pay) { setUndoId(null); return }
@@ -429,7 +379,6 @@ export function LandlordDashboard() {
     setUndoId(null)
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
-
   async function deleteArchivedContract() {
     if (!arch) return
     const id = arch.id
@@ -448,7 +397,6 @@ export function LandlordDashboard() {
     setArchiveId(null)
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
-
   function receiptText(h: any): string {
     const month = parseDate(h.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })
     const sum = Number(h.base_amount || 0) + Number(h.penalty_amount || 0) + Number(h.utilities_amount || 0)
@@ -457,7 +405,6 @@ export function LandlordDashboard() {
     const dateStr = new Date(h.confirmed_at || Date.now()).toLocaleDateString('ru-RU')
     return `РАСПИСКА\n${dateStr}\nЯ, ${landlordName}, получил от ${tenantName} сумму ${sum.toFixed(0)} ₽ в счёт оплаты аренды за ${month} по объекту: ${current?.address || h.address}. Оплата произведена наличными. Претензий по оплате не имею.`
   }
-
   async function copyReceipt(h: any) {
     try {
       await navigator.clipboard.writeText(receiptText(h))
@@ -466,7 +413,6 @@ export function LandlordDashboard() {
       showToast('Не удалось скопировать')
     }
   }
-
   async function saveUtilities(paymentId: string, value: string) {
     const amount = Number(String(value).replace(',', '.')) || 0
     const { error } = await supabase.from('payments').update({ utilities_amount: amount }).eq('id', paymentId)
@@ -477,7 +423,6 @@ export function LandlordDashboard() {
     setUtilSaved(`Ресурсы ${amount.toFixed(0)} ₽ добавлены к текущему платежу`)
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
-
   async function saveUtilitiesNext(value: string) {
     if (!contract) return
     const amount = Number(String(value).replace(',', '.')) || 0
@@ -510,7 +455,6 @@ export function LandlordDashboard() {
     if (current) setUtilInputs(prev => ({ ...prev, [current.id]: String(amount) }))
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
-
   async function recordReceipt(amount: number) {
     if (!contract || !current?.paymentId) return
     if (isNaN(amount) || amount <= 0) { showToast('Некорректная сумма'); return }
@@ -546,7 +490,6 @@ export function LandlordDashboard() {
     }
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
-
   async function confirmSigning(paymentId: string) {
     const { error } = await supabase.from('payments').update({ confirmed_by_landlord: true, confirmed_at: new Date().toISOString() }).eq('id', paymentId)
     if (error) { showToast('Ошибка: ' + error.message); return }
@@ -559,7 +502,6 @@ export function LandlordDashboard() {
     }
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
-
   async function confirmSelected() {
     const chosen = openList.filter(o => massSel[o.id] && Number(o.payment.paid_amount || 0) === 0)
     if (chosen.length === 0) { showToast('Отметьте полученные оплаты'); return }
@@ -591,7 +533,6 @@ export function LandlordDashboard() {
       window.dispatchEvent(new Event('rentflow-refresh'))
     } finally { setMassBusy(false) }
   }
-
   async function doAddDeposit(amount: number) {
     if (!contract) return
     if (deposit <= 0) { showToast('Сначала укажите общую сумму депозита'); return }
@@ -601,7 +542,6 @@ export function LandlordDashboard() {
     showToast('✅ Платёж по депозиту внесён')
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
-
   async function doEditDeposit(v: number) {
     if (!contract) return
     if (isNaN(v) || v < 0) { showToast('Некорректное значение'); return }
@@ -610,7 +550,6 @@ export function LandlordDashboard() {
     showToast('✅ Депозит обновлён')
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
-
   async function setPoolShare(share: boolean) {
     if (!current) return
     const teamToSet = share ? ((pools.find((p: any) => p.id !== 'own') || null)?.id || null) : null
@@ -620,14 +559,12 @@ export function LandlordDashboard() {
     showToast(share ? '✅ Объект добавлен в пул — команда его видит' : '✅ Объект убран из пула — виден только вам')
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
-
   function openAdjust(id: string, zero: boolean) {
     const row = (current?.frozenRows || []).find((f: any) => f.id === id)
     setFzAmount(row ? String(row.amount) : '')
     setFzNote('')
     setFz({ id, zero })
   }
-
   async function confirmAdjust() {
     if (!fz || !contract) return
     const zero = fz.zero
@@ -646,7 +583,6 @@ export function LandlordDashboard() {
     setFz(null)
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
-
   async function confirmDeferral(requestId: string, contractId: string, paymentId: string, amount: number, tenantId: string) {
     const { data: pay } = await supabase.from('payments').select('*').eq('id', paymentId).maybeSingle()
     const { error: e1 } = await supabase.from('frozen_penalties').insert({ contract_id: contractId, payment_id: paymentId, period: pay ? pay.period : null, amount, original_amount: amount, note: 'отсрочка штрафа подтверждена' })
@@ -660,7 +596,6 @@ export function LandlordDashboard() {
     showToast('✅ Отсрочка подтверждена')
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
-
   async function freezePenalty(paymentId: string) {
     const { data: pay } = await supabase.from('payments').select('*').eq('id', paymentId).maybeSingle()
     if (!pay) return
@@ -674,18 +609,7 @@ export function LandlordDashboard() {
     showToast('✅ Штраф заморожен')
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
-  async function prolongContract(months: number) {
-    if (!contract) return
-    const ed = parseDate((contract as any).end_date)
-    const newEnd = new Date(ed.getFullYear(), ed.getMonth() + months, ed.getDate())
-    const isoEnd = `${newEnd.getFullYear()}-${String(newEnd.getMonth() + 1).padStart(2, '0')}-${String(newEnd.getDate()).padStart(2, '0')}`
-    const { error } = await supabase.from('contracts').update({ end_date: isoEnd }).eq('id', contract.id)
-    if (error) { showToast('Ошибка: ' + error.message); return }
-    await supabase.from('notifications_log').insert({ user_id: contract.tenant_id, type: 'contract_prolonged', related_id: contract.id, message: `🔄 Договор продлён до ${newEnd.toLocaleDateString('ru-RU')}`, sent_at: new Date().toISOString() })
-    showToast(`✅ Договор продлён до ${newEnd.toLocaleDateString('ru-RU')}`)
-    window.dispatchEvent(new Event('rentflow-refresh'))
-  }
-    async function landlordSendOffer() {
+  async function landlordSendOffer() {
     if (!contract) return
     const rentN = Number(String(offRent).replace(',', '.'))
     if (!rentN || rentN <= 0) { showToast('Укажите сумму аренды'); return }
@@ -699,7 +623,6 @@ export function LandlordDashboard() {
     setRenewOffer(data)
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
-
   async function landlordAccept() {
     if (!contract || !renewOffer) return
     const res = await acceptRenewal(renewOffer, contract)
@@ -708,7 +631,6 @@ export function LandlordDashboard() {
     showToast('✅ Договор продлён')
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
-
   async function landlordDecline() {
     if (!contract || !renewOffer) return
     await markOffer(renewOffer.id, 'declined')
@@ -716,7 +638,6 @@ export function LandlordDashboard() {
     showToast('✅ Продление отклонено')
     setRenewOffer({ ...renewOffer, status: 'declined' })
   }
-
   async function updatePaymentMethod(contractId: string, method: 'card' | 'cash' | 'both') {
     const updateData: any = { payment_method: method }
     if (method === 'cash') updateData.cash_slots = []
@@ -726,7 +647,6 @@ export function LandlordDashboard() {
       setObjects(prev => prev.map(o => o.contract?.id === contractId ? { ...o, contract: { ...o.contract!, payment_method: method, cash_slots: method === 'cash' ? [] : (o.contract as any).cash_slots } } : o))
     } else showToast('Ошибка: ' + error.message)
   }
-
   async function confirmChannel(paymentId: string, channel: 'card' | 'cash', close: boolean = false) {
     const { data: pay } = await supabase.from('payments').select('*').eq('id', paymentId).maybeSingle()
     if (!pay) { showToast('Платёж не найден'); return }
@@ -764,7 +684,7 @@ export function LandlordDashboard() {
       case 'cash_confirmed': return '🤝 Встреча по оплате согласована'
       case 'deferred_proposed': return '🙏 Арендатор попросил отсрочку штрафа'
       case 'deferred_confirmed': return '🧊 Замороженный штраф обновлён'
-      case 'bill_uploaded': return '📄 Арендатор загрузил квитанцию'
+      case 'bill_uploaded': return '📄 Квитанция загружена'
       case 'bill_paid': return '🧾 Арендатор приложил подтверждение оплаты'
       case 'bill_confirmed': return '✅ Квитанция подтверждена'
       case 'contract_terminated': return '🏁 Договор завершён'
@@ -773,17 +693,17 @@ export function LandlordDashboard() {
     }
   }
 
-const iosBlue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 16, fontWeight: 600, cursor: 'pointer', padding: 4, flexShrink: 0 }
-const iosRed: React.CSSProperties = { border: 'none', background: 'transparent', color: '#ff3b30', fontSize: 16, cursor: 'pointer', padding: 4, flexShrink: 0 }
-const actBlue: React.CSSProperties = { ...iosBlue, fontSize: 14 }
-const actRed: React.CSSProperties = { ...iosRed, fontSize: 14 }
-const iosOk: React.CSSProperties = { color: '#1e7e34', fontSize: 14, fontWeight: 600 }
-const iosMuted: React.CSSProperties = { color: '#8e8e93', fontSize: 14 }
-const valText: React.CSSProperties = { fontSize: 16, fontWeight: 500, color: '#1d1d1f' }
-const valMoney: React.CSSProperties = { fontSize: 16, fontWeight: 600, color: '#1d1d1f', whiteSpace: 'nowrap' }
-const valRight: React.CSSProperties = { fontSize: 16, fontWeight: 600, color: '#1d1d1f', textAlign: 'right' }
-const secHead: React.CSSProperties = { fontSize: 12, color: '#8e8e93', margin: '14px 16px 6px', textTransform: 'uppercase', letterSpacing: 0.3 }
-const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProperties
+  const iosBlue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 17, fontWeight: 600, cursor: 'pointer', padding: 4, flexShrink: 0 }
+  const iosRed: React.CSSProperties = { border: 'none', background: 'transparent', color: '#ff3b30', fontSize: 17, cursor: 'pointer', padding: 4, flexShrink: 0 }
+  const actBlue: React.CSSProperties = { ...iosBlue, fontSize: 15 }
+  const actRed: React.CSSProperties = { ...iosRed, fontSize: 15 }
+  const iosOk: React.CSSProperties = { color: '#1e7e34', fontSize: 15, fontWeight: 600 }
+  const iosMuted: React.CSSProperties = { color: '#8e8e93', fontSize: 15 }
+  const valText: React.CSSProperties = { fontSize: 17, fontWeight: 500, color: '#1d1d1f' }
+  const valMoney: React.CSSProperties = { fontSize: 17, fontWeight: 600, color: '#1d1d1f', whiteSpace: 'nowrap' }
+  const valRight: React.CSSProperties = { fontSize: 17, fontWeight: 600, color: '#1d1d1f', textAlign: 'right' }
+  const secHead: React.CSSProperties = { fontSize: 13, color: '#8e8e93', margin: '14px 16px 6px', textTransform: 'uppercase', letterSpacing: 0.3 }
+  const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProperties
 
   const contract = current?.contract
   const deposit = Number((contract as any)?.deposit_amount || 0)
@@ -799,11 +719,9 @@ const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProper
   const todayMid0 = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate())
   const daysToEnd = (contract as any)?.end_date ? Math.round((parseDate((contract as any).end_date).getTime() - todayMid0.getTime()) / 86400000) : null
   const lastMonth = daysToEnd !== null && daysToEnd >= 0 && daysToEnd <= 31
-
   const objHistoryRaw = history.filter(h => h.objId === current?.id)
   const firstOpenPeriod = objHistoryRaw.filter((h: any) => !h.confirmed_by_landlord).map((h: any) => h.period).sort()[0]
   const objHistory = objHistoryRaw.filter((h: any) => !(!h.confirmed_by_landlord && firstOpenPeriod && h.period > firstOpenPeriod)).slice(0, 10)
-
   const pcPay = current?.payment
   const pcMonth = pcPay ? new Date(pcPay.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : ''
   const pcSum = pcPay ? Number(pcPay.base_amount || 0) + Number(pcPay.penalty_amount || 0) + Number(pcPay.utilities_amount || 0) : 0
@@ -832,9 +750,9 @@ const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProper
         <h1 style={T.h1}>{arch.object?.address || 'Объект'}</h1>
         <div style={T.card}>
           <div style={T.h2}>Договор завершён · архив</div>
-          <div style={T.row}> <span style={iosMuted}>Арендатор</span> <span style={valRight}>{(contract as any).tenant?.full_name || '—'}</span> </div>
+          <div style={T.row}><span style={iosMuted}>Арендатор</span><span style={valRight}>{arch.tenant?.full_name || '—'}</span></div>
           {arch.tenant?.phone && <div style={T.row}><span style={iosMuted}>Телефон</span><span style={valText}>{arch.tenant.phone}</span></div>}
-          <div style={T.row}> <span style={iosMuted}>Срок</span> <span style={valRight}>{parseDate((contract as any).start_date).toLocaleDateString('ru-RU')} — {parseDate((contract as any).end_date).toLocaleDateString('ru-RU')}</span> </div>
+          <div style={T.row}><span style={iosMuted}>Срок</span><span style={valRight}>{arch.start_date ? parseDate(arch.start_date).toLocaleDateString('ru-RU') : '—'} — {arch.terminated_at ? new Date(arch.terminated_at).toLocaleDateString('ru-RU') : (arch.end_date ? parseDate(arch.end_date).toLocaleDateString('ru-RU') : '—')}</span></div>
           <div style={T.row}><span style={iosMuted}>Аренда</span><span style={valMoney}>{Number(arch.rent_amount || 0).toFixed(0)} ₽/мес</span></div>
           {arch.termination_note && <div style={T.row}><span style={iosMuted}>Примечание</span><span style={valText}>{arch.termination_note}</span></div>}
           {archSettlement.deposit_paid != null && <div style={T.row}><span style={iosMuted}>Депозит внесён</span><span style={valMoney}>{Number(archSettlement.deposit_paid).toFixed(0)} ₽</span></div>}
@@ -976,13 +894,11 @@ const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProper
                   <div style={{ fontSize: 13, color: o.statusColor || '#8e8e93', marginTop: 4 }}>
                     {o.statusDetail}{o.amount > 0 ? ` · ${o.amount.toFixed(0)} ₽` : ''}
                   </div>
-                  {Number((o.contract as any)?.deposit_amount || 0) > 0 && (
-                    <div style={{ fontSize: 13, color: '#8e8e93', marginTop: 2 }}>
-                      депозит {Number((o.contract as any).deposit_paid || 0).toFixed(0)} из {Number((o.contract as any).deposit_amount).toFixed(0)} ₽
-                    </div>
-                  )}
                 </div>
-                <span style={{ color: '#c7c7cc', fontSize: 18, flexShrink: 0 }}>›</span>
+                {Number((o.contract as any)?.deposit_amount || 0) > 0 && (
+                  <span style={{ fontSize: 13, color: '#8e8e93', flexShrink: 0 }}>депозит {Number((o.contract as any).deposit_paid || 0).toFixed(0)}/{Number((o.contract as any).deposit_amount).toFixed(0)}</span>
+                )}
+                <span style={{ color: '#c7c7cc', fontSize: 18 }}>›</span>
               </button>
             </div>
           ))}
@@ -1063,7 +979,6 @@ const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProper
         <button style={iosBlue} onClick={() => setOpenId(null)}>← Мои объекты</button>
       </div>
       <h1 style={T.h1}>{current.address}</h1>
-
       {tab === 'pay' && (
         <>
           {contract && firstMonthPending && (
@@ -1072,7 +987,6 @@ const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProper
               <button style={T.btn} onClick={() => confirmSigning(current.paymentId!)}>Подтвердить: первый месяц получен при подписании</button>
             </div>
           )}
-
           {contract && current.paymentId && !current.payment?.confirmed_by_landlord && !firstMonthPending && (
             <div style={T.card}>
               <div style={T.h2}>Подтверждение оплаты · {pcMonth}</div>
@@ -1141,7 +1055,6 @@ const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProper
               </div>
             </div>
           )}
-
           {showUtilities && (
             <div style={T.card}>
               <div style={T.h2}>Ресурсы по квитанции</div>
@@ -1167,14 +1080,12 @@ const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProper
               <Hint text="Введённая сумма записывается как есть (заменяет предыдущую), добавляется к платежу отдельно, не растёт при просрочке и не входит в штрафы." />
             </div>
           )}
-
           {current.readingsMode === 'self' && contract && (
             <div>
               <div style={secHead}>Квитанции</div>
               <BillReview contractId={contract.id} tenantId={contract.tenant_id} />
             </div>
           )}
-
           {contract && ((current.deferredRequests || []).length > 0 || ((current.penaltyAmount || 0) > 0 && !current.payment?.confirmed_by_landlord)) && (
             <div style={T.card}>
               <div style={T.h2}>Штраф текущего платежа</div>
@@ -1192,7 +1103,6 @@ const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProper
               )}
             </div>
           )}
-
           {contract && tenantChoseCash && (
             <div>
               <div style={secHead}>Оплата наличными</div>
@@ -1204,7 +1114,6 @@ const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProper
               />
             </div>
           )}
-
           <div style={T.card}>
             <div style={T.h2}>История платежей</div>
             {objHistory.length === 0 ? (
@@ -1240,7 +1149,6 @@ const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProper
           </div>
         </>
       )}
-
       {tab === 'meters' && (
         <>
           {current.readingsMode === 'manual' && contract && (
@@ -1253,31 +1161,12 @@ const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProper
           <MetersEditor objId={current.id} />
         </>
       )}
-
       {tab === 'contract' && !contract && (
         <ObjectEdit objectId={current.id} />
       )}
-
       {tab === 'contract' && contract && (
         <>
           <div style={T.card}>
-            {lastMonth && (
-             <div style={T.card}>
-                <div style={T.h2}>Договор заканчивается</div>
-                <div style={{ ...T.small, margin: '0 0 10px' }}>Последний счёт — за текущий месяц. Вилка: пролонгация или завершение.</div>
-                                  <select
-                    value={prolongMonths}
-                    onChange={(e) => setProlongMonths(Number(e.target.value))}
-                    style={{ width: '100%', padding: 12, borderRadius: 10, border: '1px solid #ddd', fontSize: 16, background: '#fff', marginBottom: 8, boxSizing: 'border-box' }}
-                  >
-                    {Array.from({ length: 11 }, (_, i) => i + 1).map((m) => (
-                      <option key={m} value={m}>{m === 1 ? '1 месяц' : m < 5 ? `${m} месяца` : `${m} месяцев`}</option>
-                    ))}
-                  </select>
-                  <button style={{ width: '100%', padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }} onClick={() => prolongContract(prolongMonths)}>Продлить договор</button>
-                <Hint text="Для завершения — блок «Завершение договора» ниже: депозит, замороженные штрафы и открытые счета будут учтены в итоговом расчёте." />
-              </div>
-            )}
             <div style={T.h2}>Договор</div>
             <div style={T.row}><span style={iosMuted}>Арендатор</span><span style={valText}>{(contract as any).tenant?.full_name || '—'}</span></div>
             {(contract as any).tenant?.phone && <div style={T.row}><span style={iosMuted}>Телефон</span><span style={valText}>{(contract as any).tenant.phone}</span></div>}
@@ -1287,12 +1176,12 @@ const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProper
             )}
             <div style={T.row}><span style={iosMuted}>Аренда</span><span style={valMoney}>{Number(contract.rent_amount).toFixed(0)} ₽/мес</span></div>
             {(contract as any).amendment_at && (
-             <div style={T.row}> <span style={iosMuted}>Допсоглашение</span> <span style={valRight}>{Number(contract.rent_amount).toFixed(0)} ₽ с {(contract as any).amendment_from ? new Date((contract as any).amendment_from).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : new Date((contract as any).amendment_at).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })} · со следующего счёта</span> </div>
+              <div style={T.row}><span style={iosMuted}>Допсоглашение</span><span style={valRight}>{Number(contract.rent_amount).toFixed(0)} ₽ с {(contract as any).amendment_from ? new Date((contract as any).amendment_from).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : new Date((contract as any).amendment_at).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })} · со следующего счёта</span></div>
             )}
             {contractBalance > 0 && (
               <div style={T.row}><span style={iosMuted}>Баланс (переплата)</span><span style={valMoney}>{contractBalance.toFixed(0)} ₽</span></div>
             )}
-            <div style={T.row}> <span style={iosMuted}>Оплата</span> <span style={valRight}>до {contract.payment_day} числа</span> </div>
+            <div style={T.row}><span style={iosMuted}>Оплата</span><span style={valRight}>до {contract.payment_day} числа</span></div>
             {deposit > 0 && (
               <div style={{ padding: '8px 0 4px' }}>
                 <Progress value={depositPaid} max={deposit} />
@@ -1302,57 +1191,58 @@ const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProper
                 </div>
               </div>
             )}
-           </div >
- {(renewOffer || ((contract as any)?.end_date && (() => { const ed = parseDate((contract as any).end_date); const t = new Date(); const mid = new Date(t.getFullYear(), t.getMonth(), t.getDate()); const d = Math.round((ed.getTime() - mid.getTime()) / 86400000); return d >= 0 && d <= 31 })())) && (
-  <div style={T.card} >
-   <div style={T.h2} >Продление договора </div >
-   {renewOffer && renewOffer.status === 'accepted' && <div style={{ ...T.noteGreen, margin: '0 0 8px' }} >Договор продлён новым договором. </div >}
-   {renewOffer && renewOffer.status === 'declined' && <div style={{ ...T.noteGreen, margin: '0 0 8px' }} >Продление отклонено — договор завершится в срок. </div >}
-   {renewOffer && renewOffer.status === 'countered' && <div style={{ ...T.small, margin: '0 0 8px' }} >Идёт обсуждение условий. </div >}
-   {renewOffer && renewOffer.status === 'proposed' && renewOffer.offered_by === 'landlord' && (
-    <div style={{ ...T.small, margin: '0 0 8px' }} >Ваше предложение: {Number(renewOffer.rent_amount).toFixed(0)} ₽/мес, {renewOffer.months} мес. с {parseDate(renewOffer.start_date).toLocaleDateString('ru-RU')}. Ждём ответ арендатора. </div >
-   )}
-   {renewOffer && renewOffer.status === 'proposed' && renewOffer.offered_by === 'tenant' && (
-    <>
-     {(renewOffer.round || 1) > 1
-      ? <div style={{ ...T.small, margin: '0 0 8px' }} >Встречное предложение арендатора: {Number(renewOffer.rent_amount).toFixed(0)} ₽/мес, {renewOffer.months} мес. с {parseDate(renewOffer.start_date).toLocaleDateString('ru-RU')}. </div >
-      : <div style={{ ...T.small, margin: '0 0 8px' }} >Арендатор просит продлить договор. Предложите свои условия: </div >}
-     {!renewForm ? (
-      <div style={{ display: 'flex', gap: 8 }} >
-       <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }} onClick={() => { setOffRent(String(contract.rent_amount)); setOffMonths(11); const ed = parseDate((contract as any).end_date); const ds = new Date(ed.getFullYear(), ed.getMonth(), ed.getDate() + 1); setOffStart(`${ds.getFullYear()}-${String(ds.getMonth() + 1).padStart(2, '0')}-${String(ds.getDate()).padStart(2, '0')}`); setRenewForm(true) }} >
-        {(renewOffer.round || 1) > 1 ? 'Контрпредложение' : 'Предложить условия'}
-       </button >
-       {(renewOffer.round || 1) > 1 && (
-        <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }} onClick={landlordAccept} >Согласен </button >
-       )}
-      </div >
-     ) : (
-      <div >
-       <div style={{ fontSize: 13, color: '#8e8e93', margin: '4px 0 2px' }} >Аренда, ₽/мес </div >
-       <input style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 17, boxSizing: 'border-box' }} value={offRent} onChange={(e) => setOffRent(e.target.value)} inputMode= "numeric" / >
-       <div style={{ fontSize: 13, color: '#8e8e93', margin: '8px 0 2px' }} >Срок, месяцев (1–11) </div >
-       <select style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 17, boxSizing: 'border-box' }} value={offMonths} onChange={(e) => setOffMonths(Number(e.target.value))} >
-        {Array.from({ length: 11 }, (_, i) => i + 1).map((m) => <option key={m} value={m} >{m} </option >)}
-       </select >
-       <div style={{ fontSize: 13, color: '#8e8e93', margin: '8px 0 2px' }} >Начало нового договора (можно сделать разрыв) </div >
-       <input style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 17, boxSizing: 'border-box' }} type= "date" value={offStart} onChange={(e) => setOffStart(e.target.value)} / >
-       <div style={{ display: 'flex', gap: 8, marginTop: 10 }} >
-        <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }} onClick={landlordSendOffer} >Отправить предложение </button >
-        <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 15, cursor: 'pointer' }} onClick={() => setRenewForm(false)} >Отмена </button >
-       </div >
-      </div >
-     )}
-     <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 0' }} >
-      <button style={{ ...actBlue, color: '#ff3b30' }} onClick={landlordDecline} >Отказать и завершить в срок </button >
-     </div >
-    </>
-   )}
-   {!renewOffer && <div style={{ ...T.small, margin: 0 }} >Арендатор пока не отправил предложение. Когда выберет продление — запрос появится здесь, и вы сможете предложить новые условия. </div >}
-  </div >
- )}
- <div style={secHead} >Экстренные контакты </div >
+          </div>
+          {(renewOffer || lastMonth) && (
+            <div style={T.card}>
+              <div style={T.h2}>Продление договора</div>
+              {renewOffer && renewOffer.status === 'accepted' && <div style={{ ...T.noteGreen, margin: '0 0 8px' }}>Договор продлён новым договором.</div>}
+              {renewOffer && renewOffer.status === 'declined' && <div style={{ ...T.noteGreen, margin: '0 0 8px' }}>Продление отклонено — договор завершится в срок.</div>}
+              {renewOffer && renewOffer.status === 'countered' && <div style={{ ...T.small, margin: '0 0 8px' }}>Идёт обсуждение условий.</div>}
+              {renewOffer && renewOffer.status === 'proposed' && renewOffer.offered_by === 'landlord' && (
+                <div style={{ ...T.small, margin: '0 0 8px' }}>Ваше предложение: {Number(renewOffer.rent_amount).toFixed(0)} ₽/мес, {renewOffer.months} мес. с {parseDate(renewOffer.start_date).toLocaleDateString('ru-RU')}. Ждём ответ арендатора.</div>
+              )}
+              {renewOffer && renewOffer.status === 'proposed' && renewOffer.offered_by === 'tenant' && (
+                (renewOffer.round || 1) > 1
+                  ? <div style={{ ...T.small, margin: '0 0 8px' }}>Встречное предложение арендатора: {Number(renewOffer.rent_amount).toFixed(0)} ₽/мес, {renewOffer.months} мес. с {parseDate(renewOffer.start_date).toLocaleDateString('ru-RU')}.</div>
+                  : <div style={{ ...T.small, margin: '0 0 8px' }}>Арендатор просит продлить договор. Предложите свои условия:</div>
+              )}
+              {!renewOffer && <div style={{ ...T.small, margin: '0 0 8px' }}>Арендатор пока не отправил предложение. Можете предложить условия продления сами — арендатор ответит в приложении.</div>}
+              {!(renewOffer && (renewOffer.status === 'accepted' || renewOffer.status === 'declined')) && !(renewOffer && renewOffer.status === 'proposed' && renewOffer.offered_by === 'landlord') && (
+                !renewForm ? (
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }} onClick={() => { setOffRent(String(contract.rent_amount)); setOffMonths(11); const ed = parseDate((contract as any).end_date); const ds = new Date(ed.getFullYear(), ed.getMonth(), ed.getDate() + 1); setOffStart(`${ds.getFullYear()}-${String(ds.getMonth() + 1).padStart(2, '0')}-${String(ds.getDate()).padStart(2, '0')}`); setRenewForm(true) }}>
+                      {renewOffer && renewOffer.status === 'proposed' && renewOffer.offered_by === 'tenant' ? ((renewOffer.round || 1) > 1 ? 'Контрпредложение' : 'Предложить условия') : 'Предложить условия продления'}
+                    </button>
+                    {renewOffer && renewOffer.status === 'proposed' && renewOffer.offered_by === 'tenant' && (renewOffer.round || 1) > 1 && (
+                      <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }} onClick={landlordAccept}>Согласен</button>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    <div style={{ fontSize: 13, color: '#8e8e93', margin: '4px 0 2px' }}>Аренда, ₽/мес</div>
+                    <input style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 17, boxSizing: 'border-box' }} value={offRent} onChange={(e) => setOffRent(e.target.value)} inputMode="numeric" />
+                    <div style={{ fontSize: 13, color: '#8e8e93', margin: '8px 0 2px' }}>Срок, месяцев (1–11)</div>
+                    <select style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 17, boxSizing: 'border-box' }} value={offMonths} onChange={(e) => setOffMonths(Number(e.target.value))}>
+                      {Array.from({ length: 11 }, (_, i) => i + 1).map((m) => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                    <div style={{ fontSize: 13, color: '#8e8e93', margin: '8px 0 2px' }}>Начало нового договора (можно сделать разрыв)</div>
+                    <input style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 17, boxSizing: 'border-box' }} type="date" value={offStart} onChange={(e) => setOffStart(e.target.value)} />
+                    <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                      <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }} onClick={landlordSendOffer}>Отправить предложение</button>
+                      <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 15, cursor: 'pointer' }} onClick={() => setRenewForm(false)}>Отмена</button>
+                    </div>
+                  </div>
+                )
+              )}
+              {renewOffer && renewOffer.status === 'proposed' && renewOffer.offered_by === 'tenant' && (
+                <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 0' }}>
+                  <button style={{ ...actBlue, color: '#ff3b30' }} onClick={landlordDecline}>Отказать и завершить в срок</button>
+                </div>
+              )}
+            </div>
+          )}
+          <div style={secHead}>Экстренные контакты</div>
           <ContactsEditor objId={current.id} />
-
           <div style={T.card}>
             <div style={T.h2}>Способ оплаты</div>
             {[
@@ -1384,7 +1274,6 @@ const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProper
               </div>
             )}
           </div>
-
           {contract && current.landlord_id === user?.id && (
             <div style={T.card}>
               <div style={T.h2}>Совместный доступ к объекту</div>
@@ -1396,7 +1285,6 @@ const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProper
               </button>
             </div>
           )}
-
           <div style={T.card}>
             <div style={T.h2}>Замороженные штрафы</div>
             {(current.frozenRows || []).length === 0 && <div style={{ ...T.small, margin: '8px 0' }}>Замороженных штрафов нет</div>}
@@ -1422,7 +1310,6 @@ const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProper
             )}
             <Hint text="Записи не удаляются до конца договора; каждое изменение сохраняется с примечанием и датой." />
           </div>
-
           {contract.status === 'active' && (
             <>
               <div style={secHead}>Допсоглашение</div>
@@ -1431,20 +1318,16 @@ const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProper
               <TerminationWizard contractId={contract.id} />
             </>
           )}
-
           <ObjectEdit objectId={current.id} />
         </>
       )}
-
       {tab === 'chat' && contract && (
         <div style={T.card}>
           <div style={T.h2}>Чат с арендатором</div>
           <Chat contractId={contract.id} myId={user!.id} />
         </div>
       )}
-
       <BottomNav tabs={OBJ_TABS} tab={tab} setTab={setTab} badges={{ pay: payBadge, meters: metersBadge }} />
-
       <Modal open={!!payConfirm} title="Подтверждение оплаты" onClose={() => setPayConfirm(null)}>
         <div style={{ fontSize: 15, color: '#555', marginBottom: 12, lineHeight: 1.45, overflowWrap: 'break-word' }}>
           Счёт за {pcMonth} на {pcSum.toFixed(0)} ₽.{' '}
@@ -1472,7 +1355,6 @@ const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProper
           <button style={{ flex: 1, minWidth: 0, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 16, cursor: 'pointer', whiteSpace: 'nowrap' }} onClick={() => setPayConfirm(null)}>Отмена</button>
         </div>
       </Modal>
-
       <Modal open={!!receiptFor} title="Расписка" onClose={() => setReceiptFor(null)}>
         <div style={{ whiteSpace: 'pre-wrap', fontSize: 15, lineHeight: 1.5, background: 'rgba(120,120,128,0.08)', borderRadius: 10, padding: 12, marginBottom: 12 }}>
           {receiptFor ? receiptText(receiptFor) : ''}
@@ -1482,14 +1364,12 @@ const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProper
           <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 17, cursor: 'pointer' }} onClick={() => setReceiptFor(null)}>Закрыть</button>
         </div>
       </Modal>
-
       <ConfirmDelete
         open={!!undoId}
         text="Подтверждение оплаты будет отменено, счёт снова станет открытым. Арендатор получит уведомление."
         onClose={() => setUndoId(null)}
         onConfirm={() => { if (undoId) undoConfirm(undoId) }}
       />
-
       <PromptNumber
         open={receiptOpen}
         title="Частичная оплата"
@@ -1497,7 +1377,6 @@ const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProper
         onClose={() => setReceiptOpen(false)}
         onSubmit={(n) => recordReceipt(n)}
       />
-
       <PromptNumber
         open={depModal === 'add'}
         title="Взнос по депозиту"
@@ -1505,7 +1384,6 @@ const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProper
         onClose={() => setDepModal(null)}
         onSubmit={(n) => doAddDeposit(n)}
       />
-
       <PromptNumber
         open={depModal === 'edit'}
         title="Изменить «внесено»"
@@ -1514,7 +1392,6 @@ const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProper
         onClose={() => setDepModal(null)}
         onSubmit={(n) => doEditDeposit(n)}
       />
-
       <Modal open={!!fz} title={fz?.zero ? 'Обнулить замороженный штраф' : 'Изменить замороженный штраф'} onClose={() => setFz(null)}>
         {!fz?.zero && (
           <>
