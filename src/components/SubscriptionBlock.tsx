@@ -20,8 +20,8 @@ export function SubscriptionBlock() {
 
   const isOwner = !!user && normalizePhone(user.phone || '') === normalizePhone(OWNER_PHONE)
 
-  async function load() {
-    if (!user) return
+  async function load(): Promise<boolean> {
+    if (!user) return false
     let owner = user.id
     if (teamId) {
       const { data: t } = await supabase.from('teams').select('owner_id').eq('id', teamId).maybeSingle()
@@ -30,11 +30,13 @@ export function SubscriptionBlock() {
     setSubOwnerId(owner)
     const { data: s } = await supabase.from('subscriptions').select('*').eq('owner_id', owner).order('until_date', { ascending: false }).maybeSingle()
     const today = iso(new Date())
-    setSub(s && s.until_date >= today ? s : null)
+    const active = !!(s && s.until_date >= today)
+    setSub(active ? s : null)
     if (isOwner) {
       const { data: r } = await supabase.from('feedback').select('*').eq('status', 'new').ilike('message', 'ПОДПИСКА%').order('created_at', { ascending: true })
       setRequests(r || [])
     }
+    return active
   }
 
   useEffect(() => { load() }, [user, teamId])
@@ -67,10 +69,8 @@ export function SubscriptionBlock() {
     let tries = 0
     const t = setInterval(async () => {
       tries++
-      await load()
-      const today = iso(new Date())
-      const active = sub && sub.until_date >= today
-      if (active || tries > 40) clearInterval(t)
+      const activeNow = await load()
+      if (activeNow || tries > 40) clearInterval(t)
     }, 5000)
   }
 
