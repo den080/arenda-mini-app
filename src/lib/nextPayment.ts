@@ -4,8 +4,8 @@ function parseDate(d: any): Date { const [y, m, dd] = String(d).slice(0, 10).spl
 function toISO(d: Date): string { const m = String(d.getMonth() + 1).padStart(2, '0'); const dd = String(d.getDate()).padStart(2, '0'); return `${d.getFullYear()}-${m}-${dd}` }
 function clampDay(y: number, m: number, d: number): number { const last = new Date(y, m + 1, 0).getDate(); return Math.min(Math.max(1, d), last) }
 
-// Счета создаются не раньше месяца начала и не позже месяца ДО месяца окончания.
-// Счёт за месяц окончания появляется только после пролонгации, коммунальные — всегда 0.
+// Счета создаются НЕ РАНЬШЕ месяца начала и НЕ ПОЗЖЕ месяца ДО месяца окончания договора.
+// Счёт за месяц окончания появляется только после пролонгации.
 export async function ensureNextPayment(contractId: string) {
   try {
     const { data: con } = await supabase.from('contracts').select('*').eq('id', contractId).maybeSingle()
@@ -18,18 +18,16 @@ export async function ensureNextPayment(contractId: string) {
     const { data: pays } = await supabase.from('payments').select('*').eq('contract_id', contractId).order('period', { ascending: false })
     const list = pays || []
 
-    const isBeyondEnd = (p: any) => !!(
+    // уборка: неподтверждённые счета за месяц окончания и дальше (созданные до пролонгации) удаляем
+    const isBeyond = (p: any) => !!(
       lastPeriod &&
       !p.confirmed_by_landlord &&
       Number(p.paid_amount || 0) === 0 &&
       !p.card_claimed &&
       parseDate(p.period).getTime() >= lastPeriod.getTime()
     )
-
-    for (const p of list) {
-      if (isBeyondEnd(p)) await supabase.from('payments').delete().eq('id', p.id)
-    }
-    const alive = list.filter((p: any) => !isBeyondEnd(p))
+    for (const p of list) if (isBeyond(p)) await supabase.from('payments').delete().eq('id', p.id)
+    const alive = list.filter((p: any) => !isBeyond(p))
 
     const open = alive.filter((p: any) => !p.confirmed_by_landlord)
     if (open.length > 0) return open[open.length - 1]
