@@ -1,23 +1,28 @@
 import { supabase } from '../lib/supabase'
+
 export const OWNER_PHONE = '+79057674225'
 export const PRO_PRICE = 299
 export const SBP_PHONE = '+7 905 767-42-25'
+
 export interface PayDetail { type: 'card' | 'sbp'; bank: string; number: string; recipient?: string }
+
 export const S: Record<string, React.CSSProperties> = {
-  lab: { fontSize: 12, color: '#8e8e93', margin: '12px 0 2px' },
-  inp: { width: '100%', padding: '8px 0', border: 'none', borderBottom: '1px solid rgba(60,60,67,0.12)', background: 'transparent', fontSize: 16, color: '#1d1d1f', outline: 'none', borderRadius: 0, boxSizing: 'border-box' },
-  inpLocked: { width: '100%', padding: '8px 0', border: 'none', borderBottom: '1px solid rgba(60,60,67,0.12)', background: 'transparent', fontSize: 16, color: '#8e8e93', outline: 'none', borderRadius: 0, boxSizing: 'border-box', opacity: 0.6 },
+  lab: { fontSize: 13, color: '#8e8e93', margin: '12px 0 2px' },
+  inp: { width: '100%', padding: '8px 0', border: 'none', borderBottom: '1px solid rgba(60,60,67,0.12)', background: 'transparent', fontSize: 15, color: '#1d1d1f', outline: 'none', borderRadius: 0, boxSizing: 'border-box' },
+  inpLocked: { width: '100%', padding: '8px 0', border: 'none', borderBottom: '1px solid rgba(60,60,67,0.12)', background: 'transparent', fontSize: 15, color: '#8e8e93', outline: 'none', borderRadius: 0, boxSizing: 'border-box', opacity: 0.6 },
   sel: { width: '100%', padding: '9px 10px', border: 'none', background: 'rgba(120,120,128,0.08)', borderRadius: 8, fontSize: 14, color: '#1d1d1f', outline: 'none', boxSizing: 'border-box' },
-  blue: { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 14, fontWeight: 600, cursor: 'pointer', padding: 4 },
-  red: { border: 'none', background: 'transparent', color: '#ff3b30', fontSize: 14, cursor: 'pointer', padding: 4 },
+  blue: { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: 4 },
+  red: { border: 'none', background: 'transparent', color: '#ff3b30', fontSize: 15, cursor: 'pointer', padding: 4 },
   btnRow: { display: 'flex', gap: 16, alignItems: 'center', margin: '14px 0 8px' },
 }
+
 export function normalizePhone(input: string): string {
   let cleaned = input.replace(/[\s-()]/g, '')
   if (cleaned.startsWith('8') && cleaned.length === 11) cleaned = '+7' + cleaned.slice(1)
   if (!cleaned.startsWith('+')) cleaned = '+' + cleaned
   return cleaned
 }
+
 export function formatPhoneInput(v: string): string {
   const digits = (v || '').replace(/\D/g, '').slice(0, 11)
   if (digits.length === 11 && (digits.startsWith('7') || digits.startsWith('8'))) {
@@ -31,37 +36,45 @@ export function formatPhoneInput(v: string): string {
   }
   return v
 }
+
 export function formatCardInput(v: string): string {
   const d = (v || '').replace(/\D/g, '').slice(0, 16)
   return d.replace(/(.{4})/g, '$1 ').trim()
 }
+
 export function iso(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
+
 export function pdate(s: string): Date {
   const [y, m, d] = String(s).slice(0, 10).split('-').map(Number)
   return new Date(y, (m || 1) - 1, d || 1)
 }
+
 export function clampDay(y: number, m: number, d: number): number {
   const last = new Date(y, m + 1, 0).getDate()
   return Math.min(Math.max(1, d), last)
 }
+
 export function moneyOk(v: string, max = 10000000): number | null {
   if (String(v).trim() === '') return 0
   const n = Number(String(v).replace(',', '.'))
   if (isNaN(n) || n < 0 || n > max) return null
   return n
 }
+
 export function validPhone(phoneInput: string): boolean {
   if (!phoneInput) return true
   return phoneInput.replace(/\D/g, '').length === 11
 }
+
 export async function findCounterparty(phoneInput: string): Promise<any | null> {
   const digits = phoneInput.replace(/\D/g, '')
   if (!digits) return null
   const { data: users } = await supabase.from('users').select('*').not('phone', 'is', null)
   return (users || []).find((u: any) => (u.phone || '').replace(/\D/g, '').slice(-10) === digits.slice(-10)) || null
 }
+
 export function compress(file: File): Promise<Blob> {
   return new Promise((resolve, reject) => {
     const fr = new FileReader()
@@ -84,6 +97,7 @@ export function compress(file: File): Promise<Blob> {
     fr.readAsDataURL(file)
   })
 }
+
 export function DetailsEditor({ list, onChange }: { list: PayDetail[]; onChange: (v: PayDetail[]) => void }) {
   return (
     <div>
@@ -125,6 +139,7 @@ export function DetailsEditor({ list, onChange }: { list: PayDetail[]; onChange:
     </div>
   )
 }
+
 export function ReadingsModeSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
     <select style={S.sel} value={value} onChange={(e) => onChange(e.target.value)}>
@@ -134,6 +149,7 @@ export function ReadingsModeSelect({ value, onChange }: { value: string; onChang
     </select>
   )
 }
+
 export const methodOptions = (
   <>
     <option value="card">Безналичный расчёт</option>
