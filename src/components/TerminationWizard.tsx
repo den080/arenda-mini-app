@@ -17,7 +17,8 @@ export function TerminationWizard({ contractId }: { contractId: string }) {
   const [ok, setOk] = useState(false)
   const [busy, setBusy] = useState(false)
 
-  async function loadCalc() {
+  async function loadCalc(termISO?: string) {
+    const cut = (termISO || iso(new Date())).slice(0, 7)
     const [c, f, p] = await Promise.all([
       supabase.from('contracts').select('*').eq('id', contractId).maybeSingle(),
       supabase.from('frozen_penalties').select('amount').eq('contract_id', contractId),
@@ -26,20 +27,30 @@ export function TerminationWizard({ contractId }: { contractId: string }) {
     const contract = c.data
     if (!contract) return
     const frozen = (f.data || []).reduce((s: number, x: any) => s + Number(x.amount || 0), 0)
-    const openList = p.data || []
+    // в долг идут открытые счета по месяц завершения включительно; более поздние не учитываются
+    const openList = (p.data || []).filter((x: any) => String(x.period).slice(0, 7) <= cut)
     const openSum = openList.reduce((s: number, x: any) => s + Number(x.base_amount || 0) + Number(x.penalty_amount || 0) + Number(x.utilities_amount || 0), 0)
     const depositPaid = Number(contract.deposit_paid || 0)
     const result = depositPaid - frozen - openSum
     setCalc({ contract, frozen, openSum, openCount: openList.length, depositPaid, result })
-    setDate(iso(new Date()))
   }
 
-  useEffect(() => { if (open) { setOk(false); loadCalc() } }, [open])
+  useEffect(() => {
+    if (open) {
+      setOk(false)
+      const todayISO = iso(new Date())
+      setDate(todayISO)
+      loadCalc(todayISO)
+    }
+  }, [open])
 
   async function confirm() {
     if (!calc || busy) return
     setBusy(true)
     try {
+      const termMonth = String(date).slice(0, 7)
+      const { data: future } = await supabase.from('payments').select('id').eq('contract_id', contractId).eq('confirmed_by_landlord', false).gt('period', `${termMonth}-01`)
+      if (future && future.length) await supabase.from('payments').delete().in('id', future.map((x: any) => x.id))
       const { error } = await supabase.from('contracts').update({
         status: 'terminated',
         terminated_at: new Date(date + 'T12:00:00').toISOString(),
@@ -63,7 +74,7 @@ export function TerminationWizard({ contractId }: { contractId: string }) {
   return (
     <div style={T.card}>
       <div style={T.h2}>Завершение договора</div>
-      <div style={{ ...T.small, margin: '4px 0 10px' }}>При съезде арендатора приложение посчитает итог: депозит минус замороженные штрафы и открытые счета.</div>
+      <div style={{ ...T.small, margin: '4px 0 10px' }}>При съезде арендатора приложение посчитает итог: депозит минус замороженные штрафы и открытые счета по месяц завершения.</div>
       <div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0 8px' }}>
         <button style={iosBlue} onClick={() => setOpen(true)}>Рассчитать и завершить</button>
       </div>
@@ -79,7 +90,7 @@ export function TerminationWizard({ contractId }: { contractId: string }) {
               <b style={{ color: calc.result >= 0 ? '#1e7e34' : '#ff3b30' }}>{calc.result >= 0 ? `вернуть ${calc.result.toFixed(0)} ₽` : `долг ${Math.abs(calc.result).toFixed(0)} ₽`}</b>
             </div>
             <div style={{ fontSize: 14, margin: '10px 0 4px' }}>Дата съезда</div>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 15, boxSizing: 'border-box' }} />
+            <input type="date" value={date} onChange={(e) => { setDate(e.target.value); loadCalc(e.target.value) }} style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 15, boxSizing: 'border-box' }} />
             <div style={{ fontSize: 14, margin: '10px 0 4px' }}>Примечание (ключи, состояние, акт)</div>
             <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Например: ключи возвращены, замечаний нет" style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 15, boxSizing: 'border-box' }} />
             <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 14, margin: '12px 0' }}>
