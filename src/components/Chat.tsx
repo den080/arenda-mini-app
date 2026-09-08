@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
-import { showToast } from './ui'
+import { showToast, errText } from './ui'
 
 const st: Record<string, React.CSSProperties> = {
   box: { height: '52vh', minHeight: 260, overflowY: 'auto', padding: '8px 4px', display: 'flex', flexDirection: 'column', gap: 6 },
@@ -8,7 +8,7 @@ const st: Record<string, React.CSSProperties> = {
   mine: { alignSelf: 'flex-end', background: '#0071e3', color: '#fff', borderRadius: '18px 18px 5px 18px', padding: '8px 12px', maxWidth: '82%', boxSizing: 'border-box' },
   their: { alignSelf: 'flex-start', background: '#e9e9eb', color: '#1d1d1f', borderRadius: '18px 18px 18px 5px', padding: '8px 12px', maxWidth: '82%', boxSizing: 'border-box' },
   body: { fontSize: 15, whiteSpace: 'pre-wrap', wordBreak: 'break-word' },
-  meta: { fontSize: 10, opacity: 0.6, marginTop: 3, textAlign: 'right' },
+  meta: { fontSize: 11, opacity: 0.6, marginTop: 3, textAlign: 'right' },
   img: { maxWidth: 220, width: '100%', borderRadius: 10, display: 'block', cursor: 'pointer', marginBottom: 4 },
   file: { fontSize: 14, textDecoration: 'underline', cursor: 'pointer', marginBottom: 4 },
   preview: { display: 'flex', alignItems: 'center', gap: 8, padding: '6px 4px' },
@@ -18,6 +18,12 @@ const st: Record<string, React.CSSProperties> = {
   clip: { width: 38, height: 38, borderRadius: 19, border: 'none', background: 'rgba(120,120,128,0.12)', color: '#0071e3', fontSize: 17, cursor: 'pointer', flexShrink: 0 },
   send: { width: 38, height: 38, borderRadius: 19, border: 'none', background: '#0071e3', color: '#fff', fontSize: 15, cursor: 'pointer', flexShrink: 0, opacity: 1 },
   sendOff: { width: 38, height: 38, borderRadius: 19, border: 'none', background: '#0071e3', color: '#fff', fontSize: 15, cursor: 'pointer', flexShrink: 0, opacity: 0.4 },
+}
+
+function openDoc(url: string) {
+  const tg = (window as any).Telegram?.WebApp
+  if (tg && typeof tg.openLink === 'function') tg.openLink(url)
+  else window.open(url, '_blank')
 }
 
 function compressImage(file: File): Promise<Blob> {
@@ -71,7 +77,7 @@ export function Chat({ contractId, myId }: { contractId: string; myId: string })
 
   async function upload(file: File): Promise<string> {
     const path = `${contractId}/${Date.now()}_${Math.random().toString(36).slice(2)}_${file.name}`
-    const { error } = await supabase.storage.from('chat').upload(path, file)
+    const { error } = await supabase.storage.from('chat').upload(path, file, { contentType: file.type || 'application/octet-stream', cacheControl: '3600' })
     if (error) throw error
     const { data } = supabase.storage.from('chat').getPublicUrl(path)
     return data.publicUrl
@@ -96,7 +102,7 @@ export function Chat({ contractId, myId }: { contractId: string; myId: string })
       setAtt({ url, name, kind })
       showToast('✅ Вложение готово к отправке')
     } catch (err: any) {
-      showToast('Ошибка: ' + (err?.message || 'не удалось загрузить'))
+      showToast(errText(err))
     } finally {
       setBusy(false)
     }
@@ -114,7 +120,7 @@ export function Chat({ contractId, myId }: { contractId: string; myId: string })
         attachment_name: att?.name || null,
         attachment_kind: att?.kind || null,
       })
-      if (error) { showToast('Ошибка: ' + error.message); return }
+      if (error) { showToast(errText(error)); return }
       setText('')
       setAtt(null)
       load()
@@ -126,16 +132,16 @@ export function Chat({ contractId, myId }: { contractId: string; myId: string })
   return (
     <div>
       <div ref={boxRef} style={st.box}>
-        {rows.length === 0 && <div style={st.empty}>Сообщений пока нет — напишите первым</div>}
+        {rows.length === 0 && <div style={st.empty}>Сообщений пока нет — напишите первым.</div>}
         {rows.map(m => {
           const mine = m.sender_id === myId
           return (
             <div key={m.id} style={mine ? st.mine : st.their}>
               {m.attachment_url && m.attachment_kind === 'image' && (
-                <img src={m.attachment_url} alt="" onClick={() => window.open(m.attachment_url)} style={st.img} />
+                <img src={m.attachment_url} alt="" onClick={() => openDoc(m.attachment_url)} style={st.img} />
               )}
               {m.attachment_url && m.attachment_kind !== 'image' && (
-                <div onClick={() => window.open(m.attachment_url)} style={st.file}>📄 {m.attachment_name || 'файл'}</div>
+                <div onClick={() => openDoc(m.attachment_url)} style={st.file}>📄 {m.attachment_name || 'файл'}</div>
               )}
               {m.body && <div style={st.body}>{m.body}</div>}
               <div style={st.meta}>
