@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useState, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useTelegramUser } from '../hooks/useTelegramUser'
 import { useTeam } from '../hooks/useTeam'
@@ -231,7 +231,7 @@ export function ObjectAdd() {
           )}
           <div style={S.lab}>Напоминать за сколько дней до срока</div>
           <input style={S.inp} value={remind} onChange={(e) => setRemind(e.target.value)} placeholder="3" inputMode="numeric" />
-          <button style={{ ...T.btn, opacity: saving ? 0.6 : 1 }} disabled={saving} onClick={save}>{saving ? 'Сохранение…' : 'Сохранить'}</button>
+          <button style={T.btn} disabled={saving} onClick={save}>{saving ? 'Сохранение…' : 'Сохранить'}</button>
         </div>
       )}
       <Modal open={paywall} title="Лимит тарифа Free" onClose={() => setPaywall(false)}>
