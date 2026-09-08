@@ -23,7 +23,7 @@ const row: React.CSSProperties = { display: 'flex', justifyContent: 'space-betwe
 const last: React.CSSProperties = { ...row, borderBottom: 'none' }
 const muted: React.CSSProperties = { color: '#8e8e93', fontSize: 14 }
 const valMoney: React.CSSProperties = { fontSize: 16, fontWeight: 600, color: '#1d1d1f', whiteSpace: 'nowrap' }
-const secHead: React.CSSProperties = { fontSize: 13, color: '#8e8e93', margin: '14px 16px 6px', textTransform: 'uppercase', letterSpacing: 0.3 }
+const secHead: React.CSSProperties = { fontSize: 12, color: '#8e8e93', margin: '14px 16px 6px', textTransform: 'uppercase', letterSpacing: 0.3 }
 const blue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 14, fontWeight: 600, cursor: 'pointer', padding: 4 }
 const red: React.CSSProperties = { border: 'none', background: 'transparent', color: '#ff3b30', fontSize: 14, cursor: 'pointer', padding: 4 }
 const inp: React.CSSProperties = { flex: 1, minWidth: 0, padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 15, boxSizing: 'border-box', outline: 'none' }
@@ -35,6 +35,10 @@ function fmtDur(sec: number): string {
 
 function fmtDate(s: string): string {
   return new Date(s).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
+function fmtRu(s: string): string {
+  return new Date(String(s).slice(0, 10) + 'T00:00:00').toLocaleDateString('ru-RU')
 }
 
 function deviceLabel(meta: any): string {
@@ -82,6 +86,7 @@ export function AdminDashboard() {
   const [delFeedback, setDelFeedback] = useState<string | null>(null)
   const [delAccess, setDelAccess] = useState<string | null>(null)
   const [delUser, setDelUser] = useState<string | null>(null)
+  const [logoutOpen, setLogoutOpen] = useState(false)
   const [proPhone, setProPhone] = useState('')
   const [proTerm, setProTerm] = useState<'1' | '3' | '6' | '12' | 'inf'>('1')
   const [proEdit, setProEdit] = useState<{ id: string; date: string } | null>(null)
@@ -195,6 +200,7 @@ export function AdminDashboard() {
   const now = new Date()
   const todayMid = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const activeContracts = contracts.filter(c => c.status === 'active')
+  const activeIds = new Set(activeContracts.map(c => c.id))
   const objWithContract = new Set(activeContracts.map(c => c.object_id))
   const noContract = objects.filter(o => !objWithContract.has(o.id)).length
   const avgRent = activeContracts.length ? activeContracts.reduce((s, c) => s + Number(c.rent_amount || 0), 0) / activeContracts.length : 0
@@ -202,11 +208,13 @@ export function AdminDashboard() {
   const sumAll = confirmed.reduce((s, p) => s + Number(p.base_amount || 0) + Number(p.penalty_amount || 0) + Number(p.utilities_amount || 0), 0)
   const inMonth = (d: string, shift: number) => {
     const dt = new Date(d)
-    return dt.getFullYear() === now.getFullYear() && dt.getMonth() === now.getMonth() + shift
+    const ref = new Date(now.getFullYear(), now.getMonth() + shift, 1)
+    return dt.getFullYear() === ref.getFullYear() && dt.getMonth() === ref.getMonth()
   }
   const sumThis = confirmed.filter(p => p.confirmed_at && inMonth(p.confirmed_at, 0)).reduce((s, p) => s + Number(p.base_amount || 0) + Number(p.penalty_amount || 0) + Number(p.utilities_amount || 0), 0)
   const sumPrev = confirmed.filter(p => p.confirmed_at && inMonth(p.confirmed_at, -1)).reduce((s, p) => s + Number(p.base_amount || 0) + Number(p.penalty_amount || 0) + Number(p.utilities_amount || 0), 0)
-  const open = payments.filter(p => !p.confirmed_by_landlord)
+  // в «ожидает» и «просрочено» считаем только активные договоры
+  const open = payments.filter(p => !p.confirmed_by_landlord && activeIds.has(p.contract_id))
   const openSum = open.reduce((s, p) => s + Number(p.base_amount || 0) + Number(p.penalty_amount || 0) + Number(p.utilities_amount || 0), 0)
   const overdue = open.filter(p => new Date(p.due_date) < todayMid)
   const overdueSum = overdue.reduce((s, p) => s + Number(p.base_amount || 0) + Number(p.penalty_amount || 0) + Number(p.utilities_amount || 0), 0)
@@ -325,7 +333,7 @@ export function AdminDashboard() {
     const until = proTerm === 'inf' ? '2099-12-31' : addMonthsISO(base, Number(proTerm))
     const ok = await insertSub(u.id, until)
     if (!ok) return
-    showToast(`✅ Pro выдан: ${u.full_name || u.phone} · до ${isInf(until) ? 'бессрочно' : until}`)
+    showToast(`✅ Pro выдан: ${u.full_name || u.phone} · до ${isInf(until) ? 'бессрочно' : fmtRu(until)}`)
     setProPhone('')
     load()
   }
@@ -337,7 +345,7 @@ export function AdminDashboard() {
     const until = months === 'inf' ? '2099-12-31' : addMonthsISO(base, months)
     const { error } = await supabase.from('subscriptions').update({ until_date: until }).eq('id', s.id)
     if (error) { showToast('Ошибка: ' + error.message); return }
-    showToast(`✅ Срок обновлён: ${months === 'inf' ? 'бессрочно' : until}`)
+    showToast(`✅ Срок обновлён: до ${months === 'inf' ? 'бессрочно' : fmtRu(until)}`)
     load()
   }
 
@@ -347,7 +355,7 @@ export function AdminDashboard() {
     if (!d) { showToast('Выберите дату'); return }
     const { error } = await supabase.from('subscriptions').update({ until_date: d }).eq('id', proEdit.id)
     if (error) { showToast('Ошибка: ' + error.message); return }
-    showToast('✅ Дата исправлена: ' + d)
+    showToast('✅ Дата исправлена: ' + fmtRu(d))
     setProEdit(null)
     load()
   }
@@ -365,7 +373,7 @@ export function AdminDashboard() {
     <div style={{ ...T.page, paddingBottom: 60 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
         <h1 style={{ ...T.h1, margin: 0 }}>Админка</h1>
-        <button style={red} onClick={() => { if (window.confirm('Выйти из аккаунта? Для входа снова понадобятся почта и код.')) logout() }}>Выйти</button>
+        <button style={red} onClick={() => setLogoutOpen(true)}>Выйти</button>
       </div>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', padding: '10px 0' }}>
         {TABS.map(t => (
@@ -384,7 +392,7 @@ export function AdminDashboard() {
       {tab === 'alarms' && (
         <div style={T.card}>
           <div style={T.h2}>Тревоги</div>
-          {alarms.length === 0 && <div style={{ ...muted, padding: '8px 0' }}>Тревог нет — всё спокойно 🎉</div>}
+          {alarms.length === 0 && <div style={{ ...muted, padding: '8px 0' }}>Тревог нет.</div>}
           {alarms.map((a, i) => (
             <div key={i} style={i === alarms.length - 1 ? last : row}>
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -427,7 +435,7 @@ export function AdminDashboard() {
       {tab === 'errors' && (
         <div style={T.card}>
           <div style={T.h2}>Проблемные места (ошибки)</div>
-          {errList.length === 0 && <div style={{ ...muted, padding: '8px 0' }}>Ошибок не зафиксировано — хороший знак.</div>}
+          {errList.length === 0 && <div style={{ ...muted, padding: '8px 0' }}>Ошибок не зафиксировано.</div>}
           {errList.map(([name, count], i) => (
             <div key={name} style={i === errList.length - 1 ? last : row}>
               <div style={{ flex: 1, minWidth: 0, fontSize: 14, color: '#1d1d1f' }}>{name}</div>
@@ -485,7 +493,7 @@ export function AdminDashboard() {
                 <div key={s.id} style={i === subsSorted.length - 1 ? last : row}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f' }}>{owner?.full_name || '—'} · {owner?.phone || '—'}</div>
-                    <div style={{ ...muted, color: expired ? '#ff3b30' : undefined }}>{isInf(untilS) ? 'бессрочно' : `до ${untilS}`}{expired ? ' · истекла' : ''}</div>
+                    <div style={{ ...muted, color: expired ? '#ff3b30' : undefined }}>{isInf(untilS) ? 'бессрочно' : `до ${fmtRu(untilS)}`}{expired ? ' · истекла' : ''}</div>
                     <div style={{ display: 'flex', gap: 10, marginTop: 4, flexWrap: 'wrap' }}>
                       <button style={blue} onClick={() => extendPro(s, 1)}>+1 мес</button>
                       <button style={blue} onClick={() => extendPro(s, 3)}>+3 мес</button>
@@ -610,7 +618,7 @@ export function AdminDashboard() {
           </div>
           <div style={secHead}>Время на экранах</div>
           <div style={T.card}>
-            {screenList.length === 0 && <div style={{ ...muted, padding: '8px 0' }}>Пока нет данных о экранах.</div>}
+            {screenList.length === 0 && <div style={{ ...muted, padding: '8px 0' }}>Пока нет данных об экранах.</div>}
             {screenList.map(([name, v], i) => (
               <div key={name} style={i === screenList.length - 1 ? last : row}>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -627,6 +635,7 @@ export function AdminDashboard() {
       {tab === 'events' && (
         <div style={T.card}>
           <div style={T.h2}>События</div>
+          {events.length === 0 && <div style={{ ...muted, padding: '8px 0' }}>Событий пока нет.</div>}
           {events.map((e, i) => (
             <div key={e.id} style={i === events.length - 1 ? last : row}>
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -693,6 +702,12 @@ export function AdminDashboard() {
         text="Подписка будет отозвана немедленно. Пользователь потеряет Pro-доступ."
         onClose={() => setProRevoke(null)}
         onConfirm={() => { if (proRevoke) revokePro(proRevoke) }}
+      />
+      <ConfirmDelete
+        open={logoutOpen}
+        text="Выйти из аккаунта? Для входа снова понадобятся почта и код."
+        onClose={() => setLogoutOpen(false)}
+        onConfirm={logout}
       />
       <Modal open={!!proEdit} title="Исправить дату окончания" onClose={() => setProEdit(null)}>
         <div style={{ fontSize: 14, color: '#555', marginBottom: 10 }}>Новая дата окончания (ГГГГ-ММ-ДД). Для «бессрочно» используйте 2099-12-31.</div>
