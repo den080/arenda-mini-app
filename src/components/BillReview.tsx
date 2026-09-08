@@ -42,7 +42,7 @@ export function BillReview({ contractId, tenantId }: { contractId: string; tenan
 
   // файл уходит КАК ЕСТЬ: PDF и картинки без сжатия — QR читается
   async function uploadRaw(file: File, path: string): Promise<string> {
-    const { error } = await supabase.storage.from('bills').upload(path, file, { contentType: file.type || 'application/octet-stream', cacheControl: '3600', upsert: false })
+    const { error } = await supabase.storage.from('bills').upload(path, file, { contentType: file.type || 'application/octet-stream', cacheControl: '3600', upsert: true })
     if (error) throw error
     return supabase.storage.from('bills').getPublicUrl(path).data.publicUrl
   }
