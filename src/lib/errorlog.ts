@@ -1,7 +1,7 @@
 import { supabase } from './supabase'
 
 // Версия сборки — видна в тревогах, обновляйте при крупных коммитах
-export const APP_BUILD = '2026-08-28b'
+export const APP_BUILD = '2026-09-09a'
 
 let currentUser: any = null
 let lastSig = ''
