@@ -6,7 +6,7 @@ import BillReview from '../components/BillReview'
 import Chat from '../components/Chat'
 import { BottomNav, showToast, SkeletonList, PullToRefresh, Hint, Modal } from '../components/ui'
 import { T } from '../theme'
-import { addOffer, markOffer, acceptRenewal } from '../lib/renewal'
+import { addOffer, markOffer, acceptRenewal, latestOffer } from '../lib/renewal'
 
 const TABS = [
   { id: 'pay', l: 'Оплата' },
@@ -31,15 +31,15 @@ function formatPhone(v: string): string {
   return v
 }
 
-const iosBlue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 16, fontWeight: 600, cursor: 'pointer', padding: 4, flexShrink: 0 }
-const actBlue: React.CSSProperties = { ...iosBlue, fontSize: 14 }
-const iosMuted: React.CSSProperties = { color: '#8e8e93', fontSize: 14 }
-const valText: React.CSSProperties = { fontSize: 16, fontWeight: 500, color: '#1d1d1f' }
-const valMoney: React.CSSProperties = { fontSize: 16, fontWeight: 600, color: '#1d1d1f', whiteSpace: 'nowrap' }
-const secHead: React.CSSProperties = { fontSize: 12, color: '#8e8e93', margin: '14px 16px 6px', textTransform: 'uppercase', letterSpacing: 0.3 }
-const rightInput: React.CSSProperties = { width: 110, border: 'none', outline: 'none', background: 'rgba(120,120,128,0.08)', borderRadius: 8, padding: '8px 10px', fontSize: 16, fontWeight: 600, textAlign: 'right', color: '#1d1d1f', boxSizing: 'border-box' }
+const iosBlue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 17, fontWeight: 600, cursor: 'pointer', padding: 4, flexShrink: 0 }
+const actBlue: React.CSSProperties = { ...iosBlue, fontSize: 15 }
+const iosMuted: React.CSSProperties = { color: '#8e8e93', fontSize: 15 }
+const valText: React.CSSProperties = { fontSize: 17, fontWeight: 500, color: '#1d1d1f' }
+const valMoney: React.CSSProperties = { fontSize: 17, fontWeight: 600, color: '#1d1d1f', whiteSpace: 'nowrap' }
+const secHead: React.CSSProperties = { fontSize: 13, color: '#8e8e93', margin: '14px 16px 6px', textTransform: 'uppercase', letterSpacing: 0.3 }
+const rightInput: React.CSSProperties = { width: 110, border: 'none', outline: 'none', background: 'rgba(120,120,128,0.08)', borderRadius: 8, padding: '8px 10px', fontSize: 17, fontWeight: 600, textAlign: 'right', color: '#1d1d1f', boxSizing: 'border-box' }
 const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProperties
-const inp: React.CSSProperties = { width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box', outline: 'none' }
+const inp: React.CSSProperties = { width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 17, boxSizing: 'border-box', outline: 'none' }
 const rowBtn: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 56, border: 'none', background: 'transparent', cursor: 'pointer', padding: '4px 0', textAlign: 'left', boxSizing: 'border-box' }
 
 export function TenantDashboard() {
@@ -55,12 +55,12 @@ export function TenantDashboard() {
   const [payHistOpen, setPayHistOpen] = useState(false)
   const [payClaimOpen, setPayClaimOpen] = useState(false)
   const [endChoice, setEndChoice] = useState<'' | 'renew' | 'exit'>('')
+  const [endConfirm, setEndConfirm] = useState<'' | 'renew' | 'exit'>('')
   const [renewOffer, setRenewOffer] = useState<any>(null)
   const [renewForm, setRenewForm] = useState(false)
   const [myRent, setMyRent] = useState('')
   const [myMonths, setMyMonths] = useState(11)
   const [myStart, setMyStart] = useState('')
-  const [endConfirm, setEndConfirm] = useState<'' | 'renew' | 'exit'>('')
   const [claimPhone, setClaimPhone] = useState('')
   const [claimBusy, setClaimBusy] = useState(false)
   const [claimMsg, setClaimMsg] = useState('')
@@ -145,7 +145,7 @@ export function TenantDashboard() {
       contacts: contactsRes.data || [],
       frozen: frozenRes.data || [],
     })
-    const { data: off } = await supabase.from('renewal_offers').select('*').eq('contract_id', contract.id).order('created_at', { ascending: false }).limit(1).maybeSingle()
+    const off = await latestOffer(contract.id)
     setRenewOffer(off)
     setRenewForm(false)
   }
@@ -182,7 +182,7 @@ export function TenantDashboard() {
     setBusy(true)
     try {
       for (const m of rows) {
-        const num = Number(String(vals[m.id]).replace(',', '.'))
+        const num = Number(String(vals[m.id].replace(',', '.')))
         if (isNaN(num) || num < 0) { showToast('Некорректное значение'); return }
         const cur = (data.readings || []).find((r: any) => r.object_meter_id === m.id && r.period === period)
         if (cur) {
@@ -224,24 +224,25 @@ export function TenantDashboard() {
     loadData()
   }
 
-    async function sendEndChoice(kind: 'renew' | 'exit') {
+  async function sendEndChoice(kind: 'renew' | 'exit') {
     if (!contract) return
     setEndChoice(kind)
     if (kind === 'renew') {
       const ed = contract.end_date ? parseDate(contract.end_date) : new Date()
       const ds = new Date(ed.getFullYear(), ed.getMonth(), ed.getDate() + 1)
       await addOffer({ contract_id: contract.id, offered_by: 'tenant', rent_amount: Number(contract.rent_amount) || 0, months: 11, start_date: `${ds.getFullYear()}-${String(ds.getMonth() + 1).padStart(2, '0')}-${String(ds.getDate()).padStart(2, '0')}`, round: 1 })
+      const off = await latestOffer(contract.id)
+      setRenewOffer(off)
     }
     await notify(data?.obj?.landlord_id, kind === 'renew' ? 'renewal_requested' : 'termination_requested', kind === 'renew' ? '🔄 Предложение арендатора: продлить договор (условия можно пересмотреть)' : '🏁 Предложение арендатора: завершить договор в срок', contract.id)
     showToast(kind === 'renew' ? '✅ Предложение о продлении отправлено' : '✅ Предложение о завершении отправлено')
-    loadData()
   }
 
   async function tenantAccept() {
     if (!contract || !renewOffer) return
     const res = await acceptRenewal(renewOffer, contract)
     if (res.error) { showToast('Ошибка: ' + res.error); return }
-    await notify(data?.obj?.landlord_id, 'renewal_accepted', '🤝 Арендатор согласился на продление', contract.id)
+    await notify(data?.obj?.landlord_id, 'renewal_accepted', '🤝 Арендатор согласился на продление — договор продлён', contract.id)
     showToast('✅ Договор продлён')
     window.dispatchEvent(new Event('rentflow-refresh'))
     loadData()
@@ -251,21 +252,22 @@ export function TenantDashboard() {
     if (!contract || !renewOffer) return
     const rentN = Number(String(myRent).replace(',', '.'))
     if (!rentN || rentN <= 0) { showToast('Укажите сумму аренды'); return }
+    if (!myStart) { showToast('Укажите дату начала'); return }
     await markOffer(renewOffer.id, 'countered')
-    await addOffer({ contract_id: contract.id, offered_by: 'tenant', rent_amount: rentN, months: myMonths, start_date: myStart || renewOffer.start_date, round: (renewOffer.round || 1) + 1 })
+    await addOffer({ contract_id: contract.id, offered_by: 'tenant', rent_amount: rentN, months: myMonths, start_date: myStart, round: (renewOffer.round || 1) + 1 })
     setRenewForm(false)
     await notify(data?.obj?.landlord_id, 'renewal_countered', `🔄 Арендатор предложил свои условия: ${rentN.toFixed(0)} ₽/мес, ${myMonths} мес.`, contract.id)
     showToast('✅ Ваше предложение отправлено')
-    loadData()
+    const off = await latestOffer(contract.id)
+    setRenewOffer(off)
   }
 
   async function tenantDecline() {
     if (!contract || !renewOffer) return
     await markOffer(renewOffer.id, 'declined')
-    setEndChoice('exit')
     await notify(data?.obj?.landlord_id, 'renewal_declined', '🏁 Арендатор отказался от продления', contract.id)
     showToast('✅ Вы отказались от продления')
-    loadData()
+    setRenewOffer({ ...renewOffer, status: 'declined' })
   }
 
   async function setTenantPayMethod(m: 'card' | 'cash') {
@@ -364,8 +366,7 @@ export function TenantDashboard() {
   const contacts = data?.contacts || []
   const frozen = data?.frozen || []
   const readingsMode = contract.readings_mode || 'manual'
-  const endMonthStart = contract.end_date ? (() => { const ed = parseDate(contract.end_date); return new Date(ed.getFullYear(), ed.getMonth(), 1) })() : null
-  const openPays = payments.filter((p: any) => !p.confirmed_by_landlord && !(endMonthStart && parseDate(p.period).getTime() >= endMonthStart.getTime()))
+  const openPays = payments.filter((p: any) => !p.confirmed_by_landlord)
   const payment = openPays.length ? openPays[openPays.length - 1] : null
   const monthLabel = payment ? parseDate(payment.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : ''
   const basePlusUtil = payment ? Number(payment.base_amount || 0) + Number(payment.utilities_amount || 0) : 0
@@ -396,7 +397,6 @@ export function TenantDashboard() {
         ? 'confirmed'
         : 'proposed'
   const histList = payments.filter((p: any) => {
-    if (!p.confirmed_by_landlord && endMonthStart && parseDate(p.period).getTime() >= endMonthStart.getTime()) return false
     const firstOpen = payments.filter((x: any) => !x.confirmed_by_landlord).map((x: any) => x.period).sort()[0]
     return !(!p.confirmed_by_landlord && firstOpen && p.period > firstOpen)
   })
@@ -418,10 +418,10 @@ export function TenantDashboard() {
               {payment && (
                 <div style={T.card}>
                   <div style={T.h2}>Счёт за {monthLabel}</div>
-                  <div style={T.row}><span style={iosMuted}>Аренда</span><span style={valMoney}>{Number(payment.base_amount || 0).toFixed(0)} ₽</span></div>
-                  <div style={T.row}><span style={iosMuted}>Коммунальные</span><span style={valMoney}>{Number(payment.utilities_amount || 0).toFixed(0)} ₽</span></div>
-                  <div style={T.row}><span style={{ ...iosMuted, color: shownPenalty > 0 ? '#ff3b30' : iosMuted.color }}>Штраф</span><span style={{ ...valMoney, color: shownPenalty > 0 ? '#ff3b30' : valMoney.color }}>{shownPenalty.toFixed(0)} ₽</span></div>
-                  <div style={T.row}><span style={{ ...valText, fontWeight: 700 }}>Итого</span><span style={valMoney}>{total.toFixed(0)} ₽</span></div>
+                  <div style={T.row}> <span style={iosMuted}>Аренда</span> <span style={valMoney}>{Number(payment.base_amount || 0).toFixed(0)} ₽</span> </div>
+                  <div style={T.row}> <span style={iosMuted}>Коммунальные</span> <span style={valMoney}>{Number(payment.utilities_amount || 0).toFixed(0)} ₽</span> </div>
+                  <div style={T.row}> <span style={{ ...iosMuted, color: shownPenalty > 0 ? '#ff3b30' : iosMuted.color }}>Штраф</span> <span style={{ ...valMoney, color: shownPenalty > 0 ? '#ff3b30' : valMoney.color }}>{shownPenalty.toFixed(0)} ₽</span> </div>
+                  <div style={T.row}> <span style={{ ...valText, fontWeight: 700 }}>Итого</span> <span style={valMoney}>{total.toFixed(0)} ₽</span> </div>
                   <div style={{ ...T.row, borderBottom: 'none' }}>
                     <span style={iosMuted}>Срок</span>
                     <span style={{ fontSize: 15, fontWeight: 600, color: daysLeft < 0 ? '#ff3b30' : daysLeft <= 3 ? '#b25000' : '#1e7e34' }}>
@@ -431,9 +431,11 @@ export function TenantDashboard() {
                   {accrued > 0 && <Hint text="Штраф начисляется каждый день просрочки и растёт до момента оплаты." />}
                   {Number(payment.paid_amount || 0) > 0 && <div style={T.tiny}>Получено: {Number(payment.paid_amount).toFixed(0)} ₽</div>}
                   {shownPenalty > 0 && !deferralPending && (
-                    <button style={{ width: '100%', marginTop: 10, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }} onClick={requestDeferral}>Попросить отсрочку штрафа {shownPenalty.toFixed(0)} ₽</button>
+                    <div style={{ marginTop: 8 }}>
+                      <button style={{ width: '100%', padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }} onClick={requestDeferral}>Попросить отсрочку штрафа {shownPenalty.toFixed(0)} ₽</button>
+                    </div>
                   )}
-                  {deferralPending && <div style={{ ...T.tiny, marginTop: 8 }}>Просьба об отсрочке отправлена арендодателю — он ответит в приложении.</div>}
+                  {deferralPending && <div style={T.tiny}>Просьба об отсрочке отправлена арендодателю.</div>}
                 </div>
               )}
               {!payment && (
@@ -500,26 +502,26 @@ export function TenantDashboard() {
                   landlordId={obj?.landlord_id || contract.object?.landlord_id}
                 />
               )}
-                            {lastMonth && (
+              {lastMonth && (
                 <div style={T.card}>
                   <div style={T.h2}>Договор заканчивается</div>
                   <div style={{ ...T.small, margin: '0 0 10px' }}>Срок до {contract.end_date ? parseDate(contract.end_date).toLocaleDateString('ru-RU') : '—'}. Ваш выбор — предложение арендодателю: он примет решение и при продлении может изменить стоимость и условия.</div>
                   {!renewOffer && endChoice === '' && (
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }} onClick={() => sendEndChoice('renew')}>Отправить предложение о продлении</button>
-                      <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 15, cursor: 'pointer' }} onClick={() => sendEndChoice('exit')}>Отправить предложение о завершении</button>
+                      <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }} onClick={() => setEndConfirm('renew')}>Отправить предложение о продлении</button>
+                      <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 15, cursor: 'pointer' }} onClick={() => setEndConfirm('exit')}>Отправить предложение о завершении</button>
                     </div>
                   )}
                   {!renewOffer && endChoice === 'renew' && <div style={T.noteGreen}>Предложение о продлении отправлено арендодателю.</div>}
                   {!renewOffer && endChoice === 'exit' && <div style={T.noteGreen}>Предложение о завершении отправлено. Арендодатель подготовит расчёт при съезде.</div>}
                   {renewOffer && renewOffer.status === 'accepted' && <div style={T.noteGreen}>Договор продлён — новый договор уже в списке.</div>}
-                  {renewOffer && renewOffer.status === 'declined' && <div style={T.noteGreen}>Предложение отклонено — договор движется к завершению.</div>}
+                  {renewOffer && renewOffer.status === 'declined' && <div style={T.noteGreen}>Продление отклонено — договор завершится в срок.</div>}
                   {renewOffer && renewOffer.status === 'countered' && <div style={T.noteGreen}>Идёт обсуждение условий — ждём новое предложение.</div>}
                   {renewOffer && renewOffer.status === 'proposed' && renewOffer.offered_by === 'tenant' && <div style={T.noteGreen}>Предложение отправлено. Ждём ответ арендодателя.</div>}
                   {renewOffer && renewOffer.status === 'proposed' && renewOffer.offered_by === 'landlord' && (
                     <>
                       <div style={T.row}><span style={iosMuted}>Аренда</span><span style={valMoney}>{Number(renewOffer.rent_amount).toFixed(0)} ₽/мес</span></div>
-                      <div style={T.row}><span style={iosMuted}>Новый договор</span><span style={valText}>{renewOffer.months} мес. с {parseDate(renewOffer.start_date).toLocaleDateString('ru-RU')}</span></div>
+                      <div style={{ ...T.row, borderBottom: 'none' }}><span style={iosMuted}>Новый договор</span><span style={valText}>{renewOffer.months} мес. с {parseDate(renewOffer.start_date).toLocaleDateString('ru-RU')}</span></div>
                       {!renewForm ? (
                         <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                           <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }} onClick={tenantAccept}>Согласен</button>
@@ -632,18 +634,18 @@ export function TenantDashboard() {
             <>
               <div style={T.card}>
                 <div style={T.h2}>Договор</div>
-                <div style={T.row}><span style={iosMuted}>Арендодатель</span><span style={{ ...valText, textAlign: 'right' }}>{(obj as any)?.landlord_doc_name || landlord?.full_name || '—'}</span></div>
+                <div style={T.row}> <span style={iosMuted}>Арендодатель</span> <span style={{ ...valText, textAlign: 'right' }}>{(obj as any)?.landlord_doc_name || landlord?.full_name || '—'}</span> </div>
                 {contract.start_date && contract.end_date && (
-                  <div style={T.row}><span style={iosMuted}>Срок</span><span style={valText}>{parseDate(contract.start_date).toLocaleDateString('ru-RU')} — {parseDate(contract.end_date).toLocaleDateString('ru-RU')}</span></div>
+                  <div style={T.row}> <span style={iosMuted}>Срок</span> <span style={valText}>{parseDate(contract.start_date).toLocaleDateString('ru-RU')} — {parseDate(contract.end_date).toLocaleDateString('ru-RU')}</span> </div>
                 )}
-                <div style={T.row}><span style={iosMuted}>Аренда</span><span style={valMoney}>{Number(contract.rent_amount).toFixed(0)} ₽/мес</span></div>
-                <div style={T.row}><span style={iosMuted}>Оплата</span><span style={valText}>до {contract.payment_day} числа</span></div>
+                <div style={T.row}> <span style={iosMuted}>Аренда</span> <span style={valMoney}>{Number(contract.rent_amount).toFixed(0)} ₽/мес</span> </div>
+                <div style={T.row}> <span style={iosMuted}>Оплата</span> <span style={valText}>до {contract.payment_day} числа</span> </div>
                 {Number(contract.deposit_amount || 0) > 0 && (
-                  <div style={T.row}><span style={iosMuted}>Депозит</span><span style={valMoney}>{Number(contract.deposit_paid || 0).toFixed(0)} из {Number(contract.deposit_amount || 0).toFixed(0)} ₽</span></div>
+                  <div style={T.row}> <span style={iosMuted}>Депозит</span> <span style={valMoney}>{Number(contract.deposit_paid || 0).toFixed(0)} из {Number(contract.deposit_amount || 0).toFixed(0)} ₽</span> </div>
                 )}
-                <div style={T.row}><span style={iosMuted}>Просрочка оплаты</span><span style={valMoney}>+{penaltyRate} ₽/день</span></div>
+                <div style={T.row}> <span style={iosMuted}>Просрочка оплаты</span> <span style={valMoney}>+{penaltyRate} ₽/день</span> </div>
                 {readingsMode === 'manual' && readingsRule && Number(readingsRule.rate) > 0 && (
-                  <div style={{ ...T.row, borderBottom: 'none' }}><span style={iosMuted}>Просрочка показаний</span><span style={valMoney}>+{Number(readingsRule.rate)} ₽/день</span></div>
+                  <div style={{ ...T.row, borderBottom: 'none' }}> <span style={iosMuted}>Просрочка показаний</span> <span style={valMoney}>+{Number(readingsRule.rate)} ₽/день</span> </div>
                 )}
               </div>
               {contacts.length > 0 && (
@@ -700,7 +702,14 @@ export function TenantDashboard() {
           )}
         </>
       )}
-            <Modal open={!!endConfirm} title={endConfirm === 'renew' ? 'Предложение о продлении' : 'Предложение о завершении'} onClose={() => setEndConfirm('')}>
+      <Modal open={payClaimOpen} title="Подтверждение оплаты" onClose={() => setPayClaimOpen(false)}>
+        <div style={{ fontSize: 15, color: '#555', marginBottom: 12 }}>Вы действительно оплатили {total.toFixed(0)} ₽ за {monthLabel}? Арендодатель получит уведомление.</div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 16, cursor: 'pointer' }} onClick={() => { setPayClaimOpen(false); claimCard() }}>Да, я оплатил</button>
+          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 16, cursor: 'pointer' }} onClick={() => setPayClaimOpen(false)}>Отмена</button>
+        </div>
+      </Modal>
+      <Modal open={!!endConfirm} title={endConfirm === 'renew' ? 'Предложение о продлении' : 'Предложение о завершении'} onClose={() => setEndConfirm('')}>
         <div style={{ fontSize: 15, color: '#555', marginBottom: 12 }}>
           {endConfirm === 'renew'
             ? 'Отправить арендодателю предложение продлить договор? Он примет решение и при продлении может изменить стоимость и условия.'
@@ -709,13 +718,6 @@ export function TenantDashboard() {
         <div style={{ display: 'flex', gap: 8 }}>
           <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 16, cursor: 'pointer' }} onClick={() => { const k = endConfirm; setEndConfirm(''); if (k) sendEndChoice(k) }}>Да, отправить</button>
           <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 16, cursor: 'pointer' }} onClick={() => setEndConfirm('')}>Отмена</button>
-        </div>
-      </Modal>
-      <Modal open={payClaimOpen} title="Подтверждение оплаты" onClose={() => setPayClaimOpen(false)}>
-        <div style={{ fontSize: 15, color: '#555', marginBottom: 12 }}>Вы действительно оплатили {total.toFixed(0)} ₽ за {monthLabel}? Арендодатель получит уведомление.</div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 16, cursor: 'pointer' }} onClick={() => { setPayClaimOpen(false); claimCard() }}>Да, я оплатил</button>
-          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 16, cursor: 'pointer' }} onClick={() => setPayClaimOpen(false)}>Отмена</button>
         </div>
       </Modal>
       <BottomNav tabs={TABS} tab={tab} setTab={setTab} badges={{ pay: payBadge, meters: metersBadge }} />
