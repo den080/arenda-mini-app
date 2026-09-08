@@ -17,6 +17,18 @@ export function showToast(msg: string) {
   if (toastFn) toastFn(msg)
 }
 
+// Человеческие тексты ошибок: сырые сообщения Supabase пользователю не показываем
+export function errText(err: any): string {
+  const m = String(err?.message || err || '')
+  if (/row-level security/i.test(m)) return 'Недостаточно прав для этого действия'
+  if (/duplicate key/i.test(m)) return 'Такая запись уже существует'
+  if (/Failed to fetch|Load failed|NetworkError|network/i.test(m)) return 'Нет связи с сервером. Проверьте интернет и повторите'
+  if (/JWT expired|invalid jwt/i.test(m)) return 'Сессия устарела. Обновите страницу'
+  if (/rate limit/i.test(m)) return 'Слишком часто. Подождите минуту и повторите'
+  if (/Invalid login credentials|Token has expired/i.test(m)) return 'Код не подошёл. Запросите новый'
+  return m ? 'Ошибка: ' + m : 'Неизвестная ошибка'
+}
+
 export function Toaster() {
   const [msg, setMsg] = useState<string | null>(null)
   useEffect(() => {
@@ -57,8 +69,8 @@ export function PromptNumber({ open, title, label, initial, onClose, onSubmit }:
       <div style={{ fontSize: 14, color: '#555', marginBottom: 10 }}>{label}</div>
       <input value={v} onChange={(e) => setV(e.target.value)} inputMode="decimal" style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box', marginBottom: 14 }} />
       <div style={{ display: 'flex', gap: 8 }}>
-        <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }} onClick={() => { const n = Number(String(v).replace(',', '.')); onSubmit(n); onClose() }}>Сохранить</button>
-        <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 15, cursor: 'pointer' }} onClick={onClose}>Отмена</button>
+        <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 16, cursor: 'pointer' }} onClick={() => { const n = Number(String(v).replace(',', '.')); onSubmit(n); onClose() }}>Сохранить</button>
+        <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 16, cursor: 'pointer' }} onClick={onClose}>Отмена</button>
       </div>
     </Modal>
   )
@@ -79,20 +91,20 @@ export function Progress({ value, max }: { value: number; max: number }) {
   )
 }
 
-export function ConfirmDelete({ open, text, onClose, onConfirm }: { open: boolean; text: string; onClose: () => void; onConfirm: () => void }) {
+export function ConfirmDelete({ open, text, title, onClose, onConfirm }: { open: boolean; text: string; title?: string; onClose: () => void; onConfirm: () => void }) {
   const [ok, setOk] = useState(false)
   useEffect(() => { if (open) setOk(false) }, [open])
   if (!open) return null
   return (
-    <Modal open={open} title="Подтвердите действие" onClose={onClose}>
+    <Modal open={open} title={title || 'Подтвердите действие'} onClose={onClose}>
       <div style={{ fontSize: 14, color: '#555', marginBottom: 12 }}>{text}</div>
       <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 14, marginBottom: 14, color: '#1d1d1f' }}>
         <input type="checkbox" checked={ok} onChange={(e) => setOk(e.target.checked)} />
         Понимаю и подтверждаю
       </label>
       <div style={{ display: 'flex', gap: 8 }}>
-        <button disabled={!ok} style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#ff3b30', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer', opacity: ok ? 1 : 0.4 }} onClick={() => { haptic('success'); onConfirm(); onClose() }}>Удалить</button>
-        <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 15, cursor: 'pointer' }} onClick={onClose}>Отмена</button>
+        <button disabled={!ok} style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#ff3b30', color: '#fff', fontWeight: 700, fontSize: 16, cursor: 'pointer', opacity: ok ? 1 : 0.4 }} onClick={() => { haptic('success'); onConfirm(); onClose() }}>Удалить</button>
+        <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 16, cursor: 'pointer' }} onClick={onClose}>Отмена</button>
       </div>
     </Modal>
   )
@@ -179,7 +191,7 @@ export function SkeletonList({ count = 3 }: { count?: number }) {
   )
 }
 
-// ========== PULL-TO-REFRESH (подключим следующим шагом) ==========
+// ========== PULL-TO-REFRESH ==========
 export function PullToRefresh({ onRefresh, children }: { onRefresh: () => Promise<void> | void; children: React.ReactNode }) {
   const [drag, setDrag] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
@@ -227,18 +239,19 @@ if (typeof document !== 'undefined' && !document.getElementById('rf-anim-css')) 
   `
   document.head.appendChild(style)
 }
+
 export function Hint({ text }: { text: string }) {
   const [open, setOpen] = useState(false)
   return (
     <div style={{ margin: '6px 0 0' }}>
       <button
         onClick={() => setOpen(!open)}
-        style={{ border: 'none', background: 'transparent', color: '#8e8e93', fontSize: 13, cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 4 }}
+        style={{ border: 'none', background: 'transparent', color: '#8e8e93', fontSize: 12, cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 4 }}
       >
         <span style={{ display: 'inline-block', transform: open ? 'rotate(90deg)' : 'none' }}>›</span>
         {open ? 'Скрыть' : 'Подробнее'}
       </button>
-      {open && <div style={{ fontSize: 13, color: '#8e8e93', lineHeight: 1.45, marginTop: 4 }}>{text}</div>}
+      {open && <div style={{ fontSize: 12, color: '#8e8e93', lineHeight: 1.45, marginTop: 4 }}>{text}</div>}
     </div>
   )
 }
