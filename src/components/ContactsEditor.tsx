@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { T } from '../theme'
 import { showToast, ConfirmDelete } from './ui'
@@ -29,6 +29,8 @@ export function ContactsEditor({ objId }: { objId: string }) {
   const [del, setDel] = useState<string | null>(null)
   const [unlocked, setUnlocked] = useState(false)
   const [busy, setBusy] = useState(false)
+  const pending = useRef<Record<string, any>>({})
+  const timers = useRef<Record<string, any>>({})
 
   async function load() {
     const { data } = await supabase
@@ -55,10 +57,17 @@ export function ContactsEditor({ objId }: { objId: string }) {
     } finally { setBusy(false) }
   }
 
-  async function patch(id: string, field: string, value: string) {
-    setRows(rows.map(r => r.id === id ? { ...r, [field]: value } : r))
-    const { error } = await supabase.from('object_contacts').update({ [field]: value }).eq('id', id)
-    if (error) showToast('Ошибка: ' + error.message)
+  // правки копятся и уходят в базу одной пачкой через 600 мс после последней клавиши
+  function patch(id: string, field: string, value: string) {
+    setRows(rs => rs.map(r => r.id === id ? { ...r, [field]: value } : r))
+    pending.current[id] = { ...(pending.current[id] || {}), [field]: value }
+    clearTimeout(timers.current[id])
+    timers.current[id] = setTimeout(async () => {
+      const upd = pending.current[id] || {}
+      delete pending.current[id]
+      const { error } = await supabase.from('object_contacts').update(upd).eq('id', id)
+      if (error) showToast('Ошибка: ' + error.message)
+    }, 600)
   }
 
   async function remove(id: string) {
