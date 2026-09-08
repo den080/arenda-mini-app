@@ -2,12 +2,11 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useTelegramUser } from '../hooks/useTelegramUser'
 import { T } from '../theme'
-import { showToast, Hint } from './ui'
+import { showToast } from './ui'
 import { Media, billChip, billChipText } from './BillUploader'
 
 const iosBlue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: 4, flexShrink: 0 }
 const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProperties
-const btnBlue: React.CSSProperties = { width: '100%', padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }
 const inpSmall: React.CSSProperties = { flex: 1, minWidth: 0, padding: '8px 10px', borderRadius: 10, border: '1px solid #ddd', fontSize: 15, boxSizing: 'border-box' }
 
 export function BillReview({ contractId, tenantId }: { contractId: string; tenantId: string }) {
@@ -17,13 +16,11 @@ export function BillReview({ contractId, tenantId }: { contractId: string; tenan
   const [ready, setReady] = useState(false)
   const [view, setView] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [landlordId, setLandlordId] = useState<string | null>(null)
   const [period, setPeriod] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` })
   const [due, setDue] = useState('')
-  const billInput = useRef<HTMLInputElement | null>(null)
+  const [landlordId, setLandlordId] = useState<string | null>(null)
+  const fileRef = useRef<HTMLInputElement | null>(null)
   const proofRefs = useRef<Record<string, HTMLInputElement | null>>({})
-
-  const monthLabel = (p: string) => new Date(p + '-01').toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })
 
   async function load() {
     const { data } = await supabase.from('utility_bills').select('*').eq('contract_id', contractId).order('period', { ascending: false })
@@ -43,12 +40,11 @@ export function BillReview({ contractId, tenantId }: { contractId: string; tenan
     await supabase.from('notifications_log').insert({ user_id: userId, type, related_id: contractId, message, sent_at: new Date().toISOString() })
   }
 
-  // файл уходит в хранилище КАК ЕСТЬ, без сжатия — QR и цифры читаются
+  // файл уходит КАК ЕСТЬ: PDF и картинки без сжатия — QR читается
   async function uploadRaw(file: File, path: string): Promise<string> {
     const { error } = await supabase.storage.from('bills').upload(path, file, { contentType: file.type || 'application/octet-stream', cacheControl: '3600', upsert: false })
     if (error) throw error
-    const { data } = supabase.storage.from('bills').getPublicUrl(path)
-    return data.publicUrl
+    return supabase.storage.from('bills').getPublicUrl(path).data.publicUrl
   }
 
   async function uploadBill(file: File) {
@@ -57,17 +53,17 @@ export function BillReview({ contractId, tenantId }: { contractId: string; tenan
     try {
       const ext = (file.name.split('.').pop() || 'bin').toLowerCase()
       const url = await uploadRaw(file, `${contractId}/${period}-bill.${ext}`)
-      const existing = bills.find((x) => x.period === period)
+      const existing = bills.find((b) => b.period === period)
       if (existing) {
         const { error } = await supabase.from('utility_bills').update({ bill_url: url, uploaded_at: new Date().toISOString(), due_date: due || existing.due_date }).eq('id', existing.id)
         if (error) { showToast('Ошибка: ' + error.message); return }
       } else {
-        const { error } = await supabase.from('utility_bills').insert({ contract_id: contractId, period, due_date: due || null, bill_url: url, status: 'pending', uploaded_at: new Date().toISOString() })
+        const { error } = await supabase.from('utility_bills').insert({ contract_id: contractId, period, due_date: due || null, bill_url: url, uploaded_by: user!.id, status: 'pending', uploaded_at: new Date().toISOString() })
         if (error) { showToast('Ошибка: ' + error.message); return }
       }
-      await notify(tenantId, 'bill_uploaded', `📄 Квитанция за ${monthLabel(period)} доступна: оплатите по QR и приложите чек`)
+      await notify(tenantId, 'bill_uploaded', `📄 Квитанция за ${period} доступна: оплатите и приложите чек`)
       showToast('✅ Квитанция загружена без сжатия')
-      if (billInput.current) billInput.current.value = ''
+      if (fileRef.current) fileRef.current.value = ''
       load()
       window.dispatchEvent(new Event('rentflow-refresh'))
     } catch (e: any) {
@@ -81,10 +77,10 @@ export function BillReview({ contractId, tenantId }: { contractId: string; tenan
     try {
       const ext = (file.name.split('.').pop() || 'bin').toLowerCase()
       const url = await uploadRaw(file, `${contractId}/${b.id}-proof.${ext}`)
-      const { error } = await supabase.from('utility_bills').update({ payment_url: url, status: 'paid' }).eq('id', b.id)
+      const { error } = await supabase.from('utility_bills').update({ payment_url: url, payment_uploaded_at: new Date().toISOString(), status: 'paid' }).eq('id', b.id)
       if (error) { showToast('Ошибка: ' + error.message); return }
-      await notify(landlordId, 'bill_paid', `🧾 Арендатор приложил подтверждение оплаты за ${monthLabel(b.period)}`)
-      showToast('✅ Чек приложен')
+      await notify(landlordId, 'bill_paid', `🧾 Арендатор приложил подтверждение оплаты за ${b.period}`)
+      showToast('✅ Чек отправлен арендодателю')
       load()
       window.dispatchEvent(new Event('rentflow-refresh'))
     } catch (e: any) {
@@ -95,7 +91,7 @@ export function BillReview({ contractId, tenantId }: { contractId: string; tenan
   async function confirmBill(id: string, p: string) {
     const { error } = await supabase.from('utility_bills').update({ confirmed_at: new Date().toISOString(), status: 'confirmed' }).eq('id', id)
     if (error) { showToast('Ошибка: ' + error.message); return }
-    await notify(tenantId, 'bill_confirmed', `✅ Арендодатель подтвердил оплату по квитанции за ${monthLabel(p)}`)
+    await notify(tenantId, 'bill_confirmed', `✅ Арендодатель подтвердил оплату по квитанции за ${p}`)
     showToast('✅ Подтверждено')
     load()
     window.dispatchEvent(new Event('rentflow-refresh'))
@@ -106,22 +102,22 @@ export function BillReview({ contractId, tenantId }: { contractId: string; tenan
   const todayMid = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   return (
     <div style={T.card}>
-      <div style={T.h2}>{isTenant ? 'Квитанции и подтверждения' : 'Квитанции и чеки арендатора'}</div>
+      <div style={T.h2}>{isTenant ? 'Квитанции и чеки' : 'Квитанции от арендатора'}</div>
       {!isTenant && (
-        <div style={{ padding: '8px 0 12px' }}>
+        <div style={{ padding: '4px 0 10px' }}>
+          <div style={{ fontSize: 13, color: '#8e8e93', margin: '0 0 6px' }}>Квитанция от УК: PDF загружается без сжатия — QR читается у арендатора.</div>
           <div style={{ display: 'flex', gap: 8 }}>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13, color: '#8e8e93', margin: '0 0 2px' }}>Месяц квитанции</div>
+              <div style={{ fontSize: 12, color: '#8e8e93', margin: '0 0 2px' }}>Месяц квитанции</div>
               <input type="month" value={period} onChange={(e) => setPeriod(e.target.value)} style={inpSmall} />
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13, color: '#8e8e93', margin: '0 0 2px' }}>Оплатить квитанцию до</div>
+              <div style={{ fontSize: 12, color: '#8e8e93', margin: '0 0 2px' }}>Оплатить до</div>
               <input type="date" value={due} onChange={(e) => setDue(e.target.value)} style={inpSmall} />
             </div>
           </div>
-          <Hint text="Квитанция от УК: PDF загружается без сжатия — QR-код для оплаты читается у арендатора." />
-          <input ref={billInput} type="file" accept="application/pdf,image/*" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadBill(f) }} />
-          <button style={{ ...btnBlue, marginTop: 8 }} disabled={busy || !period} onClick={() => billInput.current?.click()}>{busy ? 'Загрузка…' : 'Загрузить квитанцию'}</button>
+          <input ref={fileRef} type="file" accept="application/pdf,image/*" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadBill(f) }} />
+          <button style={{ width: '100%', marginTop: 8, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }} disabled={busy || !period} onClick={() => fileRef.current?.click()}>{busy ? 'Загрузка…' : 'Загрузить квитанцию'}</button>
         </div>
       )}
       {bills.length === 0 && <div style={{ ...T.small, margin: '8px 0' }}>{isTenant ? 'Квитанций пока нет — арендодатель загрузит первую.' : 'Квитанций пока нет.'}</div>}
@@ -133,7 +129,7 @@ export function BillReview({ contractId, tenantId }: { contractId: string; tenan
             <div style={{ padding: '10px 0' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 15, fontWeight: 600 }}>Квитанция за {monthLabel(b.period)}</div>
+                  <div style={{ fontSize: 15, fontWeight: 600 }}>Квитанция за {new Date(b.period + '-01').toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}</div>
                   <div style={{ fontSize: 13, color: '#8e8e93', marginTop: 2 }}>
                     {b.bill_url ? `загружена ${new Date(b.uploaded_at).toLocaleDateString('ru-RU')}` : 'файл не загружен'}{b.due_date ? ` · оплатить до ${new Date(b.due_date).toLocaleDateString('ru-RU')}` : ''}
                   </div>
@@ -142,10 +138,10 @@ export function BillReview({ contractId, tenantId }: { contractId: string; tenan
               </div>
               {b.bill_url && (
                 <>
-                  <div style={{ marginTop: 8 }}>
+                  <div style={{ marginTop: 4 }}>
                     {b.bill_url.includes('.pdf')
                       ? <Media url={b.bill_url} maxH={160} />
-                      : <img src={b.bill_url} alt="" onClick={() => setView(b.bill_url)} style={{ width: '100%', maxHeight: 160, objectFit: 'cover', borderRadius: 10, cursor: 'pointer' }} />}
+                      : <img src={b.bill_url} alt="" onClick={() => setView(b.bill_url)} style={{ width: '100%', maxHeight: 160, objectFit: 'cover', borderRadius: 10, marginTop: 8, cursor: 'pointer' }} />}
                   </div>
                   <div style={{ marginTop: 4 }}>
                     <a href={b.bill_url} target="_blank" rel="noopener noreferrer" style={iosBlue}>Открыть оригинал (без сжатия)</a>
@@ -158,10 +154,7 @@ export function BillReview({ contractId, tenantId }: { contractId: string; tenan
                   <div style={{ marginTop: 4 }}>
                     {b.payment_url.includes('.pdf')
                       ? <Media url={b.payment_url} maxH={140} />
-                      : <img src={b.payment_url} alt="" onClick={() => setView(b.payment_url)} style={{ width: '100%', maxHeight: 140, objectFit: 'cover', borderRadius: 10, cursor: 'pointer' }} />}
-                  </div>
-                  <div style={{ marginTop: 4 }}>
-                    <a href={b.payment_url} target="_blank" rel="noopener noreferrer" style={iosBlue}>Открыть оригинал чека</a>
+                      : <img src={b.payment_url} alt="" onClick={() => setView(b.payment_url)} style={{ width: '100%', maxHeight: 140, objectFit: 'cover', borderRadius: 10, marginTop: 4, cursor: 'pointer' }} />}
                   </div>
                 </div>
               )}
