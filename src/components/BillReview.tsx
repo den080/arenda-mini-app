@@ -115,7 +115,7 @@ export function BillReview({ contractId, tenantId }: { contractId: string; tenan
               <input type="month" value={period} onChange={(e) => setPeriod(e.target.value)} style={inpSmall} />
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13, color: '#8e8e93', margin: '0 0 2px' }}>Срок оплаты</div>
+              <div style={{ fontSize: 13, color: '#8e8e93', margin: '0 0 2px' }}>Оплатить квитанцию до</div>
               <input type="date" value={due} onChange={(e) => setDue(e.target.value)} style={inpSmall} />
             </div>
           </div>
@@ -135,7 +135,7 @@ export function BillReview({ contractId, tenantId }: { contractId: string; tenan
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 15, fontWeight: 600 }}>Квитанция за {monthLabel(b.period)}</div>
                   <div style={{ fontSize: 13, color: '#8e8e93', marginTop: 2 }}>
-                    {b.bill_url ? `загружена ${new Date(b.uploaded_at).toLocaleDateString('ru-RU')}` : 'файл не загружен'}{b.due_date ? ` · срок ${new Date(b.due_date).toLocaleDateString('ru-RU')}` : ''}
+                    {b.bill_url ? `загружена ${new Date(b.uploaded_at).toLocaleDateString('ru-RU')}` : 'файл не загружен'}{b.due_date ? ` · оплатить до ${new Date(b.due_date).toLocaleDateString('ru-RU')}` : ''}
                   </div>
                 </div>
                 <span style={billChip(b.status, overdue)}>{billChipText(b.status, overdue)}</span>
