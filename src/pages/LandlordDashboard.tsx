@@ -327,7 +327,7 @@ export function LandlordDashboard() {
           const order: Record<string, number> = { overdue: 0, pending: 1, no_payment: 1.5, paid: 2, no_contract: 3 }
           const colorOrder = (o: ObjectWithStatus) => o.statusColor === '#c00' ? 0 : o.statusColor === '#a80' ? 1 : 2
           const so = (order[a.status] ?? 9) - (order[b.status] ?? 9)
-          return so !== 0 ? colorOrder(a) - colorOrder(b) : 0
+          return so !== 0 ? so : colorOrder(a) - colorOrder(b)
         })
         setObjects(sortedObjects)
       } catch (err) { setError(err instanceof Error ? err.message : 'Unknown error') } finally { setLoading(false) }
@@ -638,6 +638,15 @@ export function LandlordDashboard() {
     showToast('✅ Продление отклонено')
     setRenewOffer({ ...renewOffer, status: 'declined' })
   }
+  function openRenewForm() {
+    if (!contract) return
+    setOffRent(String(contract.rent_amount))
+    setOffMonths(11)
+    const ed = parseDate((contract as any).end_date)
+    const ds = new Date(ed.getFullYear(), ed.getMonth(), ed.getDate() + 1)
+    setOffStart(`${ds.getFullYear()}-${String(ds.getMonth() + 1).padStart(2, '0')}-${String(ds.getDate()).padStart(2, '0')}`)
+    setRenewForm(true)
+  }
   async function updatePaymentMethod(contractId: string, method: 'card' | 'cash' | 'both') {
     const updateData: any = { payment_method: method }
     if (method === 'cash') updateData.cash_slots = []
@@ -689,20 +698,26 @@ export function LandlordDashboard() {
       case 'bill_confirmed': return '✅ Квитанция подтверждена'
       case 'contract_terminated': return '🏁 Договор завершён'
       case 'amendment': return '📝 Допсоглашение по аренде'
+      case 'renewal_requested': return '🔄 Арендатор просит продлить договор'
+      case 'renewal_offered': return '📨 Предложены условия продления'
+      case 'renewal_accepted': return '🤝 Продление согласовано'
+      case 'renewal_countered': return '🔄 Встречные условия продления'
+      case 'renewal_declined': return '🏁 Продление отклонено'
+      case 'contract_prolonged': return '🔄 Договор продлён'
       default: return type
     }
   }
 
-  const iosBlue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 17, fontWeight: 600, cursor: 'pointer', padding: 4, flexShrink: 0 }
-  const iosRed: React.CSSProperties = { border: 'none', background: 'transparent', color: '#ff3b30', fontSize: 17, cursor: 'pointer', padding: 4, flexShrink: 0 }
-  const actBlue: React.CSSProperties = { ...iosBlue, fontSize: 15 }
-  const actRed: React.CSSProperties = { ...iosRed, fontSize: 15 }
-  const iosOk: React.CSSProperties = { color: '#1e7e34', fontSize: 15, fontWeight: 600 }
-  const iosMuted: React.CSSProperties = { color: '#8e8e93', fontSize: 15 }
-  const valText: React.CSSProperties = { fontSize: 17, fontWeight: 500, color: '#1d1d1f' }
-  const valMoney: React.CSSProperties = { fontSize: 17, fontWeight: 600, color: '#1d1d1f', whiteSpace: 'nowrap' }
-  const valRight: React.CSSProperties = { fontSize: 17, fontWeight: 600, color: '#1d1d1f', textAlign: 'right' }
-  const secHead: React.CSSProperties = { fontSize: 13, color: '#8e8e93', margin: '14px 16px 6px', textTransform: 'uppercase', letterSpacing: 0.3 }
+  const iosBlue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 16, fontWeight: 600, cursor: 'pointer', padding: 4, flexShrink: 0 }
+  const iosRed: React.CSSProperties = { border: 'none', background: 'transparent', color: '#ff3b30', fontSize: 16, cursor: 'pointer', padding: 4, flexShrink: 0 }
+  const actBlue: React.CSSProperties = { ...iosBlue, fontSize: 14 }
+  const actRed: React.CSSProperties = { ...iosRed, fontSize: 14 }
+  const iosOk: React.CSSProperties = { color: '#1e7e34', fontSize: 14, fontWeight: 600 }
+  const iosMuted: React.CSSProperties = { color: '#8e8e93', fontSize: 14 }
+  const valText: React.CSSProperties = { fontSize: 16, fontWeight: 500, color: '#1d1d1f' }
+  const valMoney: React.CSSProperties = { fontSize: 16, fontWeight: 600, color: '#1d1d1f', whiteSpace: 'nowrap' }
+  const valRight: React.CSSProperties = { fontSize: 16, fontWeight: 600, color: '#1d1d1f', textAlign: 'right' }
+  const secHead: React.CSSProperties = { fontSize: 12, color: '#8e8e93', margin: '14px 16px 6px', textTransform: 'uppercase', letterSpacing: 0.3 }
   const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProperties
 
   const contract = current?.contract
@@ -758,12 +773,19 @@ export function LandlordDashboard() {
           {archSettlement.deposit_paid != null && <div style={T.row}><span style={iosMuted}>Депозит внесён</span><span style={valMoney}>{Number(archSettlement.deposit_paid).toFixed(0)} ₽</span></div>}
           {archSettlement.frozen_total != null && Number(archSettlement.frozen_total) > 0 && <div style={T.row}><span style={iosMuted}>Удержано по штрафам</span><span style={valMoney}>{Number(archSettlement.frozen_total).toFixed(0)} ₽</span></div>}
           {archSettlement.open_debt != null && Number(archSettlement.open_debt) > 0 && <div style={T.row}><span style={iosMuted}>Долг по счетам</span><span style={valMoney}>{Number(archSettlement.open_debt).toFixed(0)} ₽</span></div>}
-          <div style={{ ...T.row, borderBottom: 'none' }}>
-            <span style={iosMuted}>Итог при съезде</span>
-            <span style={{ ...valMoney, color: Number(archSettlement.result || 0) >= 0 ? '#1e7e34' : '#ff3b30' }}>
-              {Number(archSettlement.result || 0) >= 0 ? `возвращено ${Number(archSettlement.result).toFixed(0)} ₽` : `долг ${Math.abs(Number(archSettlement.result || 0)).toFixed(0)} ₽`}
-            </span>
-          </div>
+          {archSettlement.renewed_to ? (
+            <div style={{ ...T.row, borderBottom: 'none' }}>
+              <span style={iosMuted}>Итог</span>
+              <span style={{ ...valMoney, color: '#1e7e34' }}>договор продлён, депозит перенесён</span>
+            </div>
+          ) : (
+            <div style={{ ...T.row, borderBottom: 'none' }}>
+              <span style={iosMuted}>Итог при съезде</span>
+              <span style={{ ...valMoney, color: Number(archSettlement.result || 0) >= 0 ? '#1e7e34' : '#ff3b30' }}>
+                {Number(archSettlement.result || 0) >= 0 ? `возвращено ${Number(archSettlement.result).toFixed(0)} ₽` : `долг ${Math.abs(Number(archSettlement.result || 0)).toFixed(0)} ₽`}
+              </span>
+            </div>
+          )}
         </div>
         <div style={T.card}>
           <div style={T.h2}>История платежей</div>
@@ -779,7 +801,7 @@ export function LandlordDashboard() {
             return (
               <div key={h.id} style={{ padding: '10px 0', borderBottom: '1px solid rgba(60,60,67,0.12)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-                  <span style={{ fontSize: 17, fontWeight: 600, color: '#1d1d1f' }}>{parseDate(h.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}{firstP ? ' · первый месяц' : ''}</span>
+                  <span style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f' }}>{parseDate(h.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}{firstP ? ' · первый месяц' : ''}</span>
                   <span style={valMoney}>{sum.toFixed(0)} ₽</span>
                 </div>
                 <div style={{ marginTop: 2 }}>
@@ -795,7 +817,7 @@ export function LandlordDashboard() {
             {archiveFrozen.map((f: any) => (
               <div key={f.id} style={T.item}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                  <span style={{ fontSize: 17, fontWeight: 500, color: '#1d1d1f' }}>{f.period ? parseDate(f.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : 'без месяца'}</span>
+                  <span style={{ fontSize: 16, fontWeight: 500, color: '#1d1d1f' }}>{f.period ? parseDate(f.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : 'без месяца'}</span>
                   <span style={valMoney}>{Number(f.amount).toFixed(0)} ₽</span>
                 </div>
                 {f.adjusted_note && <div style={T.tiny}>{f.adjusted_note}</div>}
@@ -874,8 +896,8 @@ export function LandlordDashboard() {
                   setMassOpen(true)
                 }}
               >
-                <span style={{ fontSize: 17, fontWeight: 600, color: '#1d1d1f' }}>Ждут подтверждения: {openList.length}</span>
-                <span style={{ color: '#0071e3', fontSize: 15, fontWeight: 600 }}>{isPro ? 'открыть ›' : 'Pro ›'}</span>
+                <span style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f' }}>Ждут подтверждения: {openList.length}</span>
+                <span style={{ color: '#0071e3', fontSize: 14, fontWeight: 600 }}>{isPro ? 'открыть ›' : 'Pro ›'}</span>
               </button>
             </div>
           )}
@@ -896,7 +918,7 @@ export function LandlordDashboard() {
                   </div>
                 </div>
                 {Number((o.contract as any)?.deposit_amount || 0) > 0 && (
-                  <span style={{ fontSize: 13, color: '#8e8e93', flexShrink: 0 }}>депозит {Number((o.contract as any).deposit_paid || 0).toFixed(0)}/{Number((o.contract as any).deposit_amount).toFixed(0)}</span>
+                  <span style={{ fontSize: 13, color: '#8e8e93', flexShrink: 0 }}>депозит {Number((o.contract as any).deposit_paid || 0).toFixed(0)} из {Number((o.contract as any).deposit_amount).toFixed(0)}</span>
                 )}
                 <span style={{ color: '#c7c7cc', fontSize: 18 }}>›</span>
               </button>
@@ -943,7 +965,7 @@ export function LandlordDashboard() {
                       <input type="checkbox" checked={!!massSel[o.id]} onChange={(e) => setMassSel({ ...massSel, [o.id]: e.target.checked })} style={{ width: 20, height: 20, flexShrink: 0 }} />
                     )}
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 17, fontWeight: 600, color: '#1d1d1f' }}>{o.address}</div>
+                      <div style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f' }}>{o.address}</div>
                       <div style={{ fontSize: 13, color: '#8e8e93' }}>
                         {(o.contract as any)?.tenant?.full_name || '—'} · {new Date(o.payment.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })} · {o.amount.toFixed(0)} ₽{o.payment.card_claimed ? ' · заявил об оплате' : ''}
                       </div>
@@ -962,10 +984,10 @@ export function LandlordDashboard() {
             <div style={{ display: 'flex', gap: 8 }}>
               <button
                 disabled={!massOk || massBusy || !Object.values(massSel).some(Boolean)}
-                style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 17, cursor: 'pointer', opacity: (!massOk || massBusy || !Object.values(massSel).some(Boolean)) ? 0.4 : 1 }}
+                style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 16, cursor: 'pointer', opacity: (!massOk || massBusy || !Object.values(massSel).some(Boolean)) ? 0.4 : 1 }}
                 onClick={confirmSelected}
               >Подтвердить выбранные ({Object.values(massSel).filter(Boolean).length})</button>
-              <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 17, cursor: 'pointer' }} onClick={() => setMassOpen(false)}>Отмена</button>
+              <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 16, cursor: 'pointer' }} onClick={() => setMassOpen(false)}>Отмена</button>
             </div>
           </Modal>
         </div>
@@ -1065,7 +1087,7 @@ export function LandlordDashboard() {
                   value={utilInputs[current.id] ?? String(current.utilitiesAmount || '')}
                   onChange={(e) => setUtilInputs({ ...utilInputs, [current.id]: e.target.value })}
                   placeholder="0"
-                  style={{ width: 110, border: 'none', outline: 'none', background: 'rgba(120,120,128,0.08)', borderRadius: 8, padding: '8px 10px', fontSize: 17, fontWeight: 600, textAlign: 'right', color: '#1d1d1f', boxSizing: 'border-box' }}
+                  style={{ width: 110, border: 'none', outline: 'none', background: 'rgba(120,120,128,0.08)', borderRadius: 8, padding: '8px 10px', fontSize: 16, fontWeight: 600, textAlign: 'right', color: '#1d1d1f', boxSizing: 'border-box' }}
                   inputMode="numeric"
                 />
               </div>
@@ -1117,7 +1139,7 @@ export function LandlordDashboard() {
           <div style={T.card}>
             <div style={T.h2}>История платежей</div>
             {objHistory.length === 0 ? (
-              <div style={{ ...T.small, margin: '8px 0' }}>Платежей пока нет</div>
+              <div style={{ ...T.small, margin: '8px 0' }}>Платежей пока нет.</div>
             ) : (
               objHistory.map((h: any) => {
                 const firstP = isFirstPeriod(h.period, sd)
@@ -1130,7 +1152,7 @@ export function LandlordDashboard() {
                 return (
                   <div key={h.id} style={{ padding: '10px 0', borderBottom: '1px solid rgba(60,60,67,0.12)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-                      <span style={{ fontSize: 17, fontWeight: 600, color: '#1d1d1f' }}>{parseDate(h.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}{firstP ? ' · первый месяц' : ''}</span>
+                      <span style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f' }}>{parseDate(h.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}{firstP ? ' · первый месяц' : ''}</span>
                       <span style={valMoney}>{sum.toFixed(0)} ₽</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginTop: 2 }}>
@@ -1210,7 +1232,7 @@ export function LandlordDashboard() {
               {!(renewOffer && (renewOffer.status === 'accepted' || renewOffer.status === 'declined')) && !(renewOffer && renewOffer.status === 'proposed' && renewOffer.offered_by === 'landlord') && (
                 !renewForm ? (
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }} onClick={() => { setOffRent(String(contract.rent_amount)); setOffMonths(11); const ed = parseDate((contract as any).end_date); const ds = new Date(ed.getFullYear(), ed.getMonth(), ed.getDate() + 1); setOffStart(`${ds.getFullYear()}-${String(ds.getMonth() + 1).padStart(2, '0')}-${String(ds.getDate()).padStart(2, '0')}`); setRenewForm(true) }}>
+                    <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }} onClick={openRenewForm}>
                       {renewOffer && renewOffer.status === 'proposed' && renewOffer.offered_by === 'tenant' ? ((renewOffer.round || 1) > 1 ? 'Контрпредложение' : 'Предложить условия') : 'Предложить условия продления'}
                     </button>
                     {renewOffer && renewOffer.status === 'proposed' && renewOffer.offered_by === 'tenant' && (renewOffer.round || 1) > 1 && (
@@ -1220,13 +1242,13 @@ export function LandlordDashboard() {
                 ) : (
                   <div>
                     <div style={{ fontSize: 13, color: '#8e8e93', margin: '4px 0 2px' }}>Аренда, ₽/мес</div>
-                    <input style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 17, boxSizing: 'border-box' }} value={offRent} onChange={(e) => setOffRent(e.target.value)} inputMode="numeric" />
+                    <input style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box' }} value={offRent} onChange={(e) => setOffRent(e.target.value)} inputMode="numeric" />
                     <div style={{ fontSize: 13, color: '#8e8e93', margin: '8px 0 2px' }}>Срок, месяцев (1–11)</div>
-                    <select style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 17, boxSizing: 'border-box' }} value={offMonths} onChange={(e) => setOffMonths(Number(e.target.value))}>
+                    <select style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box' }} value={offMonths} onChange={(e) => setOffMonths(Number(e.target.value))}>
                       {Array.from({ length: 11 }, (_, i) => i + 1).map((m) => <option key={m} value={m}>{m}</option>)}
                     </select>
                     <div style={{ fontSize: 13, color: '#8e8e93', margin: '8px 0 2px' }}>Начало нового договора (можно сделать разрыв)</div>
-                    <input style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 17, boxSizing: 'border-box' }} type="date" value={offStart} onChange={(e) => setOffStart(e.target.value)} />
+                    <input style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box' }} type="date" value={offStart} onChange={(e) => setOffStart(e.target.value)} />
                     <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
                       <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }} onClick={landlordSendOffer}>Отправить предложение</button>
                       <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 15, cursor: 'pointer' }} onClick={() => setRenewForm(false)}>Отмена</button>
@@ -1253,7 +1275,7 @@ export function LandlordDashboard() {
               <div key={o.v}>
                 {i > 0 && <div style={hair} />}
                 <button
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', minHeight: 44, border: 'none', background: 'transparent', cursor: 'pointer', padding: '4px 0', fontSize: 17, fontWeight: 500, color: '#1d1d1f' }}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', minHeight: 44, border: 'none', background: 'transparent', cursor: 'pointer', padding: '4px 0', fontSize: 16, fontWeight: 500, color: '#1d1d1f' }}
                   onClick={() => updatePaymentMethod(contract.id, o.v as any)}
                 >
                   {o.l}
@@ -1291,7 +1313,7 @@ export function LandlordDashboard() {
             {(current.frozenRows || []).map((f: any) => (
               <div key={f.id} style={T.item}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                  <span style={{ fontSize: 17, fontWeight: 500, color: '#1d1d1f' }}>{f.period ? parseDate(f.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : 'без месяца'}</span>
+                  <span style={{ fontSize: 16, fontWeight: 500, color: '#1d1d1f' }}>{f.period ? parseDate(f.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : 'без месяца'}</span>
                   <span style={valMoney}>{Number(f.amount).toFixed(0)} ₽</span>
                 </div>
                 {f.adjusted_note && <div style={T.tiny}>{f.adjusted_note}</div>}
@@ -1360,8 +1382,8 @@ export function LandlordDashboard() {
           {receiptFor ? receiptText(receiptFor) : ''}
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 17, cursor: 'pointer' }} onClick={() => copyReceipt(receiptFor)}>Скопировать</button>
-          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 17, cursor: 'pointer' }} onClick={() => setReceiptFor(null)}>Закрыть</button>
+          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 16, cursor: 'pointer' }} onClick={() => copyReceipt(receiptFor)}>Скопировать</button>
+          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 16, cursor: 'pointer' }} onClick={() => setReceiptFor(null)}>Закрыть</button>
         </div>
       </Modal>
       <ConfirmDelete
@@ -1396,14 +1418,14 @@ export function LandlordDashboard() {
         {!fz?.zero && (
           <>
             <div style={{ fontSize: 15, marginBottom: 8 }}>Новая сумма, ₽</div>
-            <input value={fzAmount} onChange={(e) => setFzAmount(e.target.value)} inputMode="decimal" style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 17, boxSizing: 'border-box', marginBottom: 12 }} />
+            <input value={fzAmount} onChange={(e) => setFzAmount(e.target.value)} inputMode="decimal" style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box', marginBottom: 12 }} />
           </>
         )}
         <div style={{ fontSize: 15, marginBottom: 8 }}>{fz?.zero ? 'Причина обнуления (обязательно)' : 'Примечание к изменению (обязательно)'}</div>
-        <input value={fzNote} onChange={(e) => setFzNote(e.target.value)} placeholder="например: договорились с арендатором" style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 17, boxSizing: 'border-box', marginBottom: 14 }} />
+        <input value={fzNote} onChange={(e) => setFzNote(e.target.value)} placeholder="например: договорились с арендатором" style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box', marginBottom: 14 }} />
         <div style={{ display: 'flex', gap: 8 }}>
-          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 17, cursor: 'pointer' }} onClick={confirmAdjust}>Сохранить</button>
-          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 17, cursor: 'pointer' }} onClick={() => setFz(null)}>Отмена</button>
+          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 16, cursor: 'pointer' }} onClick={confirmAdjust}>Сохранить</button>
+          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 16, cursor: 'pointer' }} onClick={() => setFz(null)}>Отмена</button>
         </div>
       </Modal>
     </div>
