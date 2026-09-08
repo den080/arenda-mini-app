@@ -126,10 +126,10 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
   const cashWarning = !!(confirmed && pay && !pay.confirmed_by_landlord && effectiveCash)
   const pauseActive = !!(cashWarning && D && M && M >= D && M <= new Date(D.getFullYear(), D.getMonth(), D.getDate() + 3) && todayMid <= M)
 
-  async function notifyOther() {
+  async function notifyOther(type: string, message: string) {
     const other = myRole === 'landlord' ? tenantId : landlordId
     await supabase.from('notifications_log').insert({
-      user_id: other, type: 'cash_proposed', related_id: contractId, sent_at: new Date().toISOString(),
+      user_id: other, type, related_id: contractId, message, sent_at: new Date().toISOString(),
     })
   }
 
@@ -182,7 +182,7 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
         parent_id: w.id, meeting_date: w.meeting_date, day: w.day, time_from: s.from, time_to: s.to,
       })
       if (error) { showToast('Ошибка: ' + error.message); return }
-      await notifyOther()
+      await notifyOther('cash_proposed', '💵 Предложено время встречи наличными')
       showToast('✅ Заявка отправлена')
       setResched(false)
       window.dispatchEvent(new Event('rentflow-refresh'))
@@ -194,9 +194,9 @@ export function CashNegotiation({ contractId, myRole, tenantId, landlordId }: {
   async function confirmMeeting(id: string) {
     const m = rows.find(r => r.id === id)
     await supabase.from('cash_meetings').update({ status: 'confirmed' }).eq('id', id)
-    const other = m ? (m.proposer === 'landlord' ? landlordId : tenantId) : (myRole === 'landlord' ? tenantId : landlordId)
+    const other = m ? (m.proposer === 'landlord' ? tenantId : landlordId) : (myRole === 'landlord' ? tenantId : landlordId)
     await supabase.from('notifications_log').insert({
-      user_id: other, type: 'cash_confirmed', related_id: contractId, sent_at: new Date().toISOString(),
+      user_id: other, type: 'cash_confirmed', related_id: contractId, message: '🤝 Встреча по оплате согласована', sent_at: new Date().toISOString(),
     })
     showToast('✅ Встреча подтверждена')
     window.dispatchEvent(new Event('rentflow-refresh'))
