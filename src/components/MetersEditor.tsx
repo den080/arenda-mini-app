@@ -262,23 +262,13 @@ export function MetersEditor({ objId }: { objId: string }) {
   return (
     <div>
       <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 30, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px', background: 'rgba(242,242,247,0.94)', backdropFilter: 'blur(10px)', boxShadow: '0 1px 0 rgba(60,60,67,0.12)' }}>
-        {unlocked ? (
-          <button style={S.editBtn} onClick={() => { load(); setUnlocked(false) }}>Отменить</button>
-        ) : (
-          <span style={{ fontSize: 13, color: '#8e8e93', textTransform: 'uppercase', letterSpacing: 0.3 }}>Счётчики</span>
-        )}
-        <button
-          style={S.editBtn}
-          onClick={() => {
-            if (unlocked) {
-              if (dirty) setConfirmOpen(true)
-              else { load(); setUnlocked(false) }
-            } else setUnlocked(true)
-          }}
-        >{unlocked ? 'Готово (заблокировать)' : 'Внести изменения'}</button>
+        <span style={{ fontSize: 13, color: '#8e8e93', textTransform: 'uppercase', letterSpacing: 0.3 }}>Счётчики</span>
+        <button style={S.editBtn} onClick={() => {
+          if (unlocked) { if (dirty) setConfirmOpen(true); else { load(); setUnlocked(false) } } else setUnlocked(true)
+        }}>{unlocked ? 'Готово (заблокировать)' : 'Внести изменения'}</button>
       </div>
       <div style={{ height: 44 }} />
-      {!unlocked && <div style={S.hint}>Настройки защищены. Чтобы поменять номер, тип или стартовые показания — нажмите «Внести изменения». Сохранение — «Готово (заблокировать)», отмена без сохранения — «Отменить».</div>}
+      {!unlocked && <div style={S.hint}>Настройки защищены. Чтобы поменять номер, тип или стартовые показания — нажмите «Внести изменения», затем подтвердите сохранение.</div>}
       <div style={S.head}>Электричество</div>
       <div style={S.card}>
         {[
@@ -328,6 +318,11 @@ export function MetersEditor({ objId }: { objId: string }) {
         </div>
       )}
       {activeRows('gas').map(r => meterCard(r, 'Счётчик газа'))}
+      {unlocked && dirty && (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 0' }}>
+          <button style={{ border: 'none', background: 'transparent', color: '#ff3b30', fontSize: 14, cursor: 'pointer', padding: 4 }} onClick={() => load()}>Отменить изменения</button>
+        </div>
+      )}
       <div style={S.hint}>Порядок счётчиков фиксированный: электричество — день, затем ночь. Значения с запятой (7,876) поддерживаются. Изменения применяются только после подтверждения, затем настройки блокируются.</div>
       <Modal open={confirmOpen} title="Подтвердить изменения счётчиков" onClose={() => setConfirmOpen(false)}>
         <div style={{ fontSize: 15, color: '#555', marginBottom: 10, whiteSpace: 'pre-wrap' }}>{changeLines.join('\n')}</div>
