@@ -46,7 +46,6 @@ export function TeamManager() {
         if (error) { showToast('Ошибка: ' + error.message); return }
         tid = t.id
         await supabase.from('team_members').insert({ team_id: tid!, user_id: user!.id, role: 'owner' })
-        await supabase.from('objects').update({ team_id: tid }).eq('landlord_id', user!.id)
         selectPool(tid!)
       }
       const norm = '+' + (digits.length === 11 ? digits : '7' + digits)
@@ -59,7 +58,7 @@ export function TeamManager() {
       }
       const { error: me } = await supabase.from('team_members').insert({ team_id: tid, user_id: target.id, role: newRole, added_by: user!.id })
       if (me) { showToast('Этот человек уже подключён или ошибка: ' + me.message); return }
-      showToast(`✅ Доступ выдан: ${ROLE_LABEL[newRole]}`)
+      showToast(`✅ Доступ выдан: ${ROLE_LABEL[newRole]}. Объекты подключаются кнопкой «Поделиться в пуле» в карточке объекта.`)
       setPhone('')
       refresh()
       window.dispatchEvent(new Event('rentflow-refresh'))
@@ -108,7 +107,7 @@ export function TeamManager() {
         <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 4px' }}>
           <button style={iosBlue} disabled={busy} onClick={invite}>Выдать доступ</button>
         </div>
-        <Hint text="Сотрудник открывает бота со своего телефона: первый раз входит по номеру, дальше — автоматически. Менеджер работает как вы, но без выдачи доступа и удалений; наблюдатель — только просмотр." />
+        <Hint text="Сотрудник открывает бота со своего телефона: первый раз входит по номеру, дальше — автоматически. Менеджер работает как вы, но без выдачи доступа и удалений; наблюдатель — только просмотр. Объекты попадают в пул только кнопкой «Поделиться в пуле»." />
         <ConfirmDelete
           open={!!del}
           text="Сотрудник сразу потеряет доступ к пулу."
