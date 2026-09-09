@@ -321,7 +321,7 @@ export function TenantDashboard() {
             <div key={c.id} style={T.card}>
               <button style={rowBtn} onClick={() => { setOpenId(c.id); setTab('pay') }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 17, fontWeight: 700, color: '#1d1d1f' }}>{c._address}</div>
+                  <div style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f' }}>{c._address}</div>
                   <div style={{ fontSize: 13, color: c._over ? '#ff3b30' : '#8e8e93', marginTop: 4 }}>
                     {c._over ? `Просрочка ${c._over.days} дн. · ${c._over.amount.toFixed(0)} ₽` : `${Number(c.rent_amount).toFixed(0)} ₽/мес`}
                   </div>

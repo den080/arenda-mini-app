@@ -61,6 +61,8 @@ export function LandlordDashboard() {
   const pool: string = teamHook.pool || 'own'
   const selectPool: (id: string) => void = teamHook.selectPool || (() => {})
   const teamRole: string | null = teamHook.role ?? null
+  const SHOW_POOLS = false
+  const SHOW_MASS = false
   const [objects, setObjects] = useState<ObjectWithStatus[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -858,7 +860,7 @@ export function LandlordDashboard() {
               style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 56, border: 'none', background: 'transparent', cursor: 'pointer', padding: '4px 0', textAlign: 'left', boxSizing: 'border-box' }}
             >
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 17, fontWeight: 700, color: '#1d1d1f' }}>{a.object?.address || 'Объект'}</div>
+                <div style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f' }}>{a.object?.address || 'Объект'}</div>
                 <div style={{ fontSize: 13, color: '#8e8e93', marginTop: 4 }}>
                   {a.tenant?.full_name || '—'} · завершён {a.terminated_at ? new Date(a.terminated_at).toLocaleDateString('ru-RU') : '—'}
                 </div>
@@ -876,7 +878,7 @@ export function LandlordDashboard() {
       <PullToRefresh onRefresh={async () => { window.dispatchEvent(new Event('rentflow-refresh')); await new Promise(r => setTimeout(r, 600)) }}>
         <div style={{ ...T.page, paddingBottom: 40 }}>
           <h1 style={T.h1}>Мои объекты</h1>
-          {showTeam && poolsView.length > 1 && (
+          {SHOW_POOLS && showTeam && poolsView.length > 1 && (
             <div style={{ display: 'flex', gap: 6, overflowX: 'auto', padding: '0 0 10px' }}>
               {poolsView.map((p: any) => (
                 <button
@@ -887,7 +889,7 @@ export function LandlordDashboard() {
               ))}
             </div>
           )}
-          {openList.length > 0 && (
+          {SHOW_MASS && openList.length > 0 && (
             <div style={T.card}>
               <button
                 style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', minHeight: 48, border: 'none', background: 'transparent', cursor: 'pointer', padding: '4px 0', textAlign: 'left', boxSizing: 'border-box' }}
@@ -914,7 +916,7 @@ export function LandlordDashboard() {
                 style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 56, border: 'none', background: 'transparent', cursor: 'pointer', padding: '4px 0', textAlign: 'left', boxSizing: 'border-box' }}
               >
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 17, fontWeight: 700, color: '#1d1d1f' }}>{o.address}</div>
+                  <div style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f' }}>{o.address}</div>
                   <div style={{ fontSize: 13, color: o.statusColor || '#8e8e93', marginTop: 4 }}>
                     {o.statusDetail}{o.amount > 0 ? ` · ${o.amount.toFixed(0)} ₽` : ''}
                   </div>
@@ -958,7 +960,7 @@ export function LandlordDashboard() {
               ))}
             </div>
           )}
-          <Modal open={massOpen} title="Подтверждение оплат" onClose={() => setMassOpen(false)}>
+          <Modal open={SHOW_MASS && massOpen} title="Подтверждение оплат" onClose={() => setMassOpen(false)}>
             <div style={{ fontSize: 13, color: '#8e8e93', marginBottom: 10 }}>Отметьте платежи, по которым деньги фактически получены. Частичные оплаты учитываются внутри объекта.</div>
             {openList.map((o) => {
               const partial = Number(o.payment.paid_amount || 0) > 0
@@ -1042,21 +1044,25 @@ export function LandlordDashboard() {
                     ? <button style={actBlue} onClick={() => { setPayConfirmOk(false); setPayConfirm({ kind: 'card' }) }}>Подтвердить</button>
                     : <span style={iosMuted}>не заявлена</span>}
               </div>
-              <div style={{ ...T.row, borderBottom: 'none' }}>
-                <span style={valText}>Оплата наличными</span>
-                {current.payment?.confirmed_cash
-                  ? <span style={iosOk}>получена</span>
-                  : current.payment?.cash_closed
-                    ? <span style={iosMuted}>расчёт завершён</span>
-                    : current.hasConfirmedCashMeeting
-                      ? (
-                        <span style={{ display: 'flex', gap: 14 }}>
-                          <button style={actRed} onClick={() => { setPayConfirmOk(false); setPayConfirm({ kind: 'cash-close' }) }}>завершить</button>
-                          <button style={actBlue} onClick={() => { setPayConfirmOk(false); setPayConfirm({ kind: 'cash' }) }}>Подтвердить</button>
-                        </span>
-                      )
-                      : <span style={iosMuted}>не заявлена</span>}
+                        <div style={{ ...T.row, borderBottom: 'none' }}>
+            <span style={valText}>Оплата наличными</span>
+            {current.payment?.confirmed_cash
+              ? <span style={iosOk}>получена</span>
+              : current.payment?.cash_closed
+                ? <span style={iosMuted}>расчёт завершён</span>
+                : current.hasConfirmedCashMeeting
+                  ? <span style={{ color: '#b25000', fontSize: 15, fontWeight: 600 }}>встреча согласована</span>
+                  : <span style={iosMuted}>не заявлена</span>}
+          </div>
+          {current.hasConfirmedCashMeeting && !current.payment?.confirmed_cash && !current.payment?.cash_closed && (
+            <>
+              <button style={T.btn} onClick={() => { setPayConfirmOk(false); setPayConfirm({ kind: 'cash' }) }}>Подтвердить получение наличными</button>
+              <div style={{ display: 'flex', justifyContent: 'center', padding: '2px 0 4px' }}>
+                <button style={{ ...actRed, fontSize: 13 }} onClick={() => { setPayConfirmOk(false); setPayConfirm({ kind: 'cash-close' }) }}>Завершить наличный расчёт без оплаты</button>
               </div>
+              <Hint text="«Подтвердить получение» — деньги получены при встрече. «Завершить без оплаты» — закрывает наличный расчёт, если договорились о другом способе." />
+            </>
+          )}
               {!current.payment?.card_claimed && !current.hasConfirmedCashMeeting && (
                 daysToPay <= 7 || pcPaid > 0 ? (
                   <>
