@@ -159,7 +159,7 @@ export function LandlordDashboard() {
         const currentYear = today.getFullYear()
         const [notifRes, objRes] = await Promise.all([
           supabase.from('notifications_log').select('*').eq('user_id', user!.id).order('sent_at', { ascending: false }).limit(5),
-          supabase.from('objects').select('*').eq(teamId ? 'team_id' : 'landlord_id', (teamId || user!.id) as string),
+          supabase.from('objects').select('*').eq(teamId ? 'team_id' : 'landlord_id', (teamId || user!.id) as string).neq('status', 'archived'),
         ])
         if (notifRes.data) setNotifications(notifRes.data)
         const objectsData = objRes.data
