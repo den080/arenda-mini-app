@@ -39,11 +39,16 @@ export function App() {
     const tg = (window as any)?.Telegram?.WebApp
     const chatId = tg?.initDataUnsafe?.user?.id
     if (!chatId) return
-    fetch('/api/save-chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: user.id, chat_id: String(chatId) }),
-    }).catch(() => {})
+    ;(async () => {
+      try {
+        const { data: s } = await supabase.auth.getSession()
+        fetch('/api/save-chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(s?.session ? { Authorization: `Bearer ${s.session.access_token}` } : {}) },
+          body: JSON.stringify({ chat_id: String(chatId) }),
+        }).catch(() => {})
+      } catch {}
+    })()
   }, [user?.id])
 
   // Разбираем очередь Telegram-уведомлений при каждом открытии приложения

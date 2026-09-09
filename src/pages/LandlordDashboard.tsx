@@ -385,18 +385,9 @@ export function LandlordDashboard() {
   }
   async function deleteArchivedContract() {
     if (!arch) return
-    const id = arch.id
-    await supabase.from('meter_readings').delete().eq('contract_id', id)
-    await supabase.from('payments').delete().eq('contract_id', id)
-    await supabase.from('penalty_rules').delete().eq('contract_id', id)
-    await supabase.from('cash_meetings').delete().eq('contract_id', id)
-    await supabase.from('deferred_requests').delete().eq('contract_id', id)
-    await supabase.from('deferred_debts').delete().eq('contract_id', id)
-    await supabase.from('frozen_penalties').delete().eq('contract_id', id)
-    await supabase.from('utility_bills').delete().eq('contract_id', id)
-    const { error } = await supabase.from('contracts').delete().eq('id', id)
-    if (error) { showToast(errText(error)); return }
-    showToast('✅ Договор удалён из архива')
+    const { error } = await supabase.from('objects').update({ status: 'archived' }).eq('id', arch.object_id)
+    if (error) { showToast('Ошибка: ' + error.message); return }
+    showToast('✅ Объект в архиве: договоры, платежи и штрафы сохранены')
     setArchDelOpen(false)
     setArchiveId(null)
     window.dispatchEvent(new Event('rentflow-refresh'))

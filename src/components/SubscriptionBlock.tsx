@@ -45,13 +45,13 @@ export function SubscriptionBlock() {
     if (payBusy || !subOwnerId) return
     setPayBusy(true)
     try {
+      const { data: s } = await supabase.auth.getSession()
       const r = await fetch('/api/create-payment', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: subOwnerId }),
+        headers: { 'Content-Type': 'application/json', ...(s?.session ? { Authorization: `Bearer ${s.session.access_token}` } : {}) },
       })
       const data = await r.json()
-      if (!r.ok || !data.confirmation_url) { showToast('Ошибка оплаты: ' + (data.error || 'не удалось создать платёж')); return }
+      if (!r.ok || !data.data?.confirmation_url) { showToast('Ошибка оплаты: ' + (data.error?.message || 'не удалось создать платёж')); return }
       const tg = (window as any).Telegram?.WebApp
       if (tg && typeof tg.openLink === 'function') tg.openLink(data.confirmation_url)
       else window.open(data.confirmation_url, '_blank')
