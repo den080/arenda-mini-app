@@ -52,8 +52,8 @@ export function ObjectAdd() {
         if (s2 && s2.until_date >= iso(new Date())) return true
       }
     }
-    const { count } = await supabase.from('objects').select('id', { count: 'exact', head: true }).eq(teamId ? 'team_id' : 'landlord_id', (teamId || user.id) as string)
-    return (count || 0) < 1
+const { count } = await supabase.from('objects').select('id', { count: 'exact', head: true }).eq(teamId ? 'team_id' : 'landlord_id', (teamId || user.id) as string).neq('status', 'archived')
+return (count || 0) < 1
   }
 
   async function save() {
