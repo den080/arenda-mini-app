@@ -218,6 +218,18 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
   async function doRemove() {
     const { data: contracts } = await supabase.from('contracts').select('id').eq('object_id', objectId)
     const ids = (contracts || []).map((c: any) => c.id)
+    let hasFinance = false
+    if (ids.length) {
+      const { count } = await supabase.from('payments').select('id', { count: 'exact', head: true }).in('contract_id', ids)
+      hasFinance = (count || 0) > 0
+    }
+    if (hasFinance) {
+      const { error } = await supabase.from('objects').update({ status: 'archived' }).eq('id', objectId)
+      if (error) { showToast('Ошибка: ' + error.message); return }
+      showToast('✅ Объект в архиве: финансовая история сохранена')
+      window.dispatchEvent(new Event('rentflow-refresh'))
+      return
+    }
     if (ids.length) {
       await supabase.from('meter_readings').delete().in('contract_id', ids)
       await supabase.from('payments').delete().in('contract_id', ids)
@@ -343,7 +355,7 @@ export function ObjectEdit({ objectId }: { objectId: string }) {
       </Modal>
       <ConfirmDelete
         open={delOpen}
-        text="Объект, договор, платежи и вся история будут удалены безвозвратно."
+        text="Если по объекту есть платежи — он будет архивирован, история сохранится. Физическое удаление возможно только для объекта без финансовой истории."
         onClose={() => setDelOpen(false)}
         onConfirm={doRemove}
       />
