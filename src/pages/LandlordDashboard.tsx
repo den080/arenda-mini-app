@@ -15,7 +15,7 @@ import ContactsEditor from '../components/ContactsEditor'
 import { ensureNextPayment } from '../lib/nextPayment'
 import { addOffer, markOffer, acceptRenewal } from '../lib/renewal'
 import { setAnalyticsUser, trackOpen, trackScreen } from '../lib/analytics'
-import { BottomNav, Modal, PromptNumber, Progress, ConfirmDelete, showToast, SkeletonList, PullToRefresh, Hint } from '../components/ui'
+import { BottomNav, Modal, PromptNumber, Progress, ConfirmDelete, showToast, SkeletonList, PullToRefresh, Hint, errText } from '../components/ui'
 import { T } from '../theme'
 import type { Object as PropertyObject, Contract, NotificationLog, User } from '../types/database'
 
@@ -299,7 +299,7 @@ export function LandlordDashboard() {
               const startFuture = sd && sd.getTime() > todayMid.getTime()
               statusDetail = startFuture
                 ? `Начало договора ${sd!.toLocaleDateString('ru-RU')} · первый месяц к оплате · ${Math.round((sd!.getTime() - todayMid.getTime()) / 86400000)} дн.`
-                : 'Первый месяц — ждёт оплаты'
+                : 'Первый месяц — ждёт оплату'
               statusColor = '#a80'
             }
             else if (isOverdue) { status = 'overdue'; statusDetail = `Просрочка ${Math.round((todayMid.getTime() - dueMid.getTime()) / 86400000)} дн.`; statusColor = '#c00' }
@@ -365,7 +365,7 @@ export function LandlordDashboard() {
     const { error } = await supabase.from('payments').update({
       confirmed_by_landlord: false, confirmed_at: null, confirmed_card: false, confirmed_cash: false, cash_closed: false,
     }).eq('id', paymentId)
-    if (error) { showToast('Ошибка: ' + error.message); setUndoId(null); return }
+    if (error) { showToast(errText(error)); setUndoId(null); return }
     const { data: nexts } = await supabase.from('payments').select('*').eq('contract_id', pay.contract_id).eq('confirmed_by_landlord', false).order('period', { ascending: true })
     for (const n of nexts || []) {
       if (String(n.period) > String(pay.period) && Number(n.paid_amount || 0) === 0 && !n.card_claimed) {
@@ -391,7 +391,7 @@ export function LandlordDashboard() {
     await supabase.from('frozen_penalties').delete().eq('contract_id', id)
     await supabase.from('utility_bills').delete().eq('contract_id', id)
     const { error } = await supabase.from('contracts').delete().eq('id', id)
-    if (error) { showToast('Ошибка: ' + error.message); return }
+    if (error) { showToast(errText(error)); return }
     showToast('✅ Договор удалён из архива')
     setArchDelOpen(false)
     setArchiveId(null)
@@ -417,7 +417,7 @@ export function LandlordDashboard() {
     const amount = Number(String(value).replace(',', '.')) || 0
     const { error } = await supabase.from('payments').update({ utilities_amount: amount }).eq('id', paymentId)
     if (error) {
-      showToast('Ошибка: ' + error.message)
+      showToast(errText(error))
       return
     }
     setUtilSaved(`Ресурсы ${amount.toFixed(0)} ₽ добавлены к текущему платежу`)
@@ -447,7 +447,7 @@ export function LandlordDashboard() {
         utilities_amount: amount,
       })
       if (error) {
-        showToast('Ошибка: ' + error.message)
+        showToast(errText(error))
         return
       }
       setUtilSaved(`Создан счёт, ресурсы ${amount.toFixed(0)} ₽ добавлены`)
@@ -468,7 +468,7 @@ export function LandlordDashboard() {
     if (paid >= total) {
       const excess = paid - total
       const { error } = await supabase.from('payments').update({ paid_amount: total, confirmed_by_landlord: true, confirmed_at: new Date().toISOString() }).eq('id', pay.id)
-      if (error) { showToast('Ошибка: ' + error.message); return }
+      if (error) { showToast(errText(error)); return }
       await supabase.from('contracts').update({ balance: bal - useBal + excess }).eq('id', contract.id)
       await ensureNextPayment(contract.id)
       await supabase.from('notifications_log').insert({
@@ -479,7 +479,7 @@ export function LandlordDashboard() {
       showToast(excess > 0 ? `✅ Платёж закрыт, переплата ${excess.toFixed(0)} ₽ в балансе` : '✅ Платёж закрыт')
     } else {
       const { error } = await supabase.from('payments').update({ paid_amount: paid }).eq('id', pay.id)
-      if (error) { showToast('Ошибка: ' + error.message); return }
+      if (error) { showToast(errText(error)); return }
       if (useBal > 0) await supabase.from('contracts').update({ balance: bal - useBal }).eq('id', contract.id)
       await supabase.from('notifications_log').insert({
         user_id: contract.tenant_id, type: 'payment_partial', related_id: pay.id,
@@ -492,7 +492,7 @@ export function LandlordDashboard() {
   }
   async function confirmSigning(paymentId: string) {
     const { error } = await supabase.from('payments').update({ confirmed_by_landlord: true, confirmed_at: new Date().toISOString() }).eq('id', paymentId)
-    if (error) { showToast('Ошибка: ' + error.message); return }
+    if (error) { showToast(errText(error)); return }
     showToast('✅ Первый месяц подтверждён')
     const { data: pay } = await supabase.from('payments').select('*').eq('id', paymentId).maybeSingle()
     if (pay) {
@@ -517,7 +517,7 @@ export function LandlordDashboard() {
           paid_amount: total, confirmed_by_landlord: true,
           confirmed_at: claimedAt || new Date().toISOString(),
         }).eq('id', p.id)
-        if (error) { showToast('Ошибка: ' + error.message); continue }
+        if (error) { showToast(errText(error)); continue }
         ok++
         await ensureNextPayment(o.contract.id)
         await supabase.from('notifications_log').insert({
@@ -538,7 +538,7 @@ export function LandlordDashboard() {
     if (deposit <= 0) { showToast('Сначала укажите общую сумму депозита'); return }
     if (isNaN(amount) || amount <= 0) { showToast('Некорректная сумма'); return }
     const { error } = await supabase.from('contracts').update({ deposit_paid: Math.min(deposit, depositPaid + amount) }).eq('id', contract.id)
-    if (error) { showToast('Ошибка: ' + error.message); return }
+    if (error) { showToast(errText(error)); return }
     showToast('✅ Платёж по депозиту внесён')
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
@@ -546,7 +546,7 @@ export function LandlordDashboard() {
     if (!contract) return
     if (isNaN(v) || v < 0) { showToast('Некорректное значение'); return }
     const { error } = await supabase.from('contracts').update({ deposit_paid: Math.min(deposit, v) }).eq('id', contract.id)
-    if (error) { showToast('Ошибка: ' + error.message); return }
+    if (error) { showToast(errText(error)); return }
     showToast('✅ Депозит обновлён')
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
@@ -555,7 +555,7 @@ export function LandlordDashboard() {
     const teamToSet = share ? ((pools.find((p: any) => p.id !== 'own') || null)?.id || null) : null
     if (share && !teamToSet) { showToast('Сначала создайте пул'); return }
     const { error } = await supabase.from('objects').update({ team_id: teamToSet }).eq('id', current.id)
-    if (error) { showToast('Ошибка: ' + error.message); return }
+    if (error) { showToast(errText(error)); return }
     showToast(share ? '✅ Объект добавлен в пул — команда его видит' : '✅ Объект убран из пула — виден только вам')
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
@@ -577,7 +577,7 @@ export function LandlordDashboard() {
       amount: newAmount, adjusted_at: new Date().toISOString(),
       adjusted_note: zero ? `обнулено: ${note}` : `изменено на ${newAmount.toFixed(0)}: ${note}`,
     }).eq('id', fz.id)
-    if (error) { showToast('Ошибка: ' + error.message); return }
+    if (error) { showToast(errText(error)); return }
     await supabase.from('notifications_log').insert({ user_id: contract.tenant_id, type: 'deferred_confirmed', related_id: contract.id, message: zero ? '🧊 Замороженный штраф обнулён' : `🧊 Замороженный штраф изменён: теперь ${newAmount.toFixed(0)} ₽`, sent_at: new Date().toISOString() })
     showToast('✅ Сохранено')
     setFz(null)
@@ -586,7 +586,7 @@ export function LandlordDashboard() {
   async function confirmDeferral(requestId: string, contractId: string, paymentId: string, amount: number, tenantId: string) {
     const { data: pay } = await supabase.from('payments').select('*').eq('id', paymentId).maybeSingle()
     const { error: e1 } = await supabase.from('frozen_penalties').insert({ contract_id: contractId, payment_id: paymentId, period: pay ? pay.period : null, amount, original_amount: amount, note: 'отсрочка штрафа подтверждена' })
-    if (e1) { showToast('Ошибка: ' + e1.message); return }
+    if (e1) { showToast(errText(e1)); return }
     await supabase.from('deferred_requests').update({ status: 'confirmed' }).eq('id', requestId)
     if (paymentId) {
       const newPenalty = Math.max(0, Number(pay?.penalty_amount || 0) - amount)
@@ -602,7 +602,7 @@ export function LandlordDashboard() {
     const pen = Number(pay.penalty_amount || 0)
     if (pen <= 0) { showToast('Нет штрафа для заморозки'); return }
     const { error } = await supabase.from('frozen_penalties').insert({ contract_id: pay.contract_id, payment_id: pay.id, period: pay.period, amount: pen, original_amount: pen, note: 'штраф заморожен вручную' })
-    if (error) { showToast('Ошибка: ' + error.message); return }
+    if (error) { showToast(errText(error)); return }
     await supabase.from('payments').update({ penalty_amount: 0 }).eq('id', paymentId)
     const { data: con } = await supabase.from('contracts').select('*').eq('id', pay.contract_id).maybeSingle()
     if (con) await supabase.from('notifications_log').insert({ user_id: con.tenant_id, type: 'deferred_confirmed', related_id: pay.id, message: `🧊 Штраф ${pen.toFixed(0)} ₽ заморожен и будет учтён в конце договора`, sent_at: new Date().toISOString() })
@@ -654,7 +654,7 @@ export function LandlordDashboard() {
     if (!error) {
       showToast('✅ Способ оплаты обновлён')
       setObjects(prev => prev.map(o => o.contract?.id === contractId ? { ...o, contract: { ...o.contract!, payment_method: method, cash_slots: method === 'cash' ? [] : (o.contract as any).cash_slots } } : o))
-    } else showToast('Ошибка: ' + error.message)
+    } else showToast(errText(error))
   }
   async function confirmChannel(paymentId: string, channel: 'card' | 'cash', close: boolean = false) {
     const { data: pay } = await supabase.from('payments').select('*').eq('id', paymentId).maybeSingle()
@@ -671,7 +671,7 @@ export function LandlordDashboard() {
     const cashSatisfied = !(!!cashMeeting && !afterCashClosed) || cashFinalClosed
     if (cardSatisfied && cashSatisfied) { update.confirmed_by_landlord = true; update.confirmed_at = new Date().toISOString(); update.paid_amount = Number(pay.base_amount || 0) + Number(pay.penalty_amount || 0) + Number(pay.utilities_amount || 0) }
     const { error: e1 } = await supabase.from('payments').update(update).eq('id', paymentId)
-    if (e1) { showToast('Ошибка: ' + e1.message); return }
+    if (e1) { showToast(errText(e1)); return }
     showToast('✅ Подтверждено')
     if (update.confirmed_by_landlord) await ensureNextPayment(pay.contract_id)
     const { data: con } = await supabase.from('contracts').select('*').eq('id', pay.contract_id).maybeSingle()
@@ -703,21 +703,21 @@ export function LandlordDashboard() {
       case 'renewal_accepted': return '🤝 Продление согласовано'
       case 'renewal_countered': return '🔄 Встречные условия продления'
       case 'renewal_declined': return '🏁 Продление отклонено'
-      case 'contract_prolonged': return '🔄 Договор продлён'
       default: return type
     }
   }
 
-  const iosBlue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 16, fontWeight: 600, cursor: 'pointer', padding: 4, flexShrink: 0 }
-  const iosRed: React.CSSProperties = { border: 'none', background: 'transparent', color: '#ff3b30', fontSize: 16, cursor: 'pointer', padding: 4, flexShrink: 0 }
-  const actBlue: React.CSSProperties = { ...iosBlue, fontSize: 14 }
-  const actRed: React.CSSProperties = { ...iosRed, fontSize: 14 }
-  const iosOk: React.CSSProperties = { color: '#1e7e34', fontSize: 14, fontWeight: 600 }
-  const iosMuted: React.CSSProperties = { color: '#8e8e93', fontSize: 14 }
-  const valText: React.CSSProperties = { fontSize: 16, fontWeight: 500, color: '#1d1d1f' }
-  const valMoney: React.CSSProperties = { fontSize: 16, fontWeight: 600, color: '#1d1d1f', whiteSpace: 'nowrap' }
-  const valRight: React.CSSProperties = { fontSize: 16, fontWeight: 600, color: '#1d1d1f', textAlign: 'right' }
-  const secHead: React.CSSProperties = { fontSize: 12, color: '#8e8e93', margin: '14px 16px 6px', textTransform: 'uppercase', letterSpacing: 0.3 }
+  // Дизайн-токены под шкалу Apple HIG: headline 17, subhead 15, footnote 13
+  const iosBlue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 17, fontWeight: 600, cursor: 'pointer', padding: 4, flexShrink: 0 }
+  const iosRed: React.CSSProperties = { border: 'none', background: 'transparent', color: '#ff3b30', fontSize: 17, cursor: 'pointer', padding: 4, flexShrink: 0 }
+  const actBlue: React.CSSProperties = { ...iosBlue, fontSize: 15 }
+  const actRed: React.CSSProperties = { ...iosRed, fontSize: 15 }
+  const iosOk: React.CSSProperties = { color: '#1e7e34', fontSize: 15, fontWeight: 600 }
+  const iosMuted: React.CSSProperties = { color: '#8e8e93', fontSize: 15 }
+  const valText: React.CSSProperties = { fontSize: 17, fontWeight: 500, color: '#1d1d1f' }
+  const valMoney: React.CSSProperties = { fontSize: 17, fontWeight: 600, color: '#1d1d1f', whiteSpace: 'nowrap' }
+  const valRight: React.CSSProperties = { fontSize: 17, fontWeight: 600, color: '#1d1d1f', textAlign: 'right' }
+  const secHead: React.CSSProperties = { fontSize: 13, color: '#8e8e93', margin: '14px 16px 6px', textTransform: 'uppercase', letterSpacing: 0.3 }
   const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProperties
 
   const contract = current?.contract
@@ -754,7 +754,7 @@ export function LandlordDashboard() {
       <SkeletonList count={4} />
     </div>
   )
-  if (error) return <div style={T.page}><div style={T.card}>{error}</div></div>
+  if (error) return <div style={T.page}><div style={T.card}>{errText(error)}</div></div>
 
   if (arch) {
     return (
@@ -801,7 +801,7 @@ export function LandlordDashboard() {
             return (
               <div key={h.id} style={{ padding: '10px 0', borderBottom: '1px solid rgba(60,60,67,0.12)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-                  <span style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f' }}>{parseDate(h.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}{firstP ? ' · первый месяц' : ''}</span>
+                  <span style={{ fontSize: 17, fontWeight: 600, color: '#1d1d1f' }}>{parseDate(h.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}{firstP ? ' · первый месяц' : ''}</span>
                   <span style={valMoney}>{sum.toFixed(0)} ₽</span>
                 </div>
                 <div style={{ marginTop: 2 }}>
@@ -817,7 +817,7 @@ export function LandlordDashboard() {
             {archiveFrozen.map((f: any) => (
               <div key={f.id} style={T.item}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                  <span style={{ fontSize: 16, fontWeight: 500, color: '#1d1d1f' }}>{f.period ? parseDate(f.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : 'без месяца'}</span>
+                  <span style={{ fontSize: 17, fontWeight: 500, color: '#1d1d1f' }}>{f.period ? parseDate(f.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : 'без месяца'}</span>
                   <span style={valMoney}>{Number(f.amount).toFixed(0)} ₽</span>
                 </div>
                 {f.adjusted_note && <div style={T.tiny}>{f.adjusted_note}</div>}
@@ -896,8 +896,8 @@ export function LandlordDashboard() {
                   setMassOpen(true)
                 }}
               >
-                <span style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f' }}>Ждут подтверждения: {openList.length}</span>
-                <span style={{ color: '#0071e3', fontSize: 14, fontWeight: 600 }}>{isPro ? 'открыть ›' : 'Pro ›'}</span>
+                <span style={{ fontSize: 17, fontWeight: 600, color: '#1d1d1f' }}>Ждут подтверждения: {openList.length}</span>
+                <span style={{ color: '#0071e3', fontSize: 15, fontWeight: 600 }}>{isPro ? 'открыть ›' : 'Pro ›'}</span>
               </button>
             </div>
           )}
@@ -965,7 +965,7 @@ export function LandlordDashboard() {
                       <input type="checkbox" checked={!!massSel[o.id]} onChange={(e) => setMassSel({ ...massSel, [o.id]: e.target.checked })} style={{ width: 20, height: 20, flexShrink: 0 }} />
                     )}
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f' }}>{o.address}</div>
+                      <div style={{ fontSize: 17, fontWeight: 600, color: '#1d1d1f' }}>{o.address}</div>
                       <div style={{ fontSize: 13, color: '#8e8e93' }}>
                         {(o.contract as any)?.tenant?.full_name || '—'} · {new Date(o.payment.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })} · {o.amount.toFixed(0)} ₽{o.payment.card_claimed ? ' · заявил об оплате' : ''}
                       </div>
@@ -984,10 +984,10 @@ export function LandlordDashboard() {
             <div style={{ display: 'flex', gap: 8 }}>
               <button
                 disabled={!massOk || massBusy || !Object.values(massSel).some(Boolean)}
-                style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 16, cursor: 'pointer', opacity: (!massOk || massBusy || !Object.values(massSel).some(Boolean)) ? 0.4 : 1 }}
+                style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 17, cursor: 'pointer', opacity: (!massOk || massBusy || !Object.values(massSel).some(Boolean)) ? 0.4 : 1 }}
                 onClick={confirmSelected}
               >Подтвердить выбранные ({Object.values(massSel).filter(Boolean).length})</button>
-              <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 16, cursor: 'pointer' }} onClick={() => setMassOpen(false)}>Отмена</button>
+              <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 17, cursor: 'pointer' }} onClick={() => setMassOpen(false)}>Отмена</button>
             </div>
           </Modal>
         </div>
@@ -1087,7 +1087,7 @@ export function LandlordDashboard() {
                   value={utilInputs[current.id] ?? String(current.utilitiesAmount || '')}
                   onChange={(e) => setUtilInputs({ ...utilInputs, [current.id]: e.target.value })}
                   placeholder="0"
-                  style={{ width: 110, border: 'none', outline: 'none', background: 'rgba(120,120,128,0.08)', borderRadius: 8, padding: '8px 10px', fontSize: 16, fontWeight: 600, textAlign: 'right', color: '#1d1d1f', boxSizing: 'border-box' }}
+                  style={{ width: 110, border: 'none', outline: 'none', background: 'rgba(120,120,128,0.08)', borderRadius: 8, padding: '8px 10px', fontSize: 17, fontWeight: 600, textAlign: 'right', color: '#1d1d1f', boxSizing: 'border-box' }}
                   inputMode="numeric"
                 />
               </div>
@@ -1139,7 +1139,7 @@ export function LandlordDashboard() {
           <div style={T.card}>
             <div style={T.h2}>История платежей</div>
             {objHistory.length === 0 ? (
-              <div style={{ ...T.small, margin: '8px 0' }}>Платежей пока нет.</div>
+              <div style={{ ...T.small, margin: '8px 0' }}>Платежей пока нет</div>
             ) : (
               objHistory.map((h: any) => {
                 const firstP = isFirstPeriod(h.period, sd)
@@ -1152,7 +1152,7 @@ export function LandlordDashboard() {
                 return (
                   <div key={h.id} style={{ padding: '10px 0', borderBottom: '1px solid rgba(60,60,67,0.12)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-                      <span style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f' }}>{parseDate(h.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}{firstP ? ' · первый месяц' : ''}</span>
+                      <span style={{ fontSize: 17, fontWeight: 600, color: '#1d1d1f' }}>{parseDate(h.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}{firstP ? ' · первый месяц' : ''}</span>
                       <span style={valMoney}>{sum.toFixed(0)} ₽</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginTop: 2 }}>
@@ -1242,13 +1242,13 @@ export function LandlordDashboard() {
                 ) : (
                   <div>
                     <div style={{ fontSize: 13, color: '#8e8e93', margin: '4px 0 2px' }}>Аренда, ₽/мес</div>
-                    <input style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box' }} value={offRent} onChange={(e) => setOffRent(e.target.value)} inputMode="numeric" />
+                    <input style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 17, boxSizing: 'border-box' }} value={offRent} onChange={(e) => setOffRent(e.target.value)} inputMode="numeric" />
                     <div style={{ fontSize: 13, color: '#8e8e93', margin: '8px 0 2px' }}>Срок, месяцев (1–11)</div>
-                    <select style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box' }} value={offMonths} onChange={(e) => setOffMonths(Number(e.target.value))}>
+                    <select style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 17, boxSizing: 'border-box' }} value={offMonths} onChange={(e) => setOffMonths(Number(e.target.value))}>
                       {Array.from({ length: 11 }, (_, i) => i + 1).map((m) => <option key={m} value={m}>{m}</option>)}
                     </select>
                     <div style={{ fontSize: 13, color: '#8e8e93', margin: '8px 0 2px' }}>Начало нового договора (можно сделать разрыв)</div>
-                    <input style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box' }} type="date" value={offStart} onChange={(e) => setOffStart(e.target.value)} />
+                    <input style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 17, boxSizing: 'border-box' }} type="date" value={offStart} onChange={(e) => setOffStart(e.target.value)} />
                     <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
                       <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }} onClick={landlordSendOffer}>Отправить предложение</button>
                       <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 15, cursor: 'pointer' }} onClick={() => setRenewForm(false)}>Отмена</button>
@@ -1275,7 +1275,7 @@ export function LandlordDashboard() {
               <div key={o.v}>
                 {i > 0 && <div style={hair} />}
                 <button
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', minHeight: 44, border: 'none', background: 'transparent', cursor: 'pointer', padding: '4px 0', fontSize: 16, fontWeight: 500, color: '#1d1d1f' }}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', minHeight: 44, border: 'none', background: 'transparent', cursor: 'pointer', padding: '4px 0', fontSize: 17, fontWeight: 500, color: '#1d1d1f' }}
                   onClick={() => updatePaymentMethod(contract.id, o.v as any)}
                 >
                   {o.l}
@@ -1313,7 +1313,7 @@ export function LandlordDashboard() {
             {(current.frozenRows || []).map((f: any) => (
               <div key={f.id} style={T.item}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                  <span style={{ fontSize: 16, fontWeight: 500, color: '#1d1d1f' }}>{f.period ? parseDate(f.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : 'без месяца'}</span>
+                  <span style={{ fontSize: 17, fontWeight: 500, color: '#1d1d1f' }}>{f.period ? parseDate(f.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : 'без месяца'}</span>
                   <span style={valMoney}>{Number(f.amount).toFixed(0)} ₽</span>
                 </div>
                 {f.adjusted_note && <div style={T.tiny}>{f.adjusted_note}</div>}
@@ -1364,7 +1364,7 @@ export function LandlordDashboard() {
         <div style={{ display: 'flex', gap: 8 }}>
           <button
             disabled={!payConfirmOk}
-            style={{ flex: 1, minWidth: 0, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 16, cursor: 'pointer', opacity: payConfirmOk ? 1 : 0.4, whiteSpace: 'nowrap' }}
+            style={{ flex: 1, minWidth: 0, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 17, cursor: 'pointer', opacity: payConfirmOk ? 1 : 0.4, whiteSpace: 'nowrap' }}
             onClick={() => {
               const k = payConfirm!.kind
               setPayConfirm(null)
@@ -1374,7 +1374,7 @@ export function LandlordDashboard() {
               else confirmChannel(current.paymentId, 'card')
             }}
           >Подтвердить</button>
-          <button style={{ flex: 1, minWidth: 0, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 16, cursor: 'pointer', whiteSpace: 'nowrap' }} onClick={() => setPayConfirm(null)}>Отмена</button>
+          <button style={{ flex: 1, minWidth: 0, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 17, cursor: 'pointer', whiteSpace: 'nowrap' }} onClick={() => setPayConfirm(null)}>Отмена</button>
         </div>
       </Modal>
       <Modal open={!!receiptFor} title="Расписка" onClose={() => setReceiptFor(null)}>
@@ -1382,8 +1382,8 @@ export function LandlordDashboard() {
           {receiptFor ? receiptText(receiptFor) : ''}
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 16, cursor: 'pointer' }} onClick={() => copyReceipt(receiptFor)}>Скопировать</button>
-          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 16, cursor: 'pointer' }} onClick={() => setReceiptFor(null)}>Закрыть</button>
+          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 17, cursor: 'pointer' }} onClick={() => copyReceipt(receiptFor)}>Скопировать</button>
+          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 17, cursor: 'pointer' }} onClick={() => setReceiptFor(null)}>Закрыть</button>
         </div>
       </Modal>
       <ConfirmDelete
@@ -1418,14 +1418,14 @@ export function LandlordDashboard() {
         {!fz?.zero && (
           <>
             <div style={{ fontSize: 15, marginBottom: 8 }}>Новая сумма, ₽</div>
-            <input value={fzAmount} onChange={(e) => setFzAmount(e.target.value)} inputMode="decimal" style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box', marginBottom: 12 }} />
+            <input value={fzAmount} onChange={(e) => setFzAmount(e.target.value)} inputMode="decimal" style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 17, boxSizing: 'border-box', marginBottom: 12 }} />
           </>
         )}
         <div style={{ fontSize: 15, marginBottom: 8 }}>{fz?.zero ? 'Причина обнуления (обязательно)' : 'Примечание к изменению (обязательно)'}</div>
-        <input value={fzNote} onChange={(e) => setFzNote(e.target.value)} placeholder="например: договорились с арендатором" style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box', marginBottom: 14 }} />
+        <input value={fzNote} onChange={(e) => setFzNote(e.target.value)} placeholder="например: договорились с арендатором" style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 17, boxSizing: 'border-box', marginBottom: 14 }} />
         <div style={{ display: 'flex', gap: 8 }}>
-          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 16, cursor: 'pointer' }} onClick={confirmAdjust}>Сохранить</button>
-          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 16, cursor: 'pointer' }} onClick={() => setFz(null)}>Отмена</button>
+          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 17, cursor: 'pointer' }} onClick={confirmAdjust}>Сохранить</button>
+          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 17, cursor: 'pointer' }} onClick={() => setFz(null)}>Отмена</button>
         </div>
       </Modal>
     </div>
