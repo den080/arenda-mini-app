@@ -93,14 +93,16 @@ export function LandlordDashboard() {
   const [massBusy, setMassBusy] = useState(false)
   const [massSel, setMassSel] = useState<Record<string, boolean>>({})
   const [renewOffer, setRenewOffer] = useState<any>(null)
+  const [histOpen, setHistOpen] = useState(false)
   const [renewForm, setRenewForm] = useState(false)
   const [offRent, setOffRent] = useState('')
   const [offMonths, setOffMonths] = useState(11)
   const [offStart, setOffStart] = useState('')
 
   useEffect(() => {
-    setEarlyPayOpen(false)
-    setUtilSaved(null)
+  setEarlyPayOpen(false)
+  setUtilSaved(null)
+  setHistOpen(false)
   }, [openId])
   useEffect(() => {
     if (!openId) return
@@ -916,11 +918,13 @@ export function LandlordDashboard() {
                   <div style={{ fontSize: 13, color: o.statusColor || '#8e8e93', marginTop: 4 }}>
                     {o.statusDetail}{o.amount > 0 ? ` · ${o.amount.toFixed(0)} ₽` : ''}
                   </div>
+                  {Number((o.contract as any)?.deposit_amount || 0) > 0 && (
+                    <div style={{ fontSize: 12, color: '#8e8e93', marginTop: 2 }}>
+                      депозит {Number((o.contract as any).deposit_paid || 0).toFixed(0)} из {Number((o.contract as any).deposit_amount).toFixed(0)} ₽
+                    </div>
+                  )}
                 </div>
-                {Number((o.contract as any)?.deposit_amount || 0) > 0 && (
-                  <span style={{ fontSize: 13, color: '#8e8e93', flexShrink: 0 }}>депозит {Number((o.contract as any).deposit_paid || 0).toFixed(0)} из {Number((o.contract as any).deposit_amount).toFixed(0)}</span>
-                )}
-                <span style={{ color: '#c7c7cc', fontSize: 18 }}>›</span>
+                <span style={{ color: '#c7c7cc', fontSize: 18, flexShrink: 0 }}>›</span>
               </button>
             </div>
           ))}
@@ -1141,7 +1145,7 @@ export function LandlordDashboard() {
             {objHistory.length === 0 ? (
               <div style={{ ...T.small, margin: '8px 0' }}>Платежей пока нет</div>
             ) : (
-              objHistory.map((h: any) => {
+              (histOpen ? objHistory.slice(0, 10) : objHistory.slice(0, 1)).map((h: any) => {
                 const firstP = isFirstPeriod(h.period, sd)
                 const dueDay = parseDate(h.due_date)
                 const confDay = h.confirmed_at ? parseDate(String(h.confirmed_at).slice(0, 10)) : null
@@ -1167,6 +1171,13 @@ export function LandlordDashboard() {
                   </div>
                 )
               })
+            )}
+            {objHistory.length > 1 && (
+              <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 2px' }}>
+                <button style={actBlue} onClick={() => setHistOpen(!histOpen)}>
+                  {histOpen ? 'Свернуть историю' : 'Показать историю'}
+                </button>
+              </div>
             )}
           </div>
         </>
