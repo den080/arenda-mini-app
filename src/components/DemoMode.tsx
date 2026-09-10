@@ -12,7 +12,6 @@ const TABS = [
 const iosBlue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 17, fontWeight: 600, cursor: 'pointer', padding: 4, flexShrink: 0 }
 const actBlue: React.CSSProperties = { ...iosBlue, fontSize: 15 }
 const iosMuted: React.CSSProperties = { color: '#8e8e93', fontSize: 15 }
-const iosOk: React.CSSProperties = { color: '#1e7e34', fontSize: 15, fontWeight: 600 }
 const valText: React.CSSProperties = { fontSize: 17, fontWeight: 500, color: '#1d1d1f' }
 const valMoney: React.CSSProperties = { fontSize: 17, fontWeight: 600, color: '#1d1d1f', whiteSpace: 'nowrap' }
 const rightInput: React.CSSProperties = { width: 110, border: 'none', outline: 'none', background: 'rgba(120,120,128,0.08)', borderRadius: 8, padding: '8px 10px', fontSize: 17, fontWeight: 600, textAlign: 'right', color: '#1d1d1f', boxSizing: 'border-box' }
