@@ -24,8 +24,8 @@ upload_file() {
     "ftp://$FTP_HOST/$file" || { echo "FAILED: $file"; exit 1; }
 }
 
-# все файлы, кроме скрытых и пустых, НО включая .htaccess
-find . -type f ! -size 0 \( ! -name '.*' -o -name '.htaccess' \) | sed 's|^\./||' | sort | while read -r f; do
+# все файлы, кроме скрытых и пустых (включая .htaccess)
+find . -type f ! -name '.*' ! -size 0 | sed 's|^\./||' | sort | while read -r f; do
   upload_file "$f" || exit 1
 done
 
