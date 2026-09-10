@@ -5,13 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "tsc && vite build && FTP_HOST=$FTP_HOST FTP_USER=$FTP_USER FTP_PASS=$FTP_PASS bash scripts/mirror.sh",
     "preview": "vite preview"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.109.0",
     "nodemailer": "^6.9.16",
-
     "@telegram-apps/sdk": "^3.11.8",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
