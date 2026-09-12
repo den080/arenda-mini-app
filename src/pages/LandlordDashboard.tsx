@@ -14,6 +14,7 @@ import TeamManager from '../components/TeamManager'
 import ContactsEditor from '../components/ContactsEditor'
 import { ensureNextPayment } from '../lib/nextPayment'
 import { addOffer, markOffer, acceptRenewal } from '../lib/renewal'
+import { getPenaltyStart, addDays, toISO } from '../lib/finance'
 import { setAnalyticsUser, trackOpen, trackScreen } from '../lib/analytics'
 import { BottomNav, Modal, PromptNumber, Progress, ConfirmDelete, showToast, SkeletonList, PullToRefresh, Hint, errText } from '../components/ui'
 import { T } from '../theme'
@@ -38,6 +39,7 @@ interface ObjectWithStatus extends PropertyObject {
   frozenRows?: any[]
   deferredRequests?: any[]
   hasConfirmedCashMeeting?: boolean
+  cashMeeting?: any
 }
 
 function parseDate(d: any): Date { const [y, m, dd] = String(d).slice(0, 10).split('-').map(Number); return new Date(y, (m || 1) - 1, dd || 1) }
@@ -96,6 +98,8 @@ export function LandlordDashboard() {
   const [massSel, setMassSel] = useState<Record<string, boolean>>({})
   const [renewOffer, setRenewOffer] = useState<any>(null)
   const [histOpen, setHistOpen] = useState(false)
+  const [penStartOpen, setPenStartOpen] = useState(false)
+  const [penStartDate, setPenStartDate] = useState('')
   const [renewForm, setRenewForm] = useState(false)
   const [offRent, setOffRent] = useState('')
   const [offMonths, setOffMonths] = useState(11)
@@ -324,7 +328,7 @@ export function LandlordDashboard() {
             else if (daysLeft <= reminder) { statusDetail = `${daysLeft} дн. до оплаты (${nextDue.toLocaleDateString('ru-RU')})`; statusColor = '#a80' }
             else { statusDetail = `${daysLeft} дн. до оплаты (${nextDue.toLocaleDateString('ru-RU')})`; statusColor = '#080' }
           }
-          objectsWithStatus.push({ ...obj, status, statusDetail, statusColor, amount: baseAmount + penaltyAmount + utilitiesAmount, baseAmount, penaltyAmount, utilitiesAmount, paymentId, contract, payment, daysOverdue: isOverdue ? Math.round((todayMid.getTime() - dueMid.getTime()) / 86400000) : undefined, waitingForReadings, needUtilitiesReminder, readingsMode, frozenTotal, frozenRows: fRows, deferredRequests: dReqBy[contract.id] || [], hasConfirmedCashMeeting: !!cashMeeting })
+          objectsWithStatus.push({ ...obj, status, statusDetail, statusColor, amount: baseAmount + penaltyAmount + utilitiesAmount, baseAmount, penaltyAmount, utilitiesAmount, paymentId, contract, payment, daysOverdue: isOverdue ? Math.round((todayMid.getTime() - dueMid.getTime()) / 86400000) : undefined, waitingForReadings, needUtilitiesReminder, readingsMode, frozenTotal, frozenRows: fRows, deferredRequests: dReqBy[contract.id] || [], hasConfirmedCashMeeting: !!cashMeeting, cashMeeting: cashMeeting || null })
         }
         setHistory(allHistory)
         const sortedObjects = objectsWithStatus.sort((a, b) => {
@@ -642,6 +646,23 @@ export function LandlordDashboard() {
     setOffStart(`${ds.getFullYear()}-${String(ds.getMonth() + 1).padStart(2, '0')}-${String(ds.getDate()).padStart(2, '0')}`)
     setRenewForm(true)
   }
+    async function savePenaltyStart(value: string | null) {
+    if (!contract || !openPayment) return
+    const stamp = new Date().toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+    const old = openPayment.penalty_start_at ? String(openPayment.penalty_start_at).slice(0, 10) : 'по правилам'
+    const note = value ? `вручную: ${old} → ${value}, ${stamp}` : `сброс: ${old} → по правилам, ${stamp}`
+    const { error } = await supabase.from('payments').update({ penalty_start_at: value, penalty_start_note: note }).eq('id', openPayment.id)
+    if (error) { showToast(errText(error)); return }
+    await supabase.from('notifications_log').insert({
+      user_id: contract.tenant_id, type: 'penalty_start_changed', related_id: contract.id,
+      message: value ? `🕊 Арендодатель перенёс срок штрафа на ${parseDate(value).toLocaleDateString('ru-RU')}` : '🕊 Штраф снова считается по сроку договора',
+      sent_at: new Date().toISOString(),
+    })
+    showToast('✅ Сохранено')
+    setPenStartOpen(false)
+    window.dispatchEvent(new Event('rentflow-refresh'))
+  }
+
   async function updatePaymentMethod(contractId: string, method: 'card' | 'cash' | 'both') {
     const updateData: any = { payment_method: method }
     if (method === 'cash') updateData.cash_slots = []
@@ -736,6 +757,8 @@ export function LandlordDashboard() {
   const pcMonth = pcPay ? new Date(pcPay.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : ''
   const pcSum = pcPay ? Number(pcPay.base_amount || 0) + Number(pcPay.penalty_amount || 0) + Number(pcPay.utilities_amount || 0) : 0
   const pcPaid = Number(pcPay?.paid_amount || 0)
+  const openPayment = current?.payment && !current.payment.confirmed_by_landlord ? current.payment : null
+  const penaltyStart = openPayment ? getPenaltyStart(openPayment, contract, current?.cashMeeting) : null
   const daysToPay = openPay ? Math.round((parseDate(openPay.due_date).getTime() - new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate()).getTime()) / 86400000) : 0
   const payBadge = !!((current?.payment && !current.payment.confirmed_by_landlord) || firstMonthPending)
   const metersBadge = !!current?.waitingForReadings
@@ -1006,7 +1029,7 @@ export function LandlordDashboard() {
               <button style={T.btn} onClick={() => confirmSigning(current.paymentId!)}>Подтвердить: первый месяц получен при подписании</button>
             </div>
           )}
-          {contract && current.paymentId && !current.payment?.confirmed_by_landlord && !firstMonthPending && (
+           {contract && current.paymentId && !current.payment?.confirmed_by_landlord && !firstMonthPending && (
             <div style={T.card}>
               <div style={T.h2}>Подтверждение оплаты · {pcMonth}</div>
               {pcPaid > 0 && (
@@ -1035,25 +1058,50 @@ export function LandlordDashboard() {
                     ? <button style={actBlue} onClick={() => { setPayConfirmOk(false); setPayConfirm({ kind: 'card' }) }}>Подтвердить</button>
                     : <span style={iosMuted}>не заявлена</span>}
               </div>
-                        <div style={{ ...T.row, borderBottom: 'none' }}>
-            <span style={valText}>Оплата наличными</span>
-            {current.payment?.confirmed_cash
-              ? <span style={iosOk}>получена</span>
-              : current.payment?.cash_closed
-                ? <span style={iosMuted}>расчёт завершён</span>
-                : current.hasConfirmedCashMeeting
-                  ? <span style={{ color: '#b25000', fontSize: 15, fontWeight: 600 }}>встреча согласована</span>
-                  : <span style={iosMuted}>не заявлена</span>}
-          </div>
-          {current.hasConfirmedCashMeeting && !current.payment?.confirmed_cash && !current.payment?.cash_closed && (
-            <>
-              <button style={T.btn} onClick={() => { setPayConfirmOk(false); setPayConfirm({ kind: 'cash' }) }}>Подтвердить получение наличными</button>
-              <div style={{ display: 'flex', justifyContent: 'center', padding: '2px 0 4px' }}>
-                <button style={{ ...actRed, fontSize: 13 }} onClick={() => { setPayConfirmOk(false); setPayConfirm({ kind: 'cash-close' }) }}>Завершить наличный расчёт без оплаты</button>
+              <div style={{ ...T.row, borderBottom: 'none' }}>
+                <span style={valText}>Оплата наличными</span>
+                {current.payment?.confirmed_cash
+                  ? <span style={iosOk}>получена</span>
+                  : current.payment?.cash_closed
+                    ? <span style={iosMuted}>расчёт завершён</span>
+                    : current.hasConfirmedCashMeeting
+                      ? <span style={{ color: '#b25000', fontSize: 15, fontWeight: 600 }}>встреча согласована</span>
+                      : <span style={iosMuted}>не заявлена</span>}
               </div>
-              <Hint text="«Подтвердить получение» — деньги получены при встрече. «Завершить без оплаты» — закрывает наличный расчёт, если договорились о другом способе." />
-            </>
-          )}
+              {openPayment && penaltyStart && (
+                <>
+                  <div style={T.row}>
+                    <span style={iosMuted}>Штраф начнётся</span>
+                    <span style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f' }}>
+                      {penaltyStart.toLocaleDateString('ru-RU')}{openPayment.penalty_start_at ? ' · перенесён вручную' : ''}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'center', padding: '2px 0 4px' }}>
+                    <button style={actBlue} onClick={() => { setPenStartDate(openPayment.penalty_start_at ? String(openPayment.penalty_start_at).slice(0, 10) : ''); setPenStartOpen(!penStartOpen) }}>Изменить</button>
+                  </div>
+                  {penStartOpen && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center', alignItems: 'center', padding: '4px 0 8px' }}>
+                      <button style={actBlue} onClick={() => savePenaltyStart(toISO(addDays(parseDate(openPayment.due_date), 3)))}>+3 дн</button>
+                      <button style={actBlue} onClick={() => savePenaltyStart(toISO(addDays(parseDate(openPayment.due_date), 7)))}>+7 дн</button>
+                      {current?.cashMeeting?.meeting_date && (
+                        <button style={actBlue} onClick={() => savePenaltyStart(toISO(addDays(parseDate(current.cashMeeting.meeting_date), 1)))}>до встречи</button>
+                      )}
+                      <button style={actBlue} onClick={() => savePenaltyStart(null)}>по сроку</button>
+                      <input type="date" value={penStartDate} onChange={(e) => setPenStartDate(e.target.value)} style={{ padding: '6px 8px', borderRadius: 8, border: '1px solid #ddd', fontSize: 15 }} />
+                      <button style={actBlue} disabled={!penStartDate} onClick={() => savePenaltyStart(penStartDate)}>Сохранить</button>
+                    </div>
+                  )}
+                </>
+              )}
+              {current.hasConfirmedCashMeeting && !current.payment?.confirmed_cash && !current.payment?.cash_closed && (
+                <>
+                  <button style={T.btn} onClick={() => { setPayConfirmOk(false); setPayConfirm({ kind: 'cash' }) }}>Подтвердить получение наличными</button>
+                  <div style={{ display: 'flex', justifyContent: 'center', padding: '2px 0 4px' }}>
+                    <button style={{ ...actRed, fontSize: 13 }} onClick={() => { setPayConfirmOk(false); setPayConfirm({ kind: 'cash-close' }) }}>Завершить наличный расчёт без оплаты</button>
+                  </div>
+                  <Hint text="«Подтвердить получение» — деньги получены при встрече. «Завершить без оплаты» закрывает наличный расчёт, если договорились о другом способе; штраф тогда считаем от срока оплаты задним числом." />
+                </>
+              )}
               {!current.payment?.card_claimed && !current.hasConfirmedCashMeeting && (
                 daysToPay <= 7 || pcPaid > 0 ? (
                   <>
