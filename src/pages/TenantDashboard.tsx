@@ -7,6 +7,7 @@ import Chat from '../components/Chat'
 import { BottomNav, showToast, SkeletonList, PullToRefresh, Hint, Modal, errText } from '../components/ui'
 import { T } from '../theme'
 import { addOffer, markOffer, acceptRenewal, latestOffer } from '../lib/renewal'
+import { getPenaltyStart, calculateOverdueDays, calculatePenalty } from '../lib/finance'
 
 const TABS = [
   { id: 'pay', l: 'Оплата' },
@@ -117,7 +118,7 @@ export function TenantDashboard() {
 
   async function loadData() {
     if (!contract) return
-    const [objRes, metersRes, typesRes, readRes, paysRes, rulesRes, defRes, contactsRes, frozenRes] = await Promise.all([
+    const [objRes, metersRes, typesRes, readRes, paysRes, rulesRes, defRes, contactsRes, frozenRes, meetRes] = await Promise.all([
       supabase.from('objects').select('*, landlord_doc_name, landlord:users(id, full_name, phone)').eq('id', contract.object_id).maybeSingle(),
       supabase.from('object_meters').select('*').eq('object_id', contract.object_id).eq('is_active', true),
       supabase.from('meter_types').select('*'),
@@ -127,6 +128,7 @@ export function TenantDashboard() {
       supabase.from('deferred_requests').select('*').eq('contract_id', contract.id).order('created_at', { ascending: false }),
       supabase.from('object_contacts').select('*').eq('object_id', contract.object_id).order('sort', { ascending: true }),
       supabase.from('frozen_penalties').select('*').eq('contract_id', contract.id).order('period', { ascending: true }),
+      supabase.from('cash_meetings').select('*').eq('contract_id', contract.id).eq('kind', 'meeting').eq('status', 'confirmed').order('created_at', { ascending: false }).limit(1).maybeSingle(),
     ])
     const meterTypes = typesRes.data || []
     const g = (c: string) => c === 'water_cold' ? 0 : c === 'water_hot' ? 1 : c.startsWith('electricity') ? 2 : c === 'heat' ? 3 : c === 'gas' ? 4 : 5
@@ -145,6 +147,7 @@ export function TenantDashboard() {
       defs: defRes.data || [],
       contacts: contactsRes.data || [],
       frozen: frozenRes.data || [],
+      cashMeeting: meetRes.data || null,
     })
     const off = await latestOffer(contract.id)
     setRenewOffer(off)
@@ -381,7 +384,9 @@ export function TenantDashboard() {
   const daysLeft = due ? Math.round((due.getTime() - todayMid.getTime()) / 86400000) : 0
   const paymentOverdueRule = rules.find((r: any) => r.violation_type === 'payment_overdue')
   const penaltyRate = paymentOverdueRule ? Number(paymentOverdueRule.rate) : 500
-  const accrued = payment && daysLeft < 0 && penaltyRate > 0 ? (-daysLeft) * penaltyRate : 0
+  const penaltyStart = payment ? getPenaltyStart(payment, contract, data?.cashMeeting) : null
+  const overdueDays = payment ? calculateOverdueDays(payment, contract, data?.cashMeeting, now) : 0
+  const accrued = penaltyRate > 0 ? calculatePenalty(overdueDays, penaltyRate) : 0
   const shownPenalty = payment ? Math.max(Number(payment.penalty_amount || 0), accrued) : 0
   const total = basePlusUtil + shownPenalty
   const daysToEnd = contract.end_date ? Math.round((parseDate(contract.end_date).getTime() - todayMid.getTime()) / 86400000) : null
@@ -434,6 +439,14 @@ export function TenantDashboard() {
                       {daysLeft < 0 ? `просрочка ${-daysLeft} дн.` : daysLeft === 0 ? 'сегодня' : `ещё ${daysLeft} дн. (${due!.toLocaleDateString('ru-RU')})`}
                     </span>
                   </div>
+                  {penaltyStart && (
+                    <div style={{ ...T.tiny, margin: '6px 0 0' }}>
+                      {now.getTime() <= penaltyStart.getTime()
+                        ? `Штраф не начисляется до ${penaltyStart.toLocaleDateString('ru-RU')}`
+                        : `Штраф начисляется с ${penaltyStart.toLocaleDateString('ru-RU')}`}
+                      {payment.penalty_start_at ? ' · срок перенёс арендодатель' : ''}
+                    </div>
+                  )}
                   {accrued > 0 && <Hint text="Штраф начисляется каждый день просрочки и растёт до момента оплаты." />}
                   {Number(payment.paid_amount || 0) > 0 && <div style={T.tiny}>Получено: {Number(payment.paid_amount).toFixed(0)} ₽</div>}
                   {shownPenalty > 0 && !deferralPending && (
