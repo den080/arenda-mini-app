@@ -45,7 +45,6 @@ interface ObjectWithStatus extends PropertyObject {
 function parseDate(d: any): Date { const [y, m, dd] = String(d).slice(0, 10).split('-').map(Number); return new Date(y, (m || 1) - 1, dd || 1) }
 function isFirstPeriod(period: any, sd: Date | null): boolean { if (!sd) return false; const p = parseDate(period); return p.getMonth() === sd.getMonth() && p.getFullYear() === sd.getFullYear() }
 function clampDay(y: number, m: number, d: number): number { const last = new Date(y, m + 1, 0).getDate(); return Math.min(Math.max(1, d), last) }
-function toISO(d: Date): string { const m = String(d.getMonth() + 1).padStart(2, '0'); const dd = String(d.getDate()).padStart(2, '0'); return `${d.getFullYear()}-${m}-${dd}` }
 function noEmoji(s: string): string { return String(s || '').replace(/[\p{Extended_Pictographic}\uFE0F\u200D]/gu, '').replace(/\s{2,}/g, ' ').trim() }
 
 const OBJ_TABS = [
