@@ -489,10 +489,17 @@ export function LandlordDashboard() {
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
   async function confirmSigning(paymentId: string) {
-    const { error } = await supabase.from('payments').update({ confirmed_by_landlord: true, confirmed_at: new Date().toISOString() }).eq('id', paymentId)
+    const { data: pay0 } = await supabase.from('payments').select('*').eq('id', paymentId).maybeSingle()
+    if (!pay0) { showToast('Платёж не найден'); return }
+    const total0 = Number(pay0.base_amount || 0) + Number(pay0.utilities_amount || 0) + Number(pay0.penalty_amount || 0)
+    const nowIso = new Date().toISOString()
+    const { error } = await supabase.from('payments').update({
+      confirmed_by_landlord: true, confirmed_at: nowIso,
+      paid_amount: total0, paid_at: nowIso,
+    }).eq('id', paymentId)
     if (error) { showToast(errText(error)); return }
     showToast('✅ Первый месяц подтверждён')
-    const { data: pay } = await supabase.from('payments').select('*').eq('id', paymentId).maybeSingle()
+    const pay = pay0
     if (pay) {
       await ensureNextPayment(pay.contract_id)
       const { data: con } = await supabase.from('contracts').select('*').eq('id', pay.contract_id).maybeSingle()
