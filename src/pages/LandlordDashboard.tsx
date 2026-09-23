@@ -12,6 +12,7 @@ import Chat from '../components/Chat'
 import { ObjectAdd, ObjectEdit } from '../components/ObjectManager'
 import TeamManager from '../components/TeamManager'
 import ContactsEditor from '../components/ContactsEditor'
+import LandlordReadingsEntry from '../components/LandlordReadingsEntry'
 import { ensureNextPayment } from '../lib/nextPayment'
 import { addOffer, markOffer, acceptRenewal } from '../lib/renewal'
 import { getPenaltyStart, addDays, toISO } from '../lib/finance'
@@ -103,6 +104,10 @@ export function LandlordDashboard() {
   const [offRent, setOffRent] = useState('')
   const [offMonths, setOffMonths] = useState(11)
   const [offStart, setOffStart] = useState('')
+  const [uniRenewOpen, setUniRenewOpen] = useState(false)
+  const [uniRent, setUniRent] = useState('')
+  const [uniMonths, setUniMonths] = useState(11)
+  const [uniStart, setUniStart] = useState('')
 
   useEffect(() => {
   setEarlyPayOpen(false)
@@ -237,7 +242,7 @@ export function LandlordDashboard() {
           const fRows = fRowsBy[contract.id] || []
           const graceMonth = String(contract.created_at || '').slice(0, 7) === periodISO.slice(0, 7)
           const retro = !!(contract.created_at && contract.start_date && String(contract.created_at).slice(0, 10) > String(contract.start_date).slice(0, 10))
-          if (!graceMonth && !retro && readingsMode === 'manual' && contract.meter_deadline_day && contractStarted && (!startMonthISO || periodISO >= startMonthISO)) {
+          if (!graceMonth && !retro && readingsMode === 'manual' && contract.tenant_in_app !== false && contract.meter_deadline_day && contractStarted && (!startMonthISO || periodISO >= startMonthISO)) {
             const rr = (rulesBy[contract.id] || []).find((r: any) => r.violation_type === 'readings_overdue')
             const rRate = rr ? Number(rr.rate) || 0 : 0
             if (rRate > 0) {
@@ -286,7 +291,7 @@ export function LandlordDashboard() {
           const utilitiesAmount = Number(payment.utilities_amount || 0)
           const paymentId = String(payment.id)
           let waitingForReadings = false
-          if (!graceMonth && readingsMode === 'manual' && contract.meter_deadline_day && contractStarted && today.getDate() > contract.meter_deadline_day) {
+              if (!graceMonth && readingsMode === 'manual' && contract.tenant_in_app !== false && contract.meter_deadline_day && contractStarted && today.getDate() > contract.meter_deadline_day) {
             const metersW = metersByObj[obj.id] || []
             if (metersW.length) {
               const readSetW = new Set((readRes.data || []).filter((r: any) => r.contract_id === contract.id).map((r: any) => r.object_meter_id))
@@ -652,6 +657,29 @@ export function LandlordDashboard() {
     setOffStart(`${ds.getFullYear()}-${String(ds.getMonth() + 1).padStart(2, '0')}-${String(ds.getDate()).padStart(2, '0')}`)
     setRenewForm(true)
   }
+    async function setTenantInApp(makeOff: boolean) {
+    if (!contract) return
+    const val = makeOff ? false : true
+    const { error } = await supabase.from('contracts').update({ tenant_in_app: val }).eq('id', contract.id)
+    if (error) { showToast(errText(error)); return }
+    showToast(val ? '✅ Учёт без арендатора: доступны односторонние действия' : '✅ Арендатор снова считается пользователем приложения')
+    window.dispatchEvent(new Event('rentflow-refresh'))
+  }
+
+  async function unilateralRenew() {
+    if (!contract) return
+    const rentN = Number(String(uniRent).replace(',', '.'))
+    if (!rentN || rentN <= 0) { showToast('Укажите аренду'); return }
+    if (!uniStart) { showToast('Укажите дату начала'); return }
+    const offer = { id: null as any, contract_id: contract.id, offered_by: 'landlord' as const, rent_amount: rentN, months: uniMonths, start_date: uniStart, round: 1 }
+    const res = await acceptRenewal(offer, contract)
+    if (res.error) { showToast('Ошибка: ' + res.error); return }
+    await supabase.from('notifications_log').insert({ user_id: contract.tenant_id, type: 'renewal_unilateral', related_id: contract.id, message: '📄 Договор продлён в одностороннем порядке (бумажное согласие). Новый договор уже в приложении.', sent_at: new Date().toISOString() })
+    showToast('✅ Создан новый договор (одностороннее продление)')
+    setUniRenewOpen(false)
+    window.dispatchEvent(new Event('rentflow-refresh'))
+  }
+
     async function savePenaltyStart(value: string | null) {
     if (!contract || !openPayment) return
     const stamp = new Date().toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
@@ -1180,7 +1208,7 @@ export function LandlordDashboard() {
               )}
             </div>
           )}
-          {contract && tenantChoseCash && (
+          {contract && tenantChoseCash && contract.tenant_in_app !== false && (
             <div>
               <div style={secHead}>Оплата наличными</div>
               <CashNegotiation
@@ -1190,6 +1218,12 @@ export function LandlordDashboard() {
                 landlordId={current.landlord_id}
               />
             </div>
+                      {contract && tenantChoseCash && contract.tenant_in_app === false && (
+            <div style={T.card}>
+              <div style={T.h2}>Оплата наличными</div>
+              <div style={{ ...T.small, margin: '0 0 4px' }}>Арендатор не в приложении: окна встреч не согласуются. Получили деньги — нажмите «Получил оплату за месяц вне приложения» в карточке подтверждения, этого достаточно для учёта.</div>
+            </div>
+          )}
           )}
           <div style={T.card}>
             <div style={T.h2}>История платежей</div>
@@ -1239,6 +1273,7 @@ export function LandlordDashboard() {
             <>
               <div style={secHead}>Показания за текущий месяц</div>
               <ReadingsReview contractId={contract.id} tenantId={contract.tenant_id} />
+              <LandlordReadingsEntry objectId={current.id} contractId={contract.id} myId={user!.id} />
             </>
           )}
           <div style={secHead}>Настройка счётчиков</div>
@@ -1266,6 +1301,10 @@ export function LandlordDashboard() {
               <div style={T.row}><span style={iosMuted}>Баланс (переплата)</span><span style={valMoney}>{contractBalance.toFixed(0)} ₽</span></div>
             )}
             <div style={T.row}><span style={iosMuted}>Оплата</span><span style={valRight}>до {contract.payment_day} числа</span></div>
+                        <div style={T.row}>
+              <span style={iosMuted}>Арендатор в приложении</span>
+              <button style={actBlue} onClick={() => setTenantInApp(contract.tenant_in_app !== false)}>{contract.tenant_in_app === false ? 'нет · учёт без арендатора' : 'да'}</button>
+            </div>
             {deposit > 0 && (
               <div style={{ padding: '8px 0 4px' }}>
                 <Progress value={depositPaid} max={deposit} />
@@ -1299,6 +1338,9 @@ export function LandlordDashboard() {
                     </button>
                     {renewOffer && renewOffer.status === 'proposed' && renewOffer.offered_by === 'tenant' && (renewOffer.round || 1) > 1 && (
                       <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }} onClick={landlordAccept}>Согласен</button>
+                    )}
+                    {contract.tenant_in_app === false && (
+                      <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 15, cursor: 'pointer' }} onClick={() => { setUniRent(String(contract.rent_amount)); setUniMonths(11); const ed = parseDate(contract.end_date); const ds = new Date(ed.getFullYear(), ed.getMonth(), ed.getDate() + 1); setUniStart(`${ds.getFullYear()}-${String(ds.getMonth() + 1).padStart(2, '0')}-${String(ds.getDate()).padStart(2, '0')}`); setUniRenewOpen(true) }}>Продлить без арендатора</button>
                     )}
                   </div>
                 ) : (
@@ -1476,6 +1518,21 @@ export function LandlordDashboard() {
         onClose={() => setDepModal(null)}
         onSubmit={(n) => doEditDeposit(n)}
       />
+            <Modal open={uniRenewOpen} title="Продление без арендатора" onClose={() => setUniRenewOpen(false)}>
+        <div style={{ fontSize: 15, color: '#555', marginBottom: 12 }}>Бумажное согласие есть, арендатора в приложении нет: создастся новый договор, старый уйдёт в архив с пометкой. Депозит и замороженные штрафы перенесутся.</div>
+        <div style={{ fontSize: 13, color: '#8e8e93', margin: '4px 0 2px' }}>Аренда, ₽/мес</div>
+        <input style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 17, boxSizing: 'border-box' }} value={uniRent} onChange={(e) => setUniRent(e.target.value)} inputMode="numeric" />
+        <div style={{ fontSize: 13, color: '#8e8e93', margin: '8px 0 2px' }}>Срок, месяцев (1–11)</div>
+        <select style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 17, boxSizing: 'border-box' }} value={uniMonths} onChange={(e) => setUniMonths(Number(e.target.value))}>
+          {Array.from({ length: 11 }, (_, i) => i + 1).map((m) => <option key={m} value={m}>{m}</option>)}
+        </select>
+        <div style={{ fontSize: 13, color: '#8e8e93', margin: '8px 0 2px' }}>Начало нового договора</div>
+        <input style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 17, boxSizing: 'border-box' }} type="date" value={uniStart} onChange={(e) => setUniStart(e.target.value)} />
+        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }} onClick={unilateralRenew}>Создать новый договор</button>
+          <button style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 15, cursor: 'pointer' }} onClick={() => setUniRenewOpen(false)}>Отмена</button>
+        </div>
+      </Modal>
       <Modal open={!!fz} title={fz?.zero ? 'Обнулить замороженный штраф' : 'Изменить замороженный штраф'} onClose={() => setFz(null)}>
         {!fz?.zero && (
           <>
