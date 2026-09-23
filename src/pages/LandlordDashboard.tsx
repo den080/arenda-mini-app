@@ -110,9 +110,9 @@ export function LandlordDashboard() {
   const [uniStart, setUniStart] = useState('')
 
   useEffect(() => {
-  setEarlyPayOpen(false)
-  setUtilSaved(null)
-  setHistOpen(false)
+    setEarlyPayOpen(false)
+    setUtilSaved(null)
+    setHistOpen(false)
   }, [openId])
   useEffect(() => {
     if (!openId) return
@@ -291,7 +291,7 @@ export function LandlordDashboard() {
           const utilitiesAmount = Number(payment.utilities_amount || 0)
           const paymentId = String(payment.id)
           let waitingForReadings = false
-              if (!graceMonth && readingsMode === 'manual' && contract.tenant_in_app !== false && contract.meter_deadline_day && contractStarted && today.getDate() > contract.meter_deadline_day) {
+          if (!graceMonth && readingsMode === 'manual' && contract.tenant_in_app !== false && contract.meter_deadline_day && contractStarted && today.getDate() > contract.meter_deadline_day) {
             const metersW = metersByObj[obj.id] || []
             if (metersW.length) {
               const readSetW = new Set((readRes.data || []).filter((r: any) => r.contract_id === contract.id).map((r: any) => r.object_meter_id))
@@ -579,19 +579,14 @@ export function LandlordDashboard() {
     if (!fz || !contract) return
     const zero = fz.zero
     const note = fzNote.trim()
-    
     if (zero && !note) { showToast('Укажите причину обнуления'); return }
-    
     const newAmount = zero ? 0 : Number(fzAmount)
-    
     const { error } = await supabase.from('frozen_penalties').update({
       amount: newAmount,
       adjusted_note: note,
       adjusted_at: new Date().toISOString()
     }).eq('id', fz.id)
-    
     if (error) { showToast(errText(error)); return }
-    
     showToast('✅ Изменено')
     setFz(null)
     window.dispatchEvent(new Event('rentflow-refresh'))
@@ -660,7 +655,7 @@ export function LandlordDashboard() {
     setOffStart(`${ds.getFullYear()}-${String(ds.getMonth() + 1).padStart(2, '0')}-${String(ds.getDate()).padStart(2, '0')}`)
     setRenewForm(true)
   }
-    async function setTenantInApp(makeOff: boolean) {
+  async function setTenantInApp(makeOff: boolean) {
     if (!contract) return
     const val = makeOff ? false : true
     const { error } = await supabase.from('contracts').update({ tenant_in_app: val }).eq('id', contract.id)
@@ -668,7 +663,6 @@ export function LandlordDashboard() {
     showToast(val ? '✅ Учёт без арендатора: доступны односторонние действия' : '✅ Арендатор снова считается пользователем приложения')
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
-
   async function unilateralRenew() {
     if (!contract) return
     const rentN = Number(String(uniRent).replace(',', '.'))
@@ -682,8 +676,7 @@ export function LandlordDashboard() {
     setUniRenewOpen(false)
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
-
-    async function savePenaltyStart(value: string | null) {
+  async function savePenaltyStart(value: string | null) {
     if (!contract || !openPayment) return
     const stamp = new Date().toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
     const old = openPayment.penalty_start_at ? String(openPayment.penalty_start_at).slice(0, 10) : 'по правилам'
@@ -699,7 +692,6 @@ export function LandlordDashboard() {
     setPenStartOpen(false)
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
-
   async function updatePaymentMethod(contractId: string, method: 'card' | 'cash' | 'both') {
     const updateData: any = { payment_method: method }
     if (method === 'cash') updateData.cash_slots = []
@@ -734,7 +726,6 @@ export function LandlordDashboard() {
     }
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
-
   const getNotificationText = (type: string) => {
     switch (type) {
       case 'payment_claimed': return '✅ Арендатор сообщил об оплате'
@@ -1066,7 +1057,7 @@ export function LandlordDashboard() {
               <button style={T.btn} onClick={() => confirmSigning(current.paymentId!)}>Подтвердить: первый месяц получен при подписании</button>
             </div>
           )}
-           {contract && current.paymentId && !current.payment?.confirmed_by_landlord && !firstMonthPending && (
+          {contract && current.paymentId && !current.payment?.confirmed_by_landlord && !firstMonthPending && (
             <div style={T.card}>
               <div style={T.h2}>Подтверждение оплаты · {pcMonth}</div>
               {pcPaid > 0 && (
@@ -1221,12 +1212,12 @@ export function LandlordDashboard() {
                 landlordId={current.landlord_id}
               />
             </div>
-                      {contract && tenantChoseCash && contract.tenant_in_app === false && (
+          )}
+          {contract && tenantChoseCash && contract.tenant_in_app === false && (
             <div style={T.card}>
               <div style={T.h2}>Оплата наличными</div>
               <div style={{ ...T.small, margin: '0 0 4px' }}>Арендатор не в приложении: окна встреч не согласуются. Получили деньги — нажмите «Получил оплату за месяц вне приложения» в карточке подтверждения, этого достаточно для учёта.</div>
             </div>
-          )}
           )}
           <div style={T.card}>
             <div style={T.h2}>История платежей</div>
@@ -1304,7 +1295,7 @@ export function LandlordDashboard() {
               <div style={T.row}><span style={iosMuted}>Баланс (переплата)</span><span style={valMoney}>{contractBalance.toFixed(0)} ₽</span></div>
             )}
             <div style={T.row}><span style={iosMuted}>Оплата</span><span style={valRight}>до {contract.payment_day} числа</span></div>
-                        <div style={T.row}>
+            <div style={T.row}>
               <span style={iosMuted}>Арендатор в приложении</span>
               <button style={actBlue} onClick={() => setTenantInApp(contract.tenant_in_app !== false)}>{contract.tenant_in_app === false ? 'нет · учёт без арендатора' : 'да'}</button>
             </div>
@@ -1521,7 +1512,7 @@ export function LandlordDashboard() {
         onClose={() => setDepModal(null)}
         onSubmit={(n) => doEditDeposit(n)}
       />
-            <Modal open={uniRenewOpen} title="Продление без арендатора" onClose={() => setUniRenewOpen(false)}>
+      <Modal open={uniRenewOpen} title="Продление без арендатора" onClose={() => setUniRenewOpen(false)}>
         <div style={{ fontSize: 15, color: '#555', marginBottom: 12 }}>Бумажное согласие есть, арендатора в приложении нет: создастся новый договор, старый уйдёт в архив с пометкой. Депозит и замороженные штрафы перенесутся.</div>
         <div style={{ fontSize: 13, color: '#8e8e93', margin: '4px 0 2px' }}>Аренда, ₽/мес</div>
         <input style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 17, boxSizing: 'border-box' }} value={uniRent} onChange={(e) => setUniRent(e.target.value)} inputMode="numeric" />
