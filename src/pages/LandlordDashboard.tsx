@@ -579,17 +579,20 @@ export function LandlordDashboard() {
     if (!fz || !contract) return
     const zero = fz.zero
     const note = fzNote.trim()
-    if (zero && !note) { showToast('Обнуление требует причину'); return }
-    let newAmount = zero ? 0 : Number(fzAmount)
-    if (!zero && (isNaN(newAmount) || newAmount < 0)) { showToast('Некорректная сумма'); return }
-    if (!zero && !note) { showToast('Изменение требует примечание'); return }
+    
+    if (zero && !note) { showToast('Укажите причину обнуления'); return }
+    
+    const newAmount = zero ? 0 : Number(fzAmount)
+    
     const { error } = await supabase.from('frozen_penalties').update({
-      amount: newAmount, adjusted_at: new Date().toISOString(),
-      adjusted_note: zero ? `обнулено: ${note}` : `изменено на ${newAmount.toFixed(0)}: ${note}`,
+      amount: newAmount,
+      adjusted_note: note,
+      adjusted_at: new Date().toISOString()
     }).eq('id', fz.id)
+    
     if (error) { showToast(errText(error)); return }
-    await supabase.from('notifications_log').insert({ user_id: contract.tenant_id, type: 'deferred_confirmed', related_id: contract.id, message: zero ? '🧊 Замороженный штраф обнулён' : `🧊 Замороженный штраф изменён: теперь ${newAmount.toFixed(0)} ₽`, sent_at: new Date().toISOString() })
-    showToast('✅ Сохранено')
+    
+    showToast('✅ Изменено')
     setFz(null)
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
