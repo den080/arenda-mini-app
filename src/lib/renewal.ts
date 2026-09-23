@@ -19,6 +19,7 @@ export async function markOffer(id: string, status: string) {
 
 // Принятие предложения: создаётся НОВЫЙ договор, старый уходит в архив,
 // депозит/замороженные штрафы/последние показания переносятся.
+// offer.id может быть null при одностороннем продлении без оффера.
 export async function acceptRenewal(offer: any, oldContract: any): Promise<{ error?: string }> {
   try {
     const startD = parseDate(offer.start_date)
@@ -46,7 +47,7 @@ export async function acceptRenewal(offer: any, oldContract: any): Promise<{ err
 
     const { data: rules } = await supabase.from('penalty_rules').select('*').eq('contract_id', oldContract.id)
     if (rules && rules.length) {
-    await supabase.from('penalty_rules').insert(rules.map((r: any) => ({ contract_id: nc.id, violation_type: r.violation_type, rate: r.rate, rate_unit: r.rate_unit, starts_after_days: r.starts_after_days })))
+      await supabase.from('penalty_rules').insert(rules.map((r: any) => ({ contract_id: nc.id, violation_type: r.violation_type, rate: r.rate, rate_unit: r.rate_unit, starts_after_days: r.starts_after_days })))
     }
 
     await supabase.from('frozen_penalties').update({ contract_id: nc.id }).eq('contract_id', oldContract.id)
@@ -66,7 +67,7 @@ export async function acceptRenewal(offer: any, oldContract: any): Promise<{ err
     await supabase.from('payments').insert({ contract_id: nc.id, period: toISO(periodD), due_date: toISO(due), base_amount: Number(offer.rent_amount) || Number(oldContract.rent_amount) || 0, penalty_amount: 0, utilities_amount: 0 })
 
     await supabase.from('contracts').update({ status: 'terminated', terminated_at: new Date().toISOString(), termination_note: `продлён новым договором с ${toISO(startD)}`, settlement: { deposit_carried: Number(oldContract.deposit_paid || 0), renewed_to: nc.id } }).eq('id', oldContract.id)
-    await supabase.from('renewal_offers').update({ status: 'accepted' }).eq('id', offer.id)
+    if (offer.id) await supabase.from('renewal_offers').update({ status: 'accepted' }).eq('id', offer.id)
     return {}
   } catch (e: any) {
     return { error: e?.message || 'Ошибка продления' }
