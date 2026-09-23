@@ -32,6 +32,8 @@ export interface Contract {
   reminder_days_before: number
   status: ContractStatus
   cash_slots: CashSlot[] | null
+  tenant_in_app?: boolean | null
+  cash_grace_days?: number | null
 }
 
 export interface MeterType {
