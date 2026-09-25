@@ -18,8 +18,8 @@ export function AmendmentWizard({ contractId, tenantId }: { contractId: string; 
   const [current, setCurrent] = useState<any>(null)
 
   useEffect(() => {
-    (async () => {
-      const { data: c } = await supabase.from('contracts').select('rent_amount, amendment_at, amendment_from').eq('id', contractId).maybeSingle()
+    ;(async () => {
+      const { data: c } = await supabase.from('contracts').select('rent_amount, amendment_at, amendment_from, amendment_seq').eq('id', contractId).maybeSingle()
       setCurrent(c || null)
       if (c) setRent(String(Number(c.rent_amount) || ''))
       const n = new Date()
@@ -46,11 +46,13 @@ export function AmendmentWizard({ contractId, tenantId }: { contractId: string; 
     setBusy(true)
     try {
       const fromPeriod = `${fromMonth}-01`
+      const nextSeq = (Number(current?.amendment_seq) || 0) + 1
       const { error: e1 } = await supabase.from('contracts').update({
         rent_amount: newRent,
         amendment_at: new Date().toISOString(),
         amendment_from: fromPeriod,
         amendment_note: note.trim() || null,
+        amendment_seq: nextSeq,
       }).eq('id', contractId)
       if (e1) { showToast('Ошибка: ' + e1.message); return }
       const { error: e2 } = await supabase.from('payments')
@@ -68,6 +70,7 @@ export function AmendmentWizard({ contractId, tenantId }: { contractId: string; 
       setOpen(false)
       setOk(false)
       setExpanded(false)
+      setCurrent((c: any) => (c ? { ...c, rent_amount: newRent, amendment_at: new Date().toISOString(), amendment_from: fromPeriod, amendment_seq: nextSeq } : c))
       window.dispatchEvent(new Event('rentflow-refresh'))
     } finally {
       setBusy(false)
