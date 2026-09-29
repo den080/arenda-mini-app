@@ -23,8 +23,8 @@ export function AmendmentWizard({ contractId, tenantId }: { contractId: string; 
       setCurrent(c || null)
       if (c) setRent(String(Number(c.rent_amount) || ''))
       const n = new Date()
-      const next = new Date(n.getFullYear(), n.getMonth() + 1, 1)
-      setFromMonth(`${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`)
+      const cur = new Date(n.getFullYear(), n.getMonth(), 1)
+      setFromMonth(`${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}`)
       setReady(true)
     })()
   }, [contractId])
@@ -99,10 +99,13 @@ export function AmendmentWizard({ contractId, tenantId }: { contractId: string; 
           <div style={{ ...T.small, margin: '4px 0 10px' }}>Новые суммы встанут в неоплаченные счета с выбранного месяца, оплаченная история не изменится.</div>
           <div style={{ fontSize: 15, margin: '8px 0 4px' }}>Новая аренда, ₽/мес</div>
           <input value={rent} onChange={(e) => setRent(e.target.value)} inputMode="numeric" style={inp} />
-          <div style={{ fontSize: 15, margin: '10px 0 4px' }}>Действует с месяца</div>
+          <div style={{ fontSize: 15, margin: '10px 0 4px' }}>Пересчитать счета начиная с месяца</div>
           <select value={fromMonth} onChange={(e) => setFromMonth(e.target.value)} style={inp}>
             {months.map(m => <option key={m.v} value={m.v}>{m.l}</option>)}
           </select>
+                    <div style={{ fontSize: 13, color: '#8e8e93', margin: '6px 0 0' }}>
+            Выберите месяц, за который счёт уже должен быть по новой сумме. Например: сумма изменилась с платежа 25 сентября → выбирайте «сентябрь 2026». Пересчитаются только неоплаченные счета этого месяца и далее.
+          </div>
           <div style={{ fontSize: 15, margin: '10px 0 4px' }}>Комментарий (необязательно)</div>
           <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Например: индексация по договору" style={inp} />
           <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0 6px' }}>
