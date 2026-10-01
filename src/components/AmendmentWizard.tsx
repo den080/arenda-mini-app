@@ -19,12 +19,20 @@ export function AmendmentWizard({ contractId, tenantId }: { contractId: string; 
 
   useEffect(() => {
     ;(async () => {
-      const { data: c } = await supabase.from('contracts').select('rent_amount, amendment_at, amendment_from, amendment_seq').eq('id', contractId).maybeSingle()
+      const { data: c } = await supabase
+        .from('contracts')
+        .select('rent_amount, amendment_at, amendment_from, amendment_seq')
+        .eq('id', contractId)
+        .maybeSingle()
       setCurrent(c || null)
       if (c) setRent(String(Number(c.rent_amount) || ''))
+      // Оплата авансом: до 15 числа ещё открыт счёт текущего месяца,
+      // с 16 числа изменение ставки идёт со следующего месяца
       const n = new Date()
-      const cur = new Date(n.getFullYear(), n.getMonth(), 1)
-      setFromMonth(`${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}`)
+      const d = n.getDate() <= 15
+        ? new Date(n.getFullYear(), n.getMonth(), 1)
+        : new Date(n.getFullYear(), n.getMonth() + 1, 1)
+      setFromMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
       setReady(true)
     })()
   }, [contractId])
@@ -103,8 +111,8 @@ export function AmendmentWizard({ contractId, tenantId }: { contractId: string; 
           <select value={fromMonth} onChange={(e) => setFromMonth(e.target.value)} style={inp}>
             {months.map(m => <option key={m.v} value={m.v}>{m.l}</option>)}
           </select>
-                    <div style={{ fontSize: 13, color: '#8e8e93', margin: '6px 0 0' }}>
-            Выберите месяц, за который счёт уже должен быть по новой сумме. Например: сумма изменилась с платежа 25 сентября → выбирайте «сентябрь 2026». Пересчитаются только неоплаченные счета этого месяца и далее.
+          <div style={{ fontSize: 13, color: '#8e8e93', margin: '6px 0 0' }}>
+            Оплата авансом: до 15 числа подставляется текущий месяц (его счёт ещё открыт), с 16 — следующий. Выберите месяц, за который счёт уже должен быть по новой сумме; пересчитаются только неоплаченные счета.
           </div>
           <div style={{ fontSize: 15, margin: '10px 0 4px' }}>Комментарий (необязательно)</div>
           <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Например: индексация по договору" style={inp} />
