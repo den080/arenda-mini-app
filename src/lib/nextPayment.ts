@@ -6,6 +6,7 @@ function clampDay(y: number, m: number, d: number): number { const last = new Da
 
 // Счета создаются НЕ РАНЬШЕ месяца начала и НЕ ПОЗЖЕ месяца ДО месяца окончания договора.
 // Счёт за месяц окончания появляется только после пролонгации.
+// Оплата АВАНСОМ: счёт за месяц M оплачивается до payment_day месяца M-1.
 export async function ensureNextPayment(contractId: string) {
   try {
     const { data: con } = await supabase.from('contracts').select('*').eq('id', contractId).maybeSingle()
@@ -41,12 +42,17 @@ export async function ensureNextPayment(contractId: string) {
       const base = parseDate(last.period)
       next = new Date(base.getFullYear(), base.getMonth() + 1, 1)
       if (firstPeriod && next.getTime() < firstPeriod.getTime()) return null
-      const maxPeriod = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+      // аванс: следующий счёт должен стать виден за месяц до своего срока оплаты,
+      // поэтому горизонт создания — два месяца вперёд от текущего
+      const maxPeriod = new Date(now.getFullYear(), now.getMonth() + 2, 1)
       if (next.getTime() > maxPeriod.getTime()) return null
     }
     if (lastPeriod && next.getTime() >= lastPeriod.getTime()) return null
 
-    const due = new Date(next.getFullYear(), next.getMonth(), clampDay(next.getFullYear(), next.getMonth(), Number(con.payment_day) || 1))
+    // срок оплаты АВАНСОМ: payment_day месяца, ПРЕДШЕСТВУЮЩЕГО месяцу счёта
+    const dueMonth = new Date(next.getFullYear(), next.getMonth() - 1, 1)
+    let due = new Date(dueMonth.getFullYear(), dueMonth.getMonth(), clampDay(dueMonth.getFullYear(), dueMonth.getMonth(), Number(con.payment_day) || 1))
+    if (sd && due.getTime() < sd.getTime()) due = sd
     const { error } = await supabase.from('payments').insert({
       contract_id: contractId,
       period: toISO(next),
