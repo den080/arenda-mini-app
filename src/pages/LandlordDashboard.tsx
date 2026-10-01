@@ -440,7 +440,10 @@ export function LandlordDashboard() {
       const { data: lastp } = await supabase.from('payments').select('*').eq('contract_id', contract.id).order('period', { ascending: false }).limit(1)
       const base = lastp && lastp[0] ? parseDate(lastp[0].period) : parseDate((contract as any).start_date || new Date().toISOString())
       const nextPeriod = new Date(base.getFullYear(), base.getMonth() + 1, 1)
-      const due = new Date(nextPeriod.getFullYear(), nextPeriod.getMonth(), clampDay(nextPeriod.getFullYear(), nextPeriod.getMonth(), Number(contract.payment_day) || 1))
+      const dueMonthU = new Date(nextPeriod.getFullYear(), nextPeriod.getMonth() - 1, 1)
+      const dueRaw = new Date(dueMonthU.getFullYear(), dueMonthU.getMonth(), clampDay(dueMonthU.getFullYear(), dueMonthU.getMonth(), Number(contract.payment_day) || 1))
+      const sdU = (contract as any).start_date ? parseDate((contract as any).start_date) : null
+      const due = sdU && dueRaw.getTime() < sdU.getTime() ? sdU : dueRaw
       const { error } = await supabase.from('payments').insert({
         contract_id: contract.id,
         period: toISO(nextPeriod),
