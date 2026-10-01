@@ -62,7 +62,8 @@ export async function acceptRenewal(offer: any, oldContract: any): Promise<{ err
     }
 
     const periodD = new Date(startD.getFullYear(), startD.getMonth(), 1)
-    let due = new Date(periodD.getFullYear(), periodD.getMonth(), clampDay(periodD.getFullYear(), periodD.getMonth(), Number(oldContract.payment_day) || 1))
+    const dueMonth = new Date(periodD.getFullYear(), periodD.getMonth() - 1, 1)
+    let due = new Date(dueMonth.getFullYear(), dueMonth.getMonth(), clampDay(dueMonth.getFullYear(), dueMonth.getMonth(), Number(oldContract.payment_day) || 1))
     if (due.getTime() < startD.getTime()) due = startD
     await supabase.from('payments').insert({ contract_id: nc.id, period: toISO(periodD), due_date: toISO(due), base_amount: Number(offer.rent_amount) || Number(oldContract.rent_amount) || 0, penalty_amount: 0, utilities_amount: 0 })
 
