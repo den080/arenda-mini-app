@@ -963,7 +963,7 @@ export function LandlordDashboard() {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f' }}>{o.address}</div>
                   <div style={{ fontSize: 13, color: o.statusColor || '#8e8e93', marginTop: 4 }}>
-                    {o.statusDetail}{o.amount > 0 ? ` · ${o.amount.toFixed(0)} ₽` : ''}
+                    {o.statusDetail}{o.amount > 0 ? ` · ${o.amount.toFixed(0)} ₽` : ''}{o.payment && !o.payment.confirmed_by_landlord ? ` · за ${parseDate(o.payment.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}` : ''}
                   </div>
                   {Number((o.contract as any)?.deposit_amount || 0) > 0 && (
                     <div style={{ fontSize: 12, color: '#8e8e93', marginTop: 2 }}>
@@ -1062,7 +1062,13 @@ export function LandlordDashboard() {
           )}
           {contract && current.paymentId && !current.payment?.confirmed_by_landlord && !firstMonthPending && (
             <div style={T.card}>
-              <div style={T.h2}>Подтверждение оплаты · {pcMonth}</div>
+              <div style={T.h2}>Подтверждение оплаты за {pcMonth}</div>
+{openPay && (
+  <div style={T.row}>
+    <span style={iosMuted}>Срок оплаты</span>
+    <span style={valRight}>до {parseDate(openPay.due_date).toLocaleDateString('ru-RU')}</span>
+  </div>
+)}
               {pcPaid > 0 && (
                 <div style={T.row}>
                   <span style={iosMuted}>Получено</span>
