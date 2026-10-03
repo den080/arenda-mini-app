@@ -1326,23 +1326,23 @@ export function LandlordDashboard() {
             )}
             <div style={T.row}><span style={iosMuted}>Оплата</span><span style={valRight}>до {contract.payment_day} числа</span></div>
             <div style={T.row}>
-            <div style={T.row}>
+<div style={T.row}>
   <span style={iosMuted}>Арендатор в приложении</span>
-  <span style={{ ...valRight, color: (contract as any).tenant && ((contract as any).tenant.email || (contract as any).tenant.telegram_id) ? '#34c759' : '#ff3b30', fontWeight: 700 }}>
-    {(contract as any).tenant && ((contract as any).tenant.email || (contract as any).tenant.telegram_id) ? 'да' : 'нет'}
+  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+    <span style={{ fontSize: 15, fontWeight: 700, color: (contract as any).tenant?.email || (contract as any).tenant?.telegram_id ? '#34c759' : '#ff3b30' }}>
+      {(contract as any).tenant?.email || (contract as any).tenant?.telegram_id ? '● подключён' : '● нет'}
+    </span>
+    <button style={actBlue} onClick={() => setTenantInApp(contract.tenant_in_app !== false)}>
+      {contract.tenant_in_app === false ? 'учёт без него' : 'переключить'}
+    </button>
   </span>
 </div>
-{(contract as any).tenant && ((contract as any).tenant.email || (contract as any).tenant.telegram_id) && (
-  <div style={T.row}>
+{(contract as any).tenant?.last_seen && (
+  <div style={{ ...T.row, borderBottom: 'none' }}>
     <span style={iosMuted}>Последний вход</span>
-    <span style={valRight}>
-      {(contract as any).tenant.last_seen
-        ? new Date((contract as any).tenant.last_seen).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
-        : 'ещё не заходил после подключения'}
-    </span>
+    <span style={valRight}>{new Date((contract as any).tenant.last_seen).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
   </div>
 )}
-              <button style={actBlue} onClick={() => setTenantInApp(contract.tenant_in_app !== false)}>{contract.tenant_in_app === false ? 'нет · учёт без арендатора' : 'да'}</button>
             </div>
             {deposit > 0 && (
               <div style={{ padding: '8px 0 4px' }}>
