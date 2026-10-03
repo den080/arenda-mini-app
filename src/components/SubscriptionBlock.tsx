@@ -41,38 +41,6 @@ export function SubscriptionBlock() {
 
   useEffect(() => { load() }, [user, teamId])
 
-  async function payPro() {
-    if (payBusy || !subOwnerId) return
-    setPayBusy(true)
-    try {
-      const { data: s } = await supabase.auth.getSession()
-      const r = await fetch('/api/create-payment', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(s?.session ? { Authorization: `Bearer ${s.session.access_token}` } : {}) },
-      })
-      const data = await r.json()
-      if (!r.ok || !data.data?.confirmation_url) { showToast('Ошибка оплаты: ' + (data.error?.message || 'не удалось создать платёж')); return }
-      const tg = (window as any).Telegram?.WebApp
-      if (tg && typeof tg.openLink === 'function') tg.openLink(data.confirmation_url)
-      else window.open(data.confirmation_url, '_blank')
-      showToast('После оплаты подписка включится автоматически')
-      startPolling()
-      setPayOpen(false)
-    } catch (e) {
-      showToast('Ошибка: ' + String(e))
-    } finally {
-      setPayBusy(false)
-    }
-  }
-
-  function startPolling() {
-    let tries = 0
-    const t = setInterval(async () => {
-      tries++
-      const activeNow = await load()
-      if (activeNow || tries > 40) clearInterval(t)
-    }, 5000)
-  }
 
   async function sendCheck(file: File) {
     if (busy || !user) return
@@ -91,7 +59,7 @@ export function SubscriptionBlock() {
         image_url: url,
       })
       if (error) { showToast('Ошибка: ' + error.message); return }
-      showToast('✅ Чек отправлен. Активация — в течение часа')
+      showToast('✅ Чек отправлен. Активация — после обработки платежа')
       setPayOpen(false)
     } catch (e) {
       showToast('Ошибка: ' + String(e))
@@ -127,24 +95,13 @@ export function SubscriptionBlock() {
         <div style={{ fontSize: 14, color: '#555', marginBottom: 10 }}>
           Pro — {PRO_PRICE} ₽/мес: объекты без лимита, совместный доступ, приоритетная поддержка. Free — 1 объект.
         </div>
-        <button
-          disabled={payBusy}
-          onClick={payPro}
-          style={{ width: '100%', padding: 13, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer', marginBottom: 8, opacity: payBusy ? 0.6 : 1 }}
-        >{payBusy ? 'Создание платежа…' : `Оплатить ${PRO_PRICE} ₽ (СБП / карта)`}</button>
-        <div style={{ ...T.tiny, margin: '0 0 10px', textAlign: 'center' }}>Оплата через ЮKassa. Подписка включится автоматически после оплаты.</div>
-        <div style={{ textAlign: 'center' }}>
-          <button style={S.blue} onClick={() => setManualOpen(!manualOpen)}>Оплатили вручную? Приложить чек</button>
-        </div>
-        {manualOpen && (
-          <div style={{ marginTop: 10 }}>
-            <div style={{ fontSize: 14, marginBottom: 8 }}>Перевод по СБП: <b>{SBP_PHONE}</b></div>
-            <label style={{ display: 'block', textAlign: 'center', padding: 12, borderRadius: 10, background: '#e8e8ed', fontWeight: 600, fontSize: 15, cursor: 'pointer' }}>
-              {busy ? 'Отправка…' : 'Приложить чек'}
-              <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) sendCheck(f); e.target.value = '' }} />
-            </label>
-          </div>
-        )}
+        <div style={{ fontSize: 15, fontWeight: 600, margin: '8px 0 4px' }}>Перевод по СБП</div>
+        <div style={{ fontSize: 17, fontWeight: 600, padding: '10px 12px', borderRadius: 10, background: 'rgba(120,120,128,0.08)', marginBottom: 8 }}>{SBP_PHONE}</div>
+        <div style={{ ...T.tiny, margin: '0 0 10px' }}>Сумма {PRO_PRICE} ₽. После перевода прикрепите чек — мы проверим и активируем подписку.</div>
+        <label style={{ display: 'block', textAlign: 'center', padding: 13, borderRadius: 10, background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>
+          {busy ? 'Отправка…' : 'Приложить чек'}
+          <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) sendCheck(f); e.target.value = '' }} />
+        </label>
         {isOwner && (
           <div style={{ marginTop: 16, borderTop: '1px solid rgba(60,60,67,0.12)', paddingTop: 10 }}>
             <div style={{ fontSize: 13, color: '#8e8e93', marginBottom: 6 }}>Ручные заявки ({requests.length})</div>
