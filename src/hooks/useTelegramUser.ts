@@ -10,7 +10,7 @@ export interface DbUser {
   telegram_id: string | null
   landlord_doc_name?: string | null
   created_at?: string
-  last_seen_at?: string | null
+  last_seen?: string | null
 }
 
 export function useTelegramUser() {
@@ -67,7 +67,7 @@ export function useTelegramUser() {
       }
 
       if (row) {
-        const upd: any = { last_seen_at: new Date().toISOString() }
+        const upd: any = { last_seen: new Date().toISOString() }
         if (email && !row.email) upd.email = email
         if (tgId && !row.telegram_id) upd.telegram_id = tgId
         if (Object.keys(upd).length > 1) {

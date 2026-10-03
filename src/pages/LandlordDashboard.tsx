@@ -1326,7 +1326,22 @@ export function LandlordDashboard() {
             )}
             <div style={T.row}><span style={iosMuted}>Оплата</span><span style={valRight}>до {contract.payment_day} числа</span></div>
             <div style={T.row}>
-              <span style={iosMuted}>Арендатор в приложении</span>
+              <div style={T.row}>
+  <span style={iosMuted}>Арендатор в приложении</span>
+  <span style={{ ...valRight, color: tenant && (tenant.email || tenant.telegram_id) ? '#34c759' : '#ff3b30', fontWeight: 700 }}>
+    {tenant && (tenant.email || tenant.telegram_id) ? 'да' : 'нет'}
+  </span>
+</div>
+{tenant && (tenant.email || tenant.telegram_id) && (
+  <div style={T.row}>
+    <span style={iosMuted}>Последний вход</span>
+    <span style={valRight}>
+      {tenant.last_seen
+        ? new Date(tenant.last_seen).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
+        : 'ещё не заходил после подключения'}
+    </span>
+  </div>
+)}
               <button style={actBlue} onClick={() => setTenantInApp(contract.tenant_in_app !== false)}>{contract.tenant_in_app === false ? 'нет · учёт без арендатора' : 'да'}</button>
             </div>
             {deposit > 0 && (
