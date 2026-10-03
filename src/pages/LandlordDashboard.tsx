@@ -784,7 +784,6 @@ export function LandlordDashboard() {
   const contractBalance = Number((contract as any)?.balance || 0)
   const sd = (contract as any)?.start_date ? parseDate((contract as any).start_date) : null
   const firstMonthPending = !!(contract && current?.payment && !current.payment.confirmed_by_landlord && isFirstPeriod(current.payment.period, sd))
-  const firstMonthCurrent = !!(contract && current?.payment && isFirstPeriod(current.payment.period, sd))
   const openPay = current?.payment && !current.payment.confirmed_by_landlord ? current.payment : null
   const lastConfirmedIsFirst = !!(contract && current?.payment && current.payment.confirmed_by_landlord && isFirstPeriod(current.payment.period, sd))
   const showUtilities = !!(contract && current?.paymentId && current.readingsMode !== 'self' && (openPay || lastConfirmedIsFirst))
