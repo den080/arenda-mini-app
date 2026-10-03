@@ -10,7 +10,6 @@ export function SubscriptionBlock() {
   const { user } = useTelegramUser()
   const { teamId } = useTeam()
   const [sub, setSub] = useState<any | null>(null)
-  const [subOwnerId, setSubOwnerId] = useState<string | null>(null)
   const [payOpen, setPayOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [payBusy, setPayBusy] = useState(false)
@@ -27,7 +26,6 @@ export function SubscriptionBlock() {
       const { data: t } = await supabase.from('teams').select('owner_id').eq('id', teamId).maybeSingle()
       if (t) owner = t.owner_id
     }
-    setSubOwnerId(owner)
     const { data: s } = await supabase.from('subscriptions').select('*').eq('owner_id', owner).order('until_date', { ascending: false }).maybeSingle()
     const today = iso(new Date())
     const active = !!(s && s.until_date >= today)
