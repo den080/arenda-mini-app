@@ -423,6 +423,16 @@ export function LandlordDashboard() {
       showToast(errText(error))
       return
     }
+    const { data: pay } = await supabase.from('payments').select('*').eq('id', paymentId).maybeSingle()
+    if (pay && contract) {
+      const total = Number(pay.base_amount || 0) + Number(pay.utilities_amount || 0) + Number(pay.penalty_amount || 0)
+      const month = parseDate(pay.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })
+      await supabase.from('notifications_log').insert({
+        user_id: contract.tenant_id, type: 'utilities_added', related_id: pay.id,
+        message: `📄 К счёту за ${month} добавлены ресурсы ${amount.toFixed(0)} ₽ — итого к оплате ${total.toFixed(0)} ₽`,
+        sent_at: new Date().toISOString(),
+      })
+    }
     setUtilSaved(`Ресурсы ${amount.toFixed(0)} ₽ добавлены к текущему платежу`)
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
@@ -745,6 +755,7 @@ export function LandlordDashboard() {
       case 'bill_confirmed': return '✅ Квитанция подтверждена'
       case 'contract_terminated': return '🏁 Договор завершён'
       case 'amendment': return '📝 Допсоглашение по аренде'
+      case 'utilities_added': return '📄 Ресурсы добавлены к счёту'
       case 'renewal_requested': return '🔄 Арендатор просит продлить договор'
       case 'renewal_offered': return '📨 Предложены условия продления'
       case 'renewal_accepted': return '🤝 Продление согласовано'
@@ -776,7 +787,7 @@ export function LandlordDashboard() {
   const firstMonthCurrent = !!(contract && current?.payment && isFirstPeriod(current.payment.period, sd))
   const openPay = current?.payment && !current.payment.confirmed_by_landlord ? current.payment : null
   const lastConfirmedIsFirst = !!(contract && current?.payment && current.payment.confirmed_by_landlord && isFirstPeriod(current.payment.period, sd))
-  const showUtilities = !!(contract && current?.paymentId && current.readingsMode !== 'self' && (openPay ? !firstMonthCurrent : lastConfirmedIsFirst))
+  const showUtilities = !!(contract && current?.paymentId && current.readingsMode !== 'self' && (openPay || lastConfirmedIsFirst))
   const tenantChoseCash = contract && (contract.payment_method === 'cash' || (contract.payment_method === 'both' && (contract as any).tenant_pay_method === 'cash'))
   const todayMid0 = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate())
   const daysToEnd = (contract as any)?.end_date ? Math.round((parseDate((contract as any).end_date).getTime() - todayMid0.getTime()) / 86400000) : null
@@ -1057,7 +1068,18 @@ export function LandlordDashboard() {
           {contract && firstMonthPending && (
             <div style={T.card}>
               <div style={T.h2}>Первый месяц</div>
-              <button style={T.btn} onClick={() => confirmSigning(current.paymentId!)}>Подтвердить: первый месяц получен при подписании</button>
+              <div style={T.row}><span style={iosMuted}>Аренда</span><span style={valMoney}>{Number(current.payment?.base_amount || 0).toFixed(0)} ₽</span></div>
+              {Number(current.payment?.utilities_amount || 0) > 0 && (
+                <div style={T.row}><span style={iosMuted}>Ресурсы по квитанции</span><span style={valMoney}>{Number(current.payment.utilities_amount).toFixed(0)} ₽</span></div>
+              )}
+              <div style={{ ...T.row, borderBottom: 'none' }}>
+                <span style={iosMuted}>Итого к получению</span>
+                <span style={valMoney}>{(Number(current.payment?.base_amount || 0) + Number(current.payment?.utilities_amount || 0) + Number(current.payment?.penalty_amount || 0)).toFixed(0)} ₽</span>
+              </div>
+              {Number(current.payment?.utilities_amount || 0) === 0 && (
+                <Hint text="При продлении арендатор уже тратил ресурсы: добавьте сумму по квитанции в карточке «Ресурсы по квитанции» ниже — она войдёт в итог первого месяца, арендатор получит уведомление." />
+              )}
+              <button style={T.btn} onClick={() => confirmSigning(current.paymentId!)}>Подтвердить: получено {(Number(current.payment?.base_amount || 0) + Number(current.payment?.utilities_amount || 0) + Number(current.payment?.penalty_amount || 0)).toFixed(0)} ₽ при подписании</button>
             </div>
           )}
           {contract && current.paymentId && !current.payment?.confirmed_by_landlord && !firstMonthPending && (
