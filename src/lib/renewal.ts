@@ -32,6 +32,18 @@ export async function markOffer(id: string, status: string) {
   await supabase.from('renewal_offers').update({ status }).eq('id', id)
 }
 
+export async function latestOffer(contractId: string): Promise<any | null> {
+  const { data } = await supabase
+    .from('renewal_offers')
+    .select('*')
+    .eq('contract_id', contractId)
+    .order('round', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  return data || null
+}
+
 export async function acceptRenewal(offer: RenewalOffer, oldContract: any): Promise<{ error?: string }> {
   try {
     if (!oldContract || !oldContract.id) return { error: 'договор не найден' }
