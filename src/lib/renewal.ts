@@ -4,73 +4,121 @@ function parseDate(d: any): Date { const [y, m, dd] = String(d).slice(0, 10).spl
 function toISO(d: Date): string { const m = String(d.getMonth() + 1).padStart(2, '0'); const dd = String(d.getDate()).padStart(2, '0'); return `${d.getFullYear()}-${m}-${dd}` }
 function clampDay(y: number, m: number, d: number): number { const last = new Date(y, m + 1, 0).getDate(); return Math.min(Math.max(1, d), last) }
 
-export async function latestOffer(contractId: string): Promise<any> {
-  const { data } = await supabase.from('renewal_offers').select('*').eq('contract_id', contractId).order('created_at', { ascending: false }).limit(1).maybeSingle()
-  return data
+export interface RenewalOffer {
+  id?: string | null
+  contract_id: string
+  offered_by: 'landlord' | 'tenant'
+  rent_amount: number
+  months: number
+  start_date: string
+  round: number
+  status?: string
 }
 
-export async function addOffer(o: { contract_id: string; offered_by: 'tenant' | 'landlord'; rent_amount: number; months: number; start_date: string; round: number }) {
-  return supabase.from('renewal_offers').insert({ ...o, status: 'proposed' })
+export async function addOffer(o: RenewalOffer) {
+  await supabase.from('renewal_offers').insert({
+    contract_id: o.contract_id,
+    offered_by: o.offered_by,
+    rent_amount: o.rent_amount,
+    months: o.months,
+    start_date: o.start_date,
+    round: o.round || 1,
+    status: 'proposed',
+  })
 }
 
 export async function markOffer(id: string, status: string) {
-  return supabase.from('renewal_offers').update({ status }).eq('id', id)
+  if (!id) return
+  await supabase.from('renewal_offers').update({ status }).eq('id', id)
 }
 
-// Принятие предложения: создаётся НОВЫЙ договор, старый уходит в архив,
-// депозит/замороженные штрафы/последние показания переносятся.
-// offer.id может быть null при одностороннем продлении без оффера.
-export async function acceptRenewal(offer: any, oldContract: any): Promise<{ error?: string }> {
+export async function acceptRenewal(offer: RenewalOffer, oldContract: any): Promise<{ error?: string }> {
   try {
+    if (!oldContract || !oldContract.id) return { error: 'договор не найден' }
+
+    // Защита от дублей: если по объекту уже есть другой активный «новый» договор — второй не создаём
+    const { data: dupActive } = await supabase
+      .from('contracts')
+      .select('id')
+      .eq('object_id', oldContract.object_id)
+      .eq('status', 'active')
+      .neq('id', oldContract.id)
+      .limit(1)
+    if (dupActive && dupActive.length > 0) {
+      return { error: 'Договор уже продлён: по объекту есть действующий новый договор' }
+    }
+
     const startD = parseDate(offer.start_date)
-    const months = Number(offer.months) || 11
-    const endD = new Date(startD.getFullYear(), startD.getMonth() + months, startD.getDate())
-    const { data: nc, error } = await supabase.from('contracts').insert({
+    const endD = new Date(startD.getFullYear(), startD.getMonth() + Number(offer.months || 11), startD.getDate())
+
+    // 1) Новый договор: условия копируются из старого, аренда — из предложения
+    const { data: newCon, error: e1 } = await supabase.from('contracts').insert({
       object_id: oldContract.object_id,
       tenant_id: oldContract.tenant_id,
       rent_amount: Number(offer.rent_amount) || Number(oldContract.rent_amount) || 0,
+      payment_day: oldContract.payment_day,
+      meter_deadline_day: oldContract.meter_deadline_day,
+      reminder_days_before: oldContract.reminder_days_before,
+      payment_method: oldContract.payment_method,
+      card_number: oldContract.card_number,
+      cash_slots: oldContract.cash_slots,
+      readings_mode: oldContract.readings_mode,
+      tenant_in_app: oldContract.tenant_in_app,
       deposit_amount: Number(oldContract.deposit_amount || 0),
       deposit_paid: Number(oldContract.deposit_paid || 0),
       balance: Number(oldContract.balance || 0),
-      payment_day: Number(oldContract.payment_day || 1),
-      meter_deadline_day: oldContract.meter_deadline_day ?? null,
-      readings_mode: oldContract.readings_mode || 'manual',
       start_date: toISO(startD),
       end_date: toISO(endD),
-      payment_method: oldContract.payment_method || 'both',
-      payment_details: oldContract.payment_details || [],
-      card_number: oldContract.card_number || null,
-      reminder_days_before: oldContract.reminder_days_before ?? 3,
       status: 'active',
-    }).select().single()
-    if (error) return { error: error.message }
+    }).select('*').maybeSingle()
+    if (e1 || !newCon) return { error: e1?.message || 'не удалось создать новый договор' }
 
-    const { data: rules } = await supabase.from('penalty_rules').select('*').eq('contract_id', oldContract.id)
-    if (rules && rules.length) {
-      await supabase.from('penalty_rules').insert(rules.map((r: any) => ({ contract_id: nc.id, violation_type: r.violation_type, rate: r.rate, rate_unit: r.rate_unit, starts_after_days: r.starts_after_days })))
-    }
+    // 2) Старый договор: завершён с пометкой «продлён», депозит и баланс перенесены (обнулены в старом)
+    const frozenTotal = await supabase.from('frozen_penalties').select('amount').eq('contract_id', oldContract.id)
+    const fSum = (frozenTotal.data || []).reduce((s: number, f: any) => s + Number(f.amount || 0), 0)
+    await supabase.from('contracts').update({
+      status: 'terminated',
+      terminated_at: new Date().toISOString(),
+      deposit_paid: 0,
+      balance: 0,
+      settlement: {
+        renewed_to: newCon.id,
+        deposit_paid: Number(oldContract.deposit_paid || 0),
+        frozen_total: fSum,
+        result: 0,
+      },
+    }).eq('id', oldContract.id)
 
-    await supabase.from('frozen_penalties').update({ contract_id: nc.id }).eq('contract_id', oldContract.id)
-    await supabase.from('deferred_debts').update({ contract_id: nc.id }).eq('contract_id', oldContract.id)
+    // 3) Замороженные штрафы переезжают в новый договор
+    await supabase.from('frozen_penalties').update({ contract_id: newCon.id }).eq('contract_id', oldContract.id)
 
-    const { data: meters } = await supabase.from('object_meters').select('id').eq('object_id', oldContract.object_id).eq('is_active', true)
-    for (const m of meters || []) {
-      const { data: last } = await supabase.from('meter_readings').select('*').eq('object_meter_id', m.id).eq('contract_id', oldContract.id).order('submitted_at', { ascending: false }).limit(1).maybeSingle()
-      if (last) {
-        await supabase.from('meter_readings').insert({ object_meter_id: m.id, contract_id: nc.id, value: last.value, period: `${startD.getFullYear()}-${String(startD.getMonth() + 1).padStart(2, '0')}-01`, submitted_at: new Date().toISOString(), status: 'confirmed' })
+    // 4) Убираем открытые «будущие» счета старого договора (новый создаст свои)
+    const { data: oldPays } = await supabase.from('payments').select('*').eq('contract_id', oldContract.id)
+    for (const p of oldPays || []) {
+      if (!p.confirmed_by_landlord && Number(p.paid_amount || 0) === 0 && !p.card_claimed) {
+        await supabase.from('payments').delete().eq('id', p.id)
       }
     }
 
+    // 5) Первый счёт нового договора: авансовый срок — payment_day предыдущего месяца, но не раньше старта
     const periodD = new Date(startD.getFullYear(), startD.getMonth(), 1)
     const dueMonth = new Date(periodD.getFullYear(), periodD.getMonth() - 1, 1)
     let due = new Date(dueMonth.getFullYear(), dueMonth.getMonth(), clampDay(dueMonth.getFullYear(), dueMonth.getMonth(), Number(oldContract.payment_day) || 1))
     if (due.getTime() < startD.getTime()) due = startD
-    await supabase.from('payments').insert({ contract_id: nc.id, period: toISO(periodD), due_date: toISO(due), base_amount: Number(offer.rent_amount) || Number(oldContract.rent_amount) || 0, penalty_amount: 0, utilities_amount: 0 })
+    await supabase.from('payments').insert({
+      contract_id: newCon.id,
+      period: toISO(periodD),
+      due_date: toISO(due),
+      base_amount: Number(offer.rent_amount) || Number(oldContract.rent_amount) || 0,
+      penalty_amount: 0,
+      utilities_amount: 0,
+    })
 
-    await supabase.from('contracts').update({ status: 'terminated', terminated_at: new Date().toISOString(), termination_note: `продлён новым договором с ${toISO(startD)}`, settlement: { deposit_carried: Number(oldContract.deposit_paid || 0), renewed_to: nc.id } }).eq('id', oldContract.id)
-    if (offer.id) await supabase.from('renewal_offers').update({ status: 'accepted' }).eq('id', offer.id)
+    // 6) Предложение помечаем принятым
+    if (offer.id) await markOffer(offer.id, 'accepted')
+
     return {}
   } catch (e: any) {
-    return { error: e?.message || 'Ошибка продления' }
+    return { error: String(e?.message || e) }
   }
 }
