@@ -174,8 +174,8 @@ export function LandlordDashboard() {
         if (!objectsData || objectsData.length === 0) { setObjects([]); setHistory([]); setLoading(false); return }
         const objIds = objectsData.map((o: any) => o.id)
         const { data: contractsData } = await supabase
-          .from('contracts').select('*, tenant:users!tenant_id(full_name, phone, email)')
-          .in('object_id', objIds).eq('status', 'active')
+  .from('contracts').select('*, tenant:users!tenant_id(full_name, phone, email, telegram_id, last_seen)')
+  .in('object_id', objIds).eq('status', 'active')
         const contractByObj: Record<string, any> = {}
         for (const c of contractsData || []) contractByObj[c.object_id] = c
         const contractIds = (contractsData || []).map((c: any) => c.id)
@@ -1326,18 +1326,18 @@ export function LandlordDashboard() {
             )}
             <div style={T.row}><span style={iosMuted}>Оплата</span><span style={valRight}>до {contract.payment_day} числа</span></div>
             <div style={T.row}>
-              <div style={T.row}>
+            <div style={T.row}>
   <span style={iosMuted}>Арендатор в приложении</span>
-  <span style={{ ...valRight, color: tenant && (tenant.email || tenant.telegram_id) ? '#34c759' : '#ff3b30', fontWeight: 700 }}>
-    {tenant && (tenant.email || tenant.telegram_id) ? 'да' : 'нет'}
+  <span style={{ ...valRight, color: (contract as any).tenant && ((contract as any).tenant.email || (contract as any).tenant.telegram_id) ? '#34c759' : '#ff3b30', fontWeight: 700 }}>
+    {(contract as any).tenant && ((contract as any).tenant.email || (contract as any).tenant.telegram_id) ? 'да' : 'нет'}
   </span>
 </div>
-{tenant && (tenant.email || tenant.telegram_id) && (
+{(contract as any).tenant && ((contract as any).tenant.email || (contract as any).tenant.telegram_id) && (
   <div style={T.row}>
     <span style={iosMuted}>Последний вход</span>
     <span style={valRight}>
-      {tenant.last_seen
-        ? new Date(tenant.last_seen).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
+      {(contract as any).tenant.last_seen
+        ? new Date((contract as any).tenant.last_seen).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
         : 'ещё не заходил после подключения'}
     </span>
   </div>
