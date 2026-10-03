@@ -1,14 +1,11 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useTelegramUser } from '../hooks/useTelegramUser'
-import { useTeam } from '../hooks/useTeam'
-import { T } from '../theme'
 import { Modal, showToast } from './ui'
 import { OWNER_PHONE, PRO_PRICE, SBP_PHONE, S, normalizePhone, iso, compress } from './objectShared'
 
 export function SubscriptionBlock() {
   const { user } = useTelegramUser()
-  const { teamId } = useTeam()
   const [sub, setSub] = useState<any | null>(null)
   const [payOpen, setPayOpen] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -22,10 +19,6 @@ export function SubscriptionBlock() {
   async function load(): Promise<boolean> {
     if (!user) return false
     let owner = user.id
-    if (teamId) {
-      const { data: t } = await supabase.from('teams').select('owner_id').eq('id', teamId).maybeSingle()
-      if (t) owner = t.owner_id
-    }
     const { data: s } = await supabase.from('subscriptions').select('*').eq('owner_id', owner).order('until_date', { ascending: false }).maybeSingle()
     const today = iso(new Date())
     const active = !!(s && s.until_date >= today)
