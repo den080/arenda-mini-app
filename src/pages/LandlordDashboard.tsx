@@ -65,6 +65,7 @@ export function LandlordDashboard() {
   const teamRole: string | null = teamHook.role ?? null
   const SHOW_POOLS = false
   const SHOW_MASS = false
+
   const [objects, setObjects] = useState<ObjectWithStatus[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -114,6 +115,7 @@ export function LandlordDashboard() {
     setUtilSaved(null)
     setHistOpen(false)
   }, [openId])
+
   useEffect(() => {
     if (!openId) return
     ;(async () => {
@@ -122,6 +124,7 @@ export function LandlordDashboard() {
       setRenewForm(false)
     })()
   }, [openId])
+
   useEffect(() => {
     if (!user) return
     ;(async () => {
@@ -141,6 +144,7 @@ export function LandlordDashboard() {
       setShowTeam(pro || priv)
     })()
   }, [user, teamId])
+
   useEffect(() => {
     if (!archiveId) return
     ;(async () => {
@@ -152,11 +156,13 @@ export function LandlordDashboard() {
       setArchiveFrozen(f.data || [])
     })()
   }, [archiveId])
+
   useEffect(() => {
     const go = () => setOpenId(null)
     window.addEventListener('rentflow-archive-done', go)
     return () => window.removeEventListener('rentflow-archive-done', go)
   }, [])
+
   useEffect(() => {
     if (!user) return
     async function fetchData() {
@@ -174,8 +180,8 @@ export function LandlordDashboard() {
         if (!objectsData || objectsData.length === 0) { setObjects([]); setHistory([]); setLoading(false); return }
         const objIds = objectsData.map((o: any) => o.id)
         const { data: contractsData } = await supabase
-  .from('contracts').select('*, tenant:users!tenant_id(full_name, phone, email, telegram_id, last_seen)')
-  .in('object_id', objIds).eq('status', 'active')
+          .from('contracts').select('*, tenant:users!tenant_id(full_name, phone, email, telegram_id, last_seen)')
+          .in('object_id', objIds).eq('status', 'active')
         const contractByObj: Record<string, any> = {}
         for (const c of contractsData || []) contractByObj[c.object_id] = c
         const contractIds = (contractsData || []).map((c: any) => c.id)
@@ -350,6 +356,7 @@ export function LandlordDashboard() {
     const interval = setInterval(() => fetchData(), 30000)
     return () => { window.removeEventListener('rentflow-refresh', onRefresh); clearInterval(interval) }
   }, [user, teamId, pool])
+
   useEffect(() => {
     if (user) { setAnalyticsUser(user); trackOpen('landlord') }
   }, [user])
@@ -371,6 +378,7 @@ export function LandlordDashboard() {
   function canUndo(h: any): boolean {
     return !!h.confirmed_by_landlord && !!h.confirmed_at && (Date.now() - new Date(h.confirmed_at).getTime()) < 24 * 3600 * 1000
   }
+
   async function undoConfirm(paymentId: string) {
     const { data: pay } = await supabase.from('payments').select('*').eq('id', paymentId).maybeSingle()
     if (!pay) { setUndoId(null); return }
@@ -391,6 +399,7 @@ export function LandlordDashboard() {
     setUndoId(null)
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
+
   async function deleteArchivedContract() {
     if (!arch) return
     const { error } = await supabase.from('objects').update({ status: 'archived' }).eq('id', arch.object_id)
@@ -400,6 +409,7 @@ export function LandlordDashboard() {
     setArchiveId(null)
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
+
   function receiptText(h: any): string {
     const month = parseDate(h.period).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })
     const sum = Number(h.base_amount || 0) + Number(h.penalty_amount || 0) + Number(h.utilities_amount || 0)
@@ -408,6 +418,7 @@ export function LandlordDashboard() {
     const dateStr = new Date(h.confirmed_at || Date.now()).toLocaleDateString('ru-RU')
     return `РАСПИСКА\n${dateStr}\nЯ, ${landlordName}, получил от ${tenantName} сумму ${sum.toFixed(0)} ₽ в счёт оплаты аренды за ${month} по объекту: ${current?.address || h.address}. Оплата произведена наличными. Претензий по оплате не имею.`
   }
+
   async function copyReceipt(h: any) {
     try {
       await navigator.clipboard.writeText(receiptText(h))
@@ -416,6 +427,7 @@ export function LandlordDashboard() {
       showToast('Не удалось скопировать')
     }
   }
+
   async function saveUtilities(paymentId: string, value: string) {
     const amount = Number(String(value).replace(',', '.')) || 0
     const { error } = await supabase.from('payments').update({ utilities_amount: amount }).eq('id', paymentId)
@@ -436,6 +448,7 @@ export function LandlordDashboard() {
     setUtilSaved(`Ресурсы ${amount.toFixed(0)} ₽ добавлены к текущему платежу`)
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
+
   async function saveUtilitiesNext(value: string) {
     if (!contract) return
     const amount = Number(String(value).replace(',', '.')) || 0
@@ -471,6 +484,7 @@ export function LandlordDashboard() {
     if (current) setUtilInputs(prev => ({ ...prev, [current.id]: String(amount) }))
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
+
   async function recordReceipt(amount: number) {
     if (!contract || !current?.paymentId) return
     if (isNaN(amount) || amount <= 0) { showToast('Некорректная сумма'); return }
@@ -506,6 +520,7 @@ export function LandlordDashboard() {
     }
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
+
   async function confirmSigning(paymentId: string) {
     const { data: pay0 } = await supabase.from('payments').select('*').eq('id', paymentId).maybeSingle()
     if (!pay0) { showToast('Платёж не найден'); return }
@@ -525,6 +540,7 @@ export function LandlordDashboard() {
     }
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
+
   async function confirmSelected() {
     const chosen = openList.filter(o => massSel[o.id] && Number(o.payment.paid_amount || 0) === 0)
     if (chosen.length === 0) { showToast('Отметьте полученные оплаты'); return }
@@ -556,6 +572,7 @@ export function LandlordDashboard() {
       window.dispatchEvent(new Event('rentflow-refresh'))
     } finally { setMassBusy(false) }
   }
+
   async function doAddDeposit(amount: number) {
     if (!contract) return
     if (deposit <= 0) { showToast('Сначала укажите общую сумму депозита'); return }
@@ -565,6 +582,7 @@ export function LandlordDashboard() {
     showToast('✅ Платёж по депозиту внесён')
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
+
   async function doEditDeposit(v: number) {
     if (!contract) return
     if (isNaN(v) || v < 0) { showToast('Некорректное значение'); return }
@@ -573,6 +591,7 @@ export function LandlordDashboard() {
     showToast('✅ Депозит обновлён')
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
+
   async function setPoolShare(share: boolean) {
     if (!current) return
     const teamToSet = share ? ((pools.find((p: any) => p.id !== 'own') || null)?.id || null) : null
@@ -582,12 +601,14 @@ export function LandlordDashboard() {
     showToast(share ? '✅ Объект добавлен в пул — команда его видит' : '✅ Объект убран из пула — виден только вам')
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
+
   function openAdjust(id: string, zero: boolean) {
     const row = (current?.frozenRows || []).find((f: any) => f.id === id)
     setFzAmount(row ? String(row.amount) : '')
     setFzNote('')
     setFz({ id, zero })
   }
+
   async function confirmAdjust() {
     if (!fz || !contract) return
     const zero = fz.zero
@@ -604,6 +625,7 @@ export function LandlordDashboard() {
     setFz(null)
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
+
   async function confirmDeferral(requestId: string, contractId: string, paymentId: string, amount: number, tenantId: string) {
     const { data: pay } = await supabase.from('payments').select('*').eq('id', paymentId).maybeSingle()
     const { error: e1 } = await supabase.from('frozen_penalties').insert({ contract_id: contractId, payment_id: paymentId, period: pay ? pay.period : null, amount, original_amount: amount, note: 'отсрочка штрафа подтверждена' })
@@ -617,6 +639,7 @@ export function LandlordDashboard() {
     showToast('✅ Отсрочка подтверждена')
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
+
   async function freezePenalty(paymentId: string) {
     const { data: pay } = await supabase.from('payments').select('*').eq('id', paymentId).maybeSingle()
     if (!pay) return
@@ -630,6 +653,7 @@ export function LandlordDashboard() {
     showToast('✅ Штраф заморожен')
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
+
   async function landlordSendOffer() {
     if (!contract) return
     const rentN = Number(String(offRent).replace(',', '.'))
@@ -644,6 +668,7 @@ export function LandlordDashboard() {
     setRenewOffer(data)
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
+
   async function landlordAccept() {
     if (!contract || !renewOffer) return
     const res = await acceptRenewal(renewOffer, contract)
@@ -652,6 +677,7 @@ export function LandlordDashboard() {
     showToast('✅ Договор продлён')
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
+
   async function landlordDecline() {
     if (!contract || !renewOffer) return
     await markOffer(renewOffer.id, 'declined')
@@ -659,6 +685,7 @@ export function LandlordDashboard() {
     showToast('✅ Продление отклонено')
     setRenewOffer({ ...renewOffer, status: 'declined' })
   }
+
   function openRenewForm() {
     if (!contract) return
     setOffRent(String(contract.rent_amount))
@@ -668,6 +695,7 @@ export function LandlordDashboard() {
     setOffStart(`${ds.getFullYear()}-${String(ds.getMonth() + 1).padStart(2, '0')}-${String(ds.getDate()).padStart(2, '0')}`)
     setRenewForm(true)
   }
+
   async function setTenantInApp(makeOff: boolean) {
     if (!contract) return
     const val = makeOff ? false : true
@@ -676,6 +704,7 @@ export function LandlordDashboard() {
     showToast(val ? '✅ Учёт без арендатора: доступны односторонние действия' : '✅ Арендатор снова считается пользователем приложения')
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
+
   async function unilateralRenew() {
     if (!contract) return
     const rentN = Number(String(uniRent).replace(',', '.'))
@@ -689,6 +718,7 @@ export function LandlordDashboard() {
     setUniRenewOpen(false)
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
+
   async function savePenaltyStart(value: string | null) {
     if (!contract || !openPayment) return
     const stamp = new Date().toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
@@ -705,6 +735,7 @@ export function LandlordDashboard() {
     setPenStartOpen(false)
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
+
   async function updatePaymentMethod(contractId: string, method: 'card' | 'cash' | 'both') {
     const updateData: any = { payment_method: method }
     if (method === 'cash') updateData.cash_slots = []
@@ -714,6 +745,7 @@ export function LandlordDashboard() {
       setObjects(prev => prev.map(o => o.contract?.id === contractId ? { ...o, contract: { ...o.contract!, payment_method: method, cash_slots: method === 'cash' ? [] : (o.contract as any).cash_slots } } : o))
     } else showToast(errText(error))
   }
+
   async function confirmChannel(paymentId: string, channel: 'card' | 'cash', close: boolean = false) {
     const { data: pay } = await supabase.from('payments').select('*').eq('id', paymentId).maybeSingle()
     if (!pay) { showToast('Платёж не найден'); return }
@@ -739,6 +771,7 @@ export function LandlordDashboard() {
     }
     window.dispatchEvent(new Event('rentflow-refresh'))
   }
+
   const getNotificationText = (type: string) => {
     switch (type) {
       case 'payment_claimed': return '✅ Арендатор сообщил об оплате'
@@ -1085,12 +1118,12 @@ export function LandlordDashboard() {
           {contract && current.paymentId && !current.payment?.confirmed_by_landlord && !firstMonthPending && (
             <div style={T.card}>
               <div style={T.h2}>Подтверждение оплаты за {pcMonth}</div>
-{openPay && (
-  <div style={T.row}>
-    <span style={iosMuted}>Срок оплаты</span>
-    <span style={valRight}>до {parseDate(openPay.due_date).toLocaleDateString('ru-RU')}</span>
-  </div>
-)}
+              {openPay && (
+                <div style={T.row}>
+                  <span style={iosMuted}>Срок оплаты</span>
+                  <span style={valRight}>до {parseDate(openPay.due_date).toLocaleDateString('ru-RU')}</span>
+                </div>
+              )}
               {pcPaid > 0 && (
                 <div style={T.row}>
                   <span style={iosMuted}>Получено</span>
@@ -1326,27 +1359,32 @@ export function LandlordDashboard() {
               <div style={T.row}><span style={iosMuted}>Баланс (переплата)</span><span style={valMoney}>{contractBalance.toFixed(0)} ₽</span></div>
             )}
             <div style={T.row}><span style={iosMuted}>Оплата</span><span style={valRight}>до {contract.payment_day} числа</span></div>
-            <div style={T.row}>
-{/* Блок 1: Статус подключения */}
-<div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 0', borderBottom: '1px solid rgba(60,60,67,0.12)' }}>
-  <span style={{ width: 8, height: 8, borderRadius: '50%', background: (contract as any).tenant?.email || (contract as any).tenant?.telegram_id ? '#34c759' : '#ff3b30', flexShrink: 0 }} />
-  <span style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f' }}>
-    Арендатор {(contract as any).tenant?.email || (contract as any).tenant?.telegram_id ? 'подключён' : 'не подключён'}
-  </span>
-</div>
 
-{/* Блок 2: Управление доступом + последний вход */}
-<div style={{ padding: '10px 0', borderBottom: 'none' }}>
-  <button style={{ ...actBlue, alignSelf: 'flex-start' }} onClick={() => setTenantInApp(contract.tenant_in_app !== false)}>
-    {contract.tenant_in_app === false ? 'Включить учёт через приложение' : 'Отключить учёт через приложение'}
-  </button>
-  {(contract as any).tenant?.last_seen && (
-    <div style={{ fontSize: 12, color: '#8e8e93', marginTop: 4 }}>
-      Последний вход: {new Date((contract as any).tenant.last_seen).toLocaleString('ru-RU', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
-    </div>
-  )}
-</div>
+            {/* Строка 1: Режим учёта (главный переключатель) */}
+            <div style={{ ...T.row, borderBottom: '1px solid rgba(60,60,67,0.12)', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: contract.tenant_in_app === false ? '#ff9500' : '#34c759', flexShrink: 0 }} />
+                <span style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f' }}>
+                  {contract.tenant_in_app === false ? 'Учёт без арендатора' : 'Арендатор ведёт учёт'}
+                </span>
+              </div>
+              <button style={actBlue} onClick={() => setTenantInApp(contract.tenant_in_app !== false)}>
+                {contract.tenant_in_app === false ? 'включить' : 'отключить'}
+              </button>
             </div>
+
+            {/* Строка 2: Подключение к приложению (справочная информация) */}
+            <div style={{ ...T.row, borderBottom: 'none', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={iosMuted}>Подключение к приложению</span>
+              <span style={{ fontSize: 15, fontWeight: 600, color: (contract as any).tenant?.email || (contract as any).tenant?.telegram_id ? '#34c759' : '#8e8e93' }}>
+                {(contract as any).tenant?.email || (contract as any).tenant?.telegram_id
+                  ? ((contract as any).tenant?.last_seen
+                      ? new Date((contract as any).tenant.last_seen).toLocaleString('ru-RU', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+                      : 'подключён · ещё не заходил')
+                  : 'не подключён'}
+              </span>
+            </div>
+
             {deposit > 0 && (
               <div style={{ padding: '8px 0 4px' }}>
                 <Progress value={depositPaid} max={deposit} />
