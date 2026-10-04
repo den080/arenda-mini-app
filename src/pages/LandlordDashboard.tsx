@@ -171,10 +171,21 @@ export function LandlordDashboard() {
         const todayMid = new Date(today.getFullYear(), today.getMonth(), today.getDate())
         const currentMonth = today.getMonth()
         const currentYear = today.getFullYear()
-        const [notifRes, objRes] = await Promise.all([
-          supabase.from('notifications_log').select('*').eq('user_id', user!.id).order('sent_at', { ascending: false }).limit(5),
-          supabase.from('objects').select('*').eq(teamId ? 'team_id' : 'landlord_id', (teamId || user!.id) as string).neq('status', 'archived'),
-        ])
+// Определяем владельца объектов: если есть команда — берём owner_id из teams, иначе текущего пользователя
+let ownerId = user!.id
+if (teamId) {
+  const { data: t } = await supabase.from('teams').select('owner_id').eq('id', teamId).maybeSingle()
+  if (t?.owner_id) ownerId = t.owner_id
+}
+
+const [notifRes, objRes] = await Promise.all([
+  supabase.from('notifications_log').select('*').eq('user_id', user!.id).order('sent_at', { ascending: false }).limit(5),
+  // Показываем ВСЕ объекты владельца (личные + командные), а не только те, что уже привязаны к team_id
+  supabase.from('objects')
+    .select('*')
+    .or(`landlord_id.eq.${ownerId},team_id.eq.${teamId || ''}`)
+    .neq('status', 'archived'),
+])
         if (notifRes.data) setNotifications(notifRes.data)
         const objectsData = objRes.data
         if (!objectsData || objectsData.length === 0) { setObjects([]); setHistory([]); setLoading(false); return }
