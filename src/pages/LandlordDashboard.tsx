@@ -1327,23 +1327,25 @@ export function LandlordDashboard() {
             )}
             <div style={T.row}><span style={iosMuted}>Оплата</span><span style={valRight}>до {contract.payment_day} числа</span></div>
             <div style={T.row}>
-<div style={T.row}>
-  <span style={iosMuted}>Арендатор в приложении</span>
-  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-    <span style={{ fontSize: 15, fontWeight: 700, color: (contract as any).tenant?.email || (contract as any).tenant?.telegram_id ? '#34c759' : '#ff3b30' }}>
-      {(contract as any).tenant?.email || (contract as any).tenant?.telegram_id ? '● подключён' : '● нет'}
-    </span>
-    <button style={actBlue} onClick={() => setTenantInApp(contract.tenant_in_app !== false)}>
-      {contract.tenant_in_app === false ? 'учёт без него' : 'переключить'}
-    </button>
+{/* Блок 1: Статус подключения */}
+<div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 0', borderBottom: '1px solid rgba(60,60,67,0.12)' }}>
+  <span style={{ width: 8, height: 8, borderRadius: '50%', background: (contract as any).tenant?.email || (contract as any).tenant?.telegram_id ? '#34c759' : '#ff3b30', flexShrink: 0 }} />
+  <span style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f' }}>
+    Арендатор {(contract as any).tenant?.email || (contract as any).tenant?.telegram_id ? 'подключён' : 'не подключён'}
   </span>
 </div>
-{(contract as any).tenant?.last_seen && (
-  <div style={{ ...T.row, borderBottom: 'none' }}>
-    <span style={iosMuted}>Последний вход</span>
-    <span style={valRight}>{new Date((contract as any).tenant.last_seen).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
-  </div>
-)}
+
+{/* Блок 2: Управление доступом + последний вход */}
+<div style={{ padding: '10px 0', borderBottom: 'none' }}>
+  <button style={{ ...actBlue, alignSelf: 'flex-start' }} onClick={() => setTenantInApp(contract.tenant_in_app !== false)}>
+    {contract.tenant_in_app === false ? 'Включить учёт через приложение' : 'Отключить учёт через приложение'}
+  </button>
+  {(contract as any).tenant?.last_seen && (
+    <div style={{ fontSize: 12, color: '#8e8e93', marginTop: 4 }}>
+      Последний вход: {new Date((contract as any).tenant.last_seen).toLocaleString('ru-RU', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+    </div>
+  )}
+</div>
             </div>
             {deposit > 0 && (
               <div style={{ padding: '8px 0 4px' }}>
