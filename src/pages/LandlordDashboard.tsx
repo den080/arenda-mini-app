@@ -756,6 +756,7 @@ export function LandlordDashboard() {
       case 'contract_terminated': return '🏁 Договор завершён'
       case 'amendment': return '📝 Допсоглашение по аренде'
       case 'utilities_added': return '📄 Ресурсы добавлены к счёту'
+      case 'tenant_linked': return '🔗 Арендатор подключился к договору'
       case 'renewal_requested': return '🔄 Арендатор просит продлить договор'
       case 'renewal_offered': return '📨 Предложены условия продления'
       case 'renewal_accepted': return '🤝 Продление согласовано'
