@@ -1,121 +1,275 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useTelegramUser } from '../hooks/useTelegramUser'
-import { useTeam } from '../hooks/useTeam'
 import { T } from '../theme'
-import { showToast, ConfirmDelete, Hint } from './ui'
+import { showToast, errText, ConfirmDelete, Modal } from './ui'
 
-const ROLE_LABEL: Record<string, string> = { owner: 'Владелец', manager: 'Менеджер', viewer: 'Наблюдатель' }
-const iosBlue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: 4, flexShrink: 0 }
-const iosRed: React.CSSProperties = { border: 'none', background: 'transparent', color: '#ff3b30', fontSize: 15, cursor: 'pointer', padding: 4, flexShrink: 0 }
-const hair = { height: 1, background: 'rgba(60,60,67,0.12)' } as React.CSSProperties
-const head: React.CSSProperties = { fontSize: 13, color: '#8e8e93', margin: '14px 16px 6px', textTransform: 'uppercase', letterSpacing: 0.3 }
+interface MemberRow {
+  user_id: string
+  full_name: string | null
+  phone: string | null
+  email: string | null
+  role: string | null
+  joined_at?: string | null
+}
 
 export function TeamManager() {
   const { user } = useTelegramUser()
-  const { teamId, role, members, refresh, selectPool } = useTeam()
-  const [phone, setPhone] = useState('')
+  const [members, setMembers] = useState<MemberRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [ownerInfo, setOwnerInfo] = useState<{ id: string; full_name: string | null; phone: string | null } | null>(null)
+  const [newPhone, setNewPhone] = useState('')
+  const [newName, setNewName] = useState('')
   const [newRole, setNewRole] = useState<'manager' | 'viewer'>('manager')
-  const [del, setDel] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [removeId, setRemoveId] = useState<string | null>(null)
+  const [teamId, setTeamId] = useState<string | null>(null)
+  const [showDetails, setShowDetails] = useState(false)
 
-  if (role === 'manager' || role === 'viewer') {
-    return (
-      <div>
-        <div style={head}>Доступ</div>
-        <div style={T.card}>
-          <div style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f', margin: '12px 0 2px' }}>Совместный доступ</div>
-          <div style={{ ...T.row, borderBottom: 'none' }}>
-            <span style={{ fontSize: 15 }}>Вы подключены как </span>
-            <b>{ROLE_LABEL[role] || role}</b>
-          </div>
-        </div>
-      </div>
-    )
+  // === ГЛАВНЫЙ ФИКС: определяем или создаём ЕДИНСТВЕННУЮ команду владельца ===
+  async function resolveOrCreateTeam(ownerUid: string): Promise<string | null> {
+    try {
+      // Шаг 1: ищем любую существующую команду этого владельца
+      const { data: existing, error: e1 } = await supabase
+        .from('teams')
+        .select('id')
+        .eq('owner_id', ownerUid)
+        .order('created_at', { ascending: true })
+        .limit(1)
+
+      if (e1) throw e1
+      if (existing && existing.length > 0) return existing[0].id
+
+      // Шаг 2: если команды нет — создаём ровно одну
+      const { data: created, error: e2 } = await supabase
+        .from('teams')
+        .insert({
+          owner_id: ownerUid,
+          name: 'Пул аренды',
+        })
+        .select('id')
+        .single()
+
+      if (e2) throw e2
+      return created?.id ?? null
+    } catch (err: any) {
+      showToast('Ошибка определения команды: ' + errText(err))
+      return null
+    }
   }
 
-  async function invite() {
+  async function loadAll() {
+    if (!user) return
+    setLoading(true)
+    try {
+      // Находим владельца (если текущий юзер сам landlord — он владелец; иначе берём из team_members)
+      let ownerId = user.id
+      if (user.role !== 'landlord') {
+        const { data: tm } = await supabase
+          .from('team_members')
+          .select('team_id')
+          .eq('user_id', user.id)
+          .limit(1)
+          .maybeSingle()
+        if (tm?.team_id) {
+          const { data: t } = await supabase.from('teams').select('owner_id').eq('id', tm.team_id).maybeSingle()
+          if (t?.owner_id) ownerId = t.owner_id
+        }
+      }
+
+      const { data: ow } = await supabase.from('users').select('id, full_name, phone').eq('id', ownerId).maybeSingle()
+      setOwnerInfo(ow)
+
+      // Получаем team_id через ту же логику (гарантия единственности)
+      const tid = await resolveOrCreateTeam(ownerId)
+      setTeamId(tid)
+      if (!tid) { setMembers([]); setLoading(false); return }
+
+      // Загружаем всех участников этой команды
+      const { data: rows } = await supabase
+        .from('team_members')
+        .select('user_id, role, joined_at, users(full_name, phone, email)')
+        .eq('team_id', tid)
+        .order('joined_at', { ascending: true })
+
+      const mapped: MemberRow[] = (rows || []).map((r: any) => ({
+        user_id: r.user_id,
+        full_name: r.users?.full_name || null,
+        phone: r.users?.phone || null,
+        email: r.users?.email || null,
+        role: r.role,
+        joined_at: r.joined_at,
+      }))
+      setMembers(mapped)
+    } catch (e: any) {
+      showToast(errText(e))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { loadAll() }, [user?.id])
+
+  async function addMember() {
+    if (!teamId || !user) { showToast('Команда не определена'); return }
+    const cleanPhone = String(newPhone).replace(/\D/g, '')
+    if (cleanPhone.length < 10) { showToast('Введите корректный телефон'); return }
     if (busy) return
-    const digits = phone.replace(/\D/g, '')
-    if (digits.length < 10) { showToast('Введите телефон полностью'); return }
     setBusy(true)
     try {
-      let tid = teamId
-      if (!tid) {
-        const { data: t, error } = await supabase.from('teams').insert({ owner_id: user!.id, name: 'Пул аренды' }).select().single()
-        if (error) { showToast('Ошибка: ' + error.message); return }
-        tid = t.id
-        await supabase.from('team_members').insert({ team_id: tid!, user_id: user!.id, role: 'owner' })
-        selectPool(tid!)
+      // Ищем пользователя по последним 10 цифрам телефона (разные форматы хранения)
+      const last10 = cleanPhone.slice(-10)
+      let targetUserId: string | null = null
+      for (const candidate of [`+7${last10}`, `8${last10}`, last10]) {
+        const q = await supabase.from('users').select('id').eq('phone', candidate).limit(1).maybeSingle()
+        if (q.data?.id) { targetUserId = q.data.id; break }
       }
-      const norm = '+' + (digits.length === 11 ? digits : '7' + digits)
-      const { data: all } = await supabase.from('users').select('*').not('phone', 'is', null)
-      let target = (all || []).find((u: any) => (u.phone || '').replace(/\D/g, '').slice(-10) === digits.slice(-10))
-      if (!target) {
-        const { data: created, error } = await supabase.from('users').insert({ full_name: 'Команда', phone: norm, role: 'landlord' }).select().single()
-        if (error) { showToast('Ошибка: ' + error.message); return }
-        target = created
+
+      if (!targetUserId) {
+        // Создаём нового пользователя с ролью manager/viewer (НЕ landlord!)
+        const { data: created, error: ce } = await supabase
+          .from('users')
+          .insert({
+            phone: `+7${last10}`,
+            full_name: newName.trim() || null,
+            role: newRole === 'viewer' ? 'viewer' : 'manager',
+          })
+          .select('id')
+          .single()
+        if (ce) throw ce
+        targetUserId = created?.id ?? null
+      } else {
+        // Существующий пользователь — обновляем имя, если указано, но НЕ трогаем роль автоматически
+        if (newName.trim()) {
+          await supabase.from('users').update({ full_name: newName.trim() }).eq('id', targetUserId).then(() => {}, () => {})
+        }
       }
-      const { error: me } = await supabase.from('team_members').insert({ team_id: tid, user_id: target.id, role: newRole, added_by: user!.id })
-      if (me) { showToast('Этот человек уже подключён или ошибка: ' + me.message); return }
-      showToast(`✅ Доступ выдан: ${ROLE_LABEL[newRole]}. Объекты подключаются кнопкой «Поделиться в пуле» в карточке объекта.`)
-      setPhone('')
-      refresh()
-      window.dispatchEvent(new Event('rentflow-refresh'))
+
+      if (!targetUserId) throw new Error('Не удалось получить ID пользователя')
+
+      // Проверяем, нет ли уже такой связи в team_members
+      const dupCheck = await supabase
+        .from('team_members')
+        .select('id')
+        .eq('user_id', targetUserId)
+        .eq('team_id', teamId)
+        .limit(1)
+        .maybeSingle()
+
+      if (dupCheck.data) {
+        showToast('Этот человек уже состоит в команде')
+        setNewPhone(''); setNewName('')
+        return
+      }
+
+      // Добавляем связь в ЕДИНСТВЕННУЮ команду владельца
+      const { error: te } = await supabase
+        .from('team_members')
+        .insert({
+          user_id: targetUserId,
+          team_id: teamId,
+          role: newRole,
+        })
+      if (te) throw te
+
+      showToast(`✅ Доступ выдан: ${newRole === 'viewer' ? 'наблюдатель' : 'менеджер'}`)
+      setNewPhone(''); setNewName(''); setNewRole('manager')
+      await loadAll()
+    } catch (e: any) {
+      showToast(errText(e))
     } finally {
       setBusy(false)
     }
   }
 
-  async function removeMember(id: string) {
-    await supabase.from('team_members').delete().eq('id', id)
-    showToast('Доступ отключён')
-    refresh()
-    window.dispatchEvent(new Event('rentflow-refresh'))
+  async function removeMember(uid: string) {
+    if (!teamId) return
+    try {
+      const { error } = await supabase
+        .from('team_members')
+        .delete()
+        .eq('user_id', uid)
+        .eq('team_id', teamId)
+      if (error) throw error
+      showToast('✅ Участник удалён из команды')
+      setRemoveId(null)
+      await loadAll()
+    } catch (e: any) {
+      showToast(errText(e))
+    }
   }
 
+  const iosBlue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: 4, flexShrink: 0 }
+  const iosRed: React.CSSProperties = { border: 'none', background: 'transparent', color: '#ff3b30', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: 4, flexShrink: 0 }
+  const inpStyle: React.CSSProperties = { width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 17, boxSizing: 'border-box' }
+  const secHead: React.CSSProperties = { fontSize: 13, color: '#8e8e93', margin: '14px 16px 6px', textTransform: 'uppercase', letterSpacing: 0.3 }
+
+  if (loading) return <div style={{ ...T.card }}><div style={T.small}>Загрузка состава команды...</div></div>
+
   return (
-    <div>
-      <div style={head}>Доступ</div>
+    <>
+      <div style={secHead}>Доступ</div>
       <div style={T.card}>
-        <div style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f', margin: '12px 0 2px' }}>Совместный доступ</div>
-        {members.length === 0 && <div style={{ ...T.small, margin: '8px 0' }}>Пока только вы.</div>}
-        {members.map((m: any, i: number) => (
-          <div key={m.id}>
-            {i > 0 && <div style={hair} />}
-            <div style={T.row}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 15, fontWeight: 600 }}>{m.user?.full_name || '—'}</div>
-                <div style={{ fontSize: 13, color: '#8e8e93' }}>{m.user?.phone || ''} · {ROLE_LABEL[m.role] || m.role}</div>
+        <div style={T.h2}>Совместный доступ</div>
+        {ownerInfo && (
+          <div style={{ marginBottom: 8 }}>
+            <div style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f' }}>{ownerInfo.full_name || 'Вы'}</div>
+            <div style={{ fontSize: 13, color: '#8e8e93' }}>{ownerInfo.phone} · Владелец</div>
+          </div>
+        )}
+        {members.filter(m => m.user_id !== ownerInfo?.id).map(m => (
+          <div key={m.user_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '10px 0', borderBottom: '1px solid rgba(60,60,67,0.12)' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f' }}>{m.full_name || '—'}</div>
+              <div style={{ fontSize: 13, color: '#8e8e93', marginTop: 2 }}>
+                {m.phone || '—'} · {m.role === 'viewer' ? 'Наблюдатель' : 'Менеджер'}
               </div>
-              {m.role !== 'owner' && <button style={iosRed} onClick={() => setDel(m.id)}>отключить</button>}
             </div>
+            <button style={iosRed} onClick={() => setRemoveId(m.user_id)}>ОТКЛЮЧИТЬ</button>
           </div>
         ))}
-        <div style={{ ...hair, margin: '6px 0' }} />
-        <div style={T.row}>
-          <span style={{ fontSize: 15 }}>Телефон</span>
-          <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+7 ___ ___-__-__" inputMode="tel" style={{ flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'transparent', textAlign: 'right', fontSize: 15, color: '#1d1d1f' }} />
+
+        {/* Форма выдачи доступа */}
+        <div style={{ paddingTop: 12 }}>
+          <div style={{ fontSize: 13, color: '#8e8e93', margin: '4px 0 2px' }}>Телефон</div>
+          <input style={inpStyle} value={newPhone} onChange={(e) => setNewPhone(e.target.value)} placeholder="+7 ___ ___-__-__" inputMode="tel" />
+          <div style={{ fontSize: 13, color: '#8e8e93', margin: '8px 0 2px' }}>Имя (необязательно)</div>
+          <input style={inpStyle} value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Например: Мария" />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+            <span style={{ fontSize: 15, color: '#1d1d1f' }}>Роль</span>
+            <select style={{ flex: 1, padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 17, background: '#fff' }} value={newRole} onChange={(e) => setNewRole(e.target.value as any)}>
+              <option value="manager">Менеджер</option>
+              <option value="viewer">Наблюдатель</option>
+            </select>
+          </div>
+          <button
+            disabled={busy}
+            style={{ width: '100%', marginTop: 12, padding: 12, borderRadius: 10, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 15, cursor: busy ? 'wait' : 'pointer', opacity: busy ? 0.5 : 1 }}
+            onClick={addMember}
+          >{busy ? 'Выдача...' : 'Выдать доступ'}</button>
         </div>
-        <div style={T.row}>
-          <span style={{ fontSize: 15 }}>Роль</span>
-          <select value={newRole} onChange={(e) => setNewRole(e.target.value as any)} style={{ border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, outline: 'none', textAlign: 'right', flex: 1, minWidth: 0 }}>
-            <option value="manager">Менеджер</option>
-            <option value="viewer">Наблюдатель</option>
-          </select>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 4px' }}>
-          <button style={iosBlue} disabled={busy} onClick={invite}>Выдать доступ</button>
-        </div>
-        <Hint text="Сотрудник открывает бота со своего телефона: первый раз входит по номеру, дальше — автоматически. Менеджер работает как вы, но без выдачи доступа и удалений; наблюдатель — только просмотр. Объекты попадают в пул только кнопкой «Поделиться в пуле»." />
-        <ConfirmDelete
-          open={!!del}
-          text="Сотрудник сразу потеряет доступ к пулу."
-          onClose={() => setDel(null)}
-          onConfirm={() => { if (del) removeMember(del) }}
-        />
+
+        {/* Раскрывающийся блок пояснений */}
+        <button style={{ ...iosBlue, alignSelf: 'flex-start', marginTop: 8 }} onClick={() => setShowDetails(!showDetails)}>
+          {showDetails ? '› Свернуть' : '› Подробнее'}
+        </button>
+        {showDetails && (
+          <div style={{ marginTop: 8, fontSize: 13, color: '#8e8e93', lineHeight: 1.45 }}>
+            • Менеджеры видят все объекты пула и могут подтверждать оплаты.<br/>
+            • Наблюдатели читают данные, но не изменяют их.<br/>
+            • Новый участник должен один раз открыть мини-апп через бота Roomio — тогда привяжется его Telegram-аккаунт.<br/>
+            • Все менеджеры одного владельца находятся в общей команде «Пул аренды» — дублирующие команды больше не создаются.
+          </div>
+        )}
       </div>
-    </div>
+
+      <ConfirmDelete
+        open={!!removeId}
+        text="Человек потеряет доступ к объектам команды. Его профиль останется в системе, история действий сохранится."
+        onClose={() => setRemoveId(null)}
+        onConfirm={() => { if (removeId) removeMember(removeId) }}
+      />
+    </>
   )
 }
 
