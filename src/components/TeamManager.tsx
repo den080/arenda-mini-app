@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useTelegramUser } from '../hooks/useTelegramUser'
 import { T } from '../theme'
-import { showToast, errText, ConfirmDelete, Modal } from './ui'
+// ИСПРАВЛЕНО: убран неиспользуемый импорт Modal
+import { showToast, errText, ConfirmDelete } from './ui'
 
 interface MemberRow {
   user_id: string
