@@ -431,8 +431,11 @@ export function LandlordDashboard() {
     const onRefresh = () => fetchData()
     window.addEventListener('rentflow-refresh', onRefresh)
     const interval = setInterval(() => fetchData(), 30000)
-    return () => { window.removeEventListener('rentflow-refresh', onRefresh); clearInterval(interval) }
-  }, [user]) // <-- ИСПРАВЛЕНИЕ: Убрали teamId и pool
+    return () => { 
+      window.removeEventListener('rentflow-refresh', onRefresh); 
+      clearInterval(interval) 
+    }
+  }, [user]) // <-- Зависимость только от user
 
   useEffect(() => {
     if (user) { setAnalyticsUser(user); trackOpen('landlord') }
