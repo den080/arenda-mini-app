@@ -172,47 +172,78 @@ export function LandlordDashboard() {
         const currentMonth = today.getMonth()
         const currentYear = today.getFullYear()
 
-        // === НАЧАЛО БЛОКА ЗАГРУЗКИ ОБЪЕКТОВ (ИСПРАВЛЕНО TS6133 и TS2339) ===
+        // === НАЧАЛО БЛОКА ЗАГРУЗКИ ОБЪЕКТОВ (НАДЕЖНАЯ ВЕРСИЯ) ===
         const objPromise = (async () => {
-          let query = supabase.from('objects').select('*').neq('status', 'archived')
-          
-          // Сценарий 1: Пользователь - Админ или Владелец (Landlord)
-          if (user!.role === 'landlord' || user!.role === 'admin') {
-            // Ищем все команды, которыми владеет этот пользователь
-            const { data: ownedTeams } = await supabase
-              .from('teams')
-              .select('id')
-              .eq('owner_id', user!.id)
-            
-            if (ownedTeams && ownedTeams.length > 0) {
-              const teamIds = ownedTeams.map(t => t.id).join(',')
-              // Показываем объекты этих команд + любые личные объекты без команды (на случай миграции)
-              query = query.or(`team_id.in.(${teamIds}),landlord_id.eq.${user!.id}`)
-            } else {
-              // Если команд нет, показываем только личные объекты
-              query = query.eq('landlord_id', user!.id)
-            }
-          } 
-          // Сценарий 2: Пользователь - Менеджер или Наблюдатель
-          else {
-            // Ищем команду, в которой состоит пользователь
-            const { data: membership } = await supabase
-              .from('team_members')
-              .select('team_id')
-              .eq('user_id', user!.id)
-              .limit(1)
-              .maybeSingle()
+          let objectsData: any[] = [];
 
-            if (membership?.team_id) {
-              // Показываем все объекты этой команды
-              query = query.eq('team_id', membership.team_id)
-            } else {
-              // Фоллбек (не должен сработать при нормальной настройке)
-              query = query.eq('landlord_id', user!.id) 
+          try {
+            // Сценарий 1: Владелец или Админ
+            if (user!.role === 'landlord' || user!.role === 'admin') {
+              // 1. Загружаем личные объекты (где landlord_id = мой id)
+              const { data: personalObjects, error: err1 } = await supabase
+                .from('objects')
+                .select('*')
+                .eq('landlord_id', user!.id)
+                .neq('status', 'archived');
+
+              if (err1) console.error('Error fetching personal objects:', err1);
+
+              // 2. Ищем команды, которыми владеет пользователь
+              const { data: ownedTeams, error: err2 } = await supabase
+                .from('teams')
+                .select('id')
+                .eq('owner_id', user!.id);
+
+              if (err2) console.error('Error fetching owned teams:', err2);
+
+              let teamObjects: any[] = [];
+              if (ownedTeams && ownedTeams.length > 0) {
+                const teamIds = ownedTeams.map(t => t.id);
+                // 3. Загружаем объекты этих команд
+                const { data: tObj, error: err3 } = await supabase
+                  .from('objects')
+                  .select('*')
+                  .in('team_id', teamIds)
+                  .neq('status', 'archived');
+                
+                if (err3) console.error('Error fetching team objects:', err3);
+                teamObjects = tObj || [];
+              }
+
+              // 4. Объединяем результаты, убирая дубликаты (по id)
+              const allMap = new Map();
+              [...(personalObjects || []), ...teamObjects].forEach(obj => allMap.set(obj.id, obj));
+              objectsData = Array.from(allMap.values());
+            } 
+            // Сценарий 2: Менеджер или Наблюдатель
+            else {
+              // Ищем команду пользователя
+              const { data: membership, error: err4 } = await supabase
+                .from('team_members')
+                .select('team_id')
+                .eq('user_id', user!.id)
+                .limit(1)
+                .maybeSingle();
+
+              if (err4) console.error('Error fetching membership:', err4);
+
+              if (membership?.team_id) {
+                // Загружаем объекты команды
+                const { data: tObj, error: err5 } = await supabase
+                  .from('objects')
+                  .select('*')
+                  .eq('team_id', membership.team_id)
+                  .neq('status', 'archived');
+                
+                if (err5) console.error('Error fetching manager objects:', err5);
+                objectsData = tObj || [];
+              }
             }
+          } catch (innerErr) {
+            console.error('Critical error in objPromise:', innerErr);
           }
-          
-          return query // <-- УБРАЛИ .execute() для исправления TS2339
+
+          return { data: objectsData };
         })()
         // === КОНЕЦ БЛОКА ЗАГРУЗКИ ОБЪЕКТОВ ===
 
@@ -400,10 +431,7 @@ export function LandlordDashboard() {
     const onRefresh = () => fetchData()
     window.addEventListener('rentflow-refresh', onRefresh)
     const interval = setInterval(() => fetchData(), 30000)
-    return () => { 
-      window.removeEventListener('rentflow-refresh', onRefresh); 
-      clearInterval(interval) 
-    }
+    return () => { window.removeEventListener('rentflow-refresh', onRefresh); clearInterval(interval) }
   }, [user]) // <-- ИСПРАВЛЕНИЕ: Убрали teamId и pool
 
   useEffect(() => {
