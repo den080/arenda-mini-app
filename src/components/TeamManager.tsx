@@ -25,7 +25,6 @@ export function TeamManager() {
   const [teamId, setTeamId] = useState<string | null>(null)
   const [showDetails, setShowDetails] = useState(false)
 
-  // === ФИКС: единая команда для владельца ===
   async function resolveOrCreateTeam(ownerUid: string): Promise<string | null> {
     try {
       const { data: existing } = await supabase
@@ -57,7 +56,6 @@ export function TeamManager() {
     try {
       let ownerId = user.id
       
-      // Если текущий юзер НЕ landlord — находим владельца через его членство
       if (user.role !== 'landlord' && user.role !== 'admin') {
         const { data: tm } = await supabase
           .from('team_members')
@@ -78,7 +76,6 @@ export function TeamManager() {
       setTeamId(tid)
       if (!tid) { setMembers([]); setLoading(false); return }
 
-      // === ФИКС: грузим ВСЕХ участников команды, включая самого владельца ===
       const { data: rows, error } = await supabase
         .from('team_members')
         .select('user_id, role, users(full_name, phone, email)')
@@ -113,7 +110,6 @@ export function TeamManager() {
       const last10 = cleanPhone.slice(-10)
       let targetUserId: string | null = null
       
-      // Ищем по разным форматам телефона
       for (const candidate of [`+7${last10}`, `8${last10}`, last10]) {
         const q = await supabase.from('users').select('id').eq('phone', candidate).limit(1).maybeSingle()
         if (q.data?.id) { targetUserId = q.data.id; break }
@@ -137,7 +133,6 @@ export function TeamManager() {
 
       if (!targetUserId) throw new Error('Не удалось получить ID пользователя')
 
-      // Проверка дубля
       const dupCheck = await supabase
         .from('team_members')
         .select('id')
@@ -184,8 +179,9 @@ export function TeamManager() {
     }
   }
 
+  // === ДИЗАЙН-ТОКЕНЫ (единая шкала Apple HIG) ===
   const iosBlue: React.CSSProperties = { border: 'none', background: 'transparent', color: '#0071e3', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: 4, flexShrink: 0 }
-  const iosRed: React.CSSProperties = { border: 'none', background: 'transparent', color: '#ff3b30', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: 4, flexShrink: 0 }
+  const actRed: React.CSSProperties = { border: 'none', background: 'transparent', color: '#ff3b30', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: '4px 0', flexShrink: 0 }
   const inpStyle: React.CSSProperties = { width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 17, boxSizing: 'border-box' }
   const secHead: React.CSSProperties = { fontSize: 13, color: '#8e8e93', margin: '14px 16px 6px', textTransform: 'uppercase', letterSpacing: 0.3 }
 
@@ -196,6 +192,8 @@ export function TeamManager() {
       <div style={secHead}>Доступ</div>
       <div style={T.card}>
         <div style={T.h2}>Совместный доступ</div>
+        
+        {/* --- Блок Владельца --- */}
         {ownerInfo && (
           <div style={{ marginBottom: 8 }}>
             <div style={{ fontSize: 16, fontWeight: 600, color: '#1d1d1f' }}>{ownerInfo.full_name || 'Вы'}</div>
@@ -203,7 +201,7 @@ export function TeamManager() {
           </div>
         )}
         
-        {/* === ФИКС: показываем всех участников, кроме владельца === */}
+        {/* --- Список Менеджеров --- */}
         {members.filter(m => m.user_id !== ownerInfo?.id).length === 0 && (
           <div style={{ fontSize: 13, color: '#8e8e93', fontStyle: 'italic', padding: '8px 0' }}>
             Пока нет других участников — добавьте менеджера ниже
@@ -217,11 +215,12 @@ export function TeamManager() {
                 {m.phone || '—'} · {m.role === 'viewer' ? 'Наблюдатель' : 'Менеджер'}
               </div>
             </div>
-            <button style={iosRed} onClick={() => setRemoveId(m.user_id)}>ОТКЛЮЧИТЬ</button>
+            {/* ИСПРАВЛЕНО: Компактная текстовая ссылка вместо большой кнопки */}
+            <button style={actRed} onClick={() => setRemoveId(m.user_id)}>Отключить</button>
           </div>
         ))}
 
-        {/* Форма выдачи доступа */}
+        {/* --- Форма Добавления --- */}
         <div style={{ paddingTop: 12 }}>
           <div style={{ fontSize: 13, color: '#8e8e93', margin: '4px 0 2px' }}>Телефон</div>
           <input style={inpStyle} value={newPhone} onChange={(e) => setNewPhone(e.target.value)} placeholder="+7 ___ ___-__-__" inputMode="tel" />
@@ -241,6 +240,7 @@ export function TeamManager() {
           >{busy ? 'Выдача...' : 'Выдать доступ'}</button>
         </div>
 
+        {/* --- Раскрывающийся текст --- */}
         <button style={{ ...iosBlue, alignSelf: 'flex-start', marginTop: 8 }} onClick={() => setShowDetails(!showDetails)}>
           {showDetails ? '› Свернуть' : '› Подробнее'}
         </button>
