@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useTelegramUser } from '../hooks/useTelegramUser'
 import { T } from '../theme'
-// ИСПРАВЛЕНО: убран неиспользуемый импорт Modal
 import { showToast, errText, ConfirmDelete } from './ui'
 
 interface MemberRow {
@@ -11,7 +10,6 @@ interface MemberRow {
   phone: string | null
   email: string | null
   role: string | null
-  joined_at?: string | null
 }
 
 export function TeamManager() {
@@ -27,27 +25,21 @@ export function TeamManager() {
   const [teamId, setTeamId] = useState<string | null>(null)
   const [showDetails, setShowDetails] = useState(false)
 
-  // === ГЛАВНЫЙ ФИКС: определяем или создаём ЕДИНСТВЕННУЮ команду владельца ===
+  // === ФИКС: единая команда для владельца ===
   async function resolveOrCreateTeam(ownerUid: string): Promise<string | null> {
     try {
-      // Шаг 1: ищем любую существующую команду этого владельца
-      const { data: existing, error: e1 } = await supabase
+      const { data: existing } = await supabase
         .from('teams')
         .select('id')
         .eq('owner_id', ownerUid)
         .order('created_at', { ascending: true })
         .limit(1)
 
-      if (e1) throw e1
       if (existing && existing.length > 0) return existing[0].id
 
-      // Шаг 2: если команды нет — создаём ровно одну
       const { data: created, error: e2 } = await supabase
         .from('teams')
-        .insert({
-          owner_id: ownerUid,
-          name: 'Пул аренды',
-        })
+        .insert({ owner_id: ownerUid, name: 'Пул аренды' })
         .select('id')
         .single()
 
@@ -63,9 +55,10 @@ export function TeamManager() {
     if (!user) return
     setLoading(true)
     try {
-      // Находим владельца (если текущий юзер сам landlord — он владелец; иначе берём из team_members)
       let ownerId = user.id
-      if (user.role !== 'landlord') {
+      
+      // Если текущий юзер НЕ landlord — находим владельца через его членство
+      if (user.role !== 'landlord' && user.role !== 'admin') {
         const { data: tm } = await supabase
           .from('team_members')
           .select('team_id')
@@ -81,17 +74,17 @@ export function TeamManager() {
       const { data: ow } = await supabase.from('users').select('id, full_name, phone').eq('id', ownerId).maybeSingle()
       setOwnerInfo(ow)
 
-      // Получаем team_id через ту же логику (гарантия единственности)
       const tid = await resolveOrCreateTeam(ownerId)
       setTeamId(tid)
       if (!tid) { setMembers([]); setLoading(false); return }
 
-      // Загружаем всех участников этой команды
-      const { data: rows } = await supabase
+      // === ФИКС: грузим ВСЕХ участников команды, включая самого владельца ===
+      const { data: rows, error } = await supabase
         .from('team_members')
-        .select('user_id, role, joined_at, users(full_name, phone, email)')
+        .select('user_id, role, users(full_name, phone, email)')
         .eq('team_id', tid)
-        .order('joined_at', { ascending: true })
+      
+      if (error) throw error
 
       const mapped: MemberRow[] = (rows || []).map((r: any) => ({
         user_id: r.user_id,
@@ -99,7 +92,6 @@ export function TeamManager() {
         phone: r.users?.phone || null,
         email: r.users?.email || null,
         role: r.role,
-        joined_at: r.joined_at,
       }))
       setMembers(mapped)
     } catch (e: any) {
@@ -118,16 +110,16 @@ export function TeamManager() {
     if (busy) return
     setBusy(true)
     try {
-      // Ищем пользователя по последним 10 цифрам телефона (разные форматы хранения)
       const last10 = cleanPhone.slice(-10)
       let targetUserId: string | null = null
+      
+      // Ищем по разным форматам телефона
       for (const candidate of [`+7${last10}`, `8${last10}`, last10]) {
         const q = await supabase.from('users').select('id').eq('phone', candidate).limit(1).maybeSingle()
         if (q.data?.id) { targetUserId = q.data.id; break }
       }
 
       if (!targetUserId) {
-        // Создаём нового пользователя с ролью manager/viewer (НЕ landlord!)
         const { data: created, error: ce } = await supabase
           .from('users')
           .insert({
@@ -139,16 +131,13 @@ export function TeamManager() {
           .single()
         if (ce) throw ce
         targetUserId = created?.id ?? null
-      } else {
-        // Существующий пользователь — обновляем имя, если указано, но НЕ трогаем роль автоматически
-        if (newName.trim()) {
-          await supabase.from('users').update({ full_name: newName.trim() }).eq('id', targetUserId).then(() => {}, () => {})
-        }
+      } else if (newName.trim()) {
+        await supabase.from('users').update({ full_name: newName.trim() }).eq('id', targetUserId).then(() => {}, () => {})
       }
 
       if (!targetUserId) throw new Error('Не удалось получить ID пользователя')
 
-      // Проверяем, нет ли уже такой связи в team_members
+      // Проверка дубля
       const dupCheck = await supabase
         .from('team_members')
         .select('id')
@@ -163,14 +152,9 @@ export function TeamManager() {
         return
       }
 
-      // Добавляем связь в ЕДИНСТВЕННУЮ команду владельца
       const { error: te } = await supabase
         .from('team_members')
-        .insert({
-          user_id: targetUserId,
-          team_id: teamId,
-          role: newRole,
-        })
+        .insert({ user_id: targetUserId, team_id: teamId, role: newRole })
       if (te) throw te
 
       showToast(`✅ Доступ выдан: ${newRole === 'viewer' ? 'наблюдатель' : 'менеджер'}`)
@@ -218,6 +202,13 @@ export function TeamManager() {
             <div style={{ fontSize: 13, color: '#8e8e93' }}>{ownerInfo.phone} · Владелец</div>
           </div>
         )}
+        
+        {/* === ФИКС: показываем всех участников, кроме владельца === */}
+        {members.filter(m => m.user_id !== ownerInfo?.id).length === 0 && (
+          <div style={{ fontSize: 13, color: '#8e8e93', fontStyle: 'italic', padding: '8px 0' }}>
+            Пока нет других участников — добавьте менеджера ниже
+          </div>
+        )}
         {members.filter(m => m.user_id !== ownerInfo?.id).map(m => (
           <div key={m.user_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '10px 0', borderBottom: '1px solid rgba(60,60,67,0.12)' }}>
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -250,7 +241,6 @@ export function TeamManager() {
           >{busy ? 'Выдача...' : 'Выдать доступ'}</button>
         </div>
 
-        {/* Раскрывающийся блок пояснений */}
         <button style={{ ...iosBlue, alignSelf: 'flex-start', marginTop: 8 }} onClick={() => setShowDetails(!showDetails)}>
           {showDetails ? '› Свернуть' : '› Подробнее'}
         </button>
@@ -258,15 +248,15 @@ export function TeamManager() {
           <div style={{ marginTop: 8, fontSize: 13, color: '#8e8e93', lineHeight: 1.45 }}>
             • Менеджеры видят все объекты пула и могут подтверждать оплаты.<br/>
             • Наблюдатели читают данные, но не изменяют их.<br/>
-            • Новый участник должен один раз открыть мини-апп через бота Roomio — тогда привяжется его Telegram-аккаунт.<br/>
-            • Все менеджеры одного владельца находятся в общей команде «Пул аренды» — дублирующие команды больше не создаются.
+            • Новый участник должен один раз открыть мини-апп через бота Roomio.<br/>
+            • Все менеджеры одного владельца находятся в общей команде «Пул аренды».
           </div>
         )}
       </div>
 
       <ConfirmDelete
         open={!!removeId}
-        text="Человек потеряет доступ к объектам команды. Его профиль останется в системе, история действий сохранится."
+        text="Человек потеряет доступ к объектам команды."
         onClose={() => setRemoveId(null)}
         onConfirm={() => { if (removeId) removeMember(removeId) }}
       />
