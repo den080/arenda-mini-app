@@ -171,21 +171,63 @@ export function LandlordDashboard() {
         const todayMid = new Date(today.getFullYear(), today.getMonth(), today.getDate())
         const currentMonth = today.getMonth()
         const currentYear = today.getFullYear()
-// Определяем владельца объектов: если есть команда — берём owner_id из teams, иначе текущего пользователя
-let ownerId = user!.id
-if (teamId) {
-  const { data: t } = await supabase.from('teams').select('owner_id').eq('id', teamId).maybeSingle()
-  if (t?.owner_id) ownerId = t.owner_id
-}
 
-const [notifRes, objRes] = await Promise.all([
-  supabase.from('notifications_log').select('*').eq('user_id', user!.id).order('sent_at', { ascending: false }).limit(5),
-  // Показываем ВСЕ объекты владельца (личные + командные), а не только те, что уже привязаны к team_id
-  supabase.from('objects')
-    .select('*')
-    .or(`landlord_id.eq.${ownerId},team_id.eq.${teamId || ''}`)
-    .neq('status', 'archived'),
-])
+        // ===== ФИКС №1: определяем владельца объектов через команду =====
+        let ownerId = user!.id
+        if (teamId) {
+          const { data: t } = await supabase.from('teams').select('owner_id').eq('id', teamId).maybeSingle()
+          if (t?.owner_id) ownerId = t.owner_id
+        }
+
+        // === НАЧАЛО БЛОКА ЗАГРУЗКИ ОБЪЕКТОВ (ИСПРАВЛЕНО) ===
+        const objPromise = (async () => {
+          let query = supabase.from('objects').select('*').neq('status', 'archived')
+          
+          // Сценарий 1: Пользователь - Админ или Владелец (Landlord)
+          if (user!.role === 'landlord' || user!.role === 'admin') {
+            // Ищем все команды, которыми владеет этот пользователь
+            const { data: ownedTeams } = await supabase
+              .from('teams')
+              .select('id')
+              .eq('owner_id', user!.id)
+            
+            if (ownedTeams && ownedTeams.length > 0) {
+              const teamIds = ownedTeams.map(t => t.id).join(',')
+              // Показываем объекты этих команд + любые личные объекты без команды (на случай миграции)
+              query = query.or(`team_id.in.(${teamIds}),landlord_id.eq.${user!.id}`)
+            } else {
+              // Если команд нет, показываем только личные объекты
+              query = query.eq('landlord_id', user!.id)
+            }
+          } 
+          // Сценарий 2: Пользователь - Менеджер или Наблюдатель
+          else {
+            // Ищем команду, в которой состоит пользователь
+            const { data: membership } = await supabase
+              .from('team_members')
+              .select('team_id')
+              .eq('user_id', user!.id)
+              .limit(1)
+              .maybeSingle()
+
+            if (membership?.team_id) {
+              // Показываем все объекты этой команды
+              query = query.eq('team_id', membership.team_id)
+            } else {
+              // Фоллбек (не должен сработать при нормальной настройке)
+              query = query.eq('landlord_id', user!.id) 
+            }
+          }
+          
+          return query.execute()
+        })()
+        // === КОНЕЦ БЛОКА ЗАГРУЗКИ ОБЪЕКТОВ ===
+
+        const [notifRes, objRes] = await Promise.all([
+          supabase.from('notifications_log').select('*').eq('user_id', user!.id).order('sent_at', { ascending: false }).limit(5),
+          objPromise
+        ])
+        
         if (notifRes.data) setNotifications(notifRes.data)
         const objectsData = objRes.data
         if (!objectsData || objectsData.length === 0) { setObjects([]); setHistory([]); setLoading(false); return }
@@ -1336,6 +1378,7 @@ const [notifRes, objRes] = await Promise.all([
           </div>
         </>
       )}
+      {/* ===== ФИКС №3: восстанавливаем LandlordReadingsEntry ===== */}
       {tab === 'meters' && (
         <>
           {current.readingsMode === 'manual' && contract && (
@@ -1370,6 +1413,8 @@ const [notifRes, objRes] = await Promise.all([
               <div style={T.row}><span style={iosMuted}>Баланс (переплата)</span><span style={valMoney}>{contractBalance.toFixed(0)} ₽</span></div>
             )}
             <div style={T.row}><span style={iosMuted}>Оплата</span><span style={valRight}>до {contract.payment_day} числа</span></div>
+
+            {/* ===== ФИКС №2: Разделение режима учёта и подключения ===== */}
 
             {/* Строка 1: Режим учёта (главный переключатель) */}
             <div style={{ ...T.row, borderBottom: '1px solid rgba(60,60,67,0.12)', justifyContent: 'space-between', alignItems: 'center' }}>
