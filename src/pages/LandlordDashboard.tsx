@@ -172,14 +172,7 @@ export function LandlordDashboard() {
         const currentMonth = today.getMonth()
         const currentYear = today.getFullYear()
 
-        // ===== ФИКС №1: определяем владельца объектов через команду =====
-        let ownerId = user!.id
-        if (teamId) {
-          const { data: t } = await supabase.from('teams').select('owner_id').eq('id', teamId).maybeSingle()
-          if (t?.owner_id) ownerId = t.owner_id
-        }
-
-        // === НАЧАЛО БЛОКА ЗАГРУЗКИ ОБЪЕКТОВ (ИСПРАВЛЕНО) ===
+        // === НАЧАЛО БЛОКА ЗАГРУЗКИ ОБЪЕКТОВ (ИСПРАВЛЕНО TS6133 и TS2339) ===
         const objPromise = (async () => {
           let query = supabase.from('objects').select('*').neq('status', 'archived')
           
@@ -219,7 +212,7 @@ export function LandlordDashboard() {
             }
           }
           
-          return query.execute()
+          return query // <-- УБРАЛИ .execute() для исправления TS2339
         })()
         // === КОНЕЦ БЛОКА ЗАГРУЗКИ ОБЪЕКТОВ ===
 
