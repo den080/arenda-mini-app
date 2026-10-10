@@ -110,6 +110,28 @@ export function LandlordDashboard() {
   const [uniMonths, setUniMonths] = useState(11)
   const [uniStart, setUniStart] = useState('')
 
+  // === БЛОКИРОВКА ДЕМО-РЕЖИМА: Если нет юзера и загрузка закончилась — показываем ошибку доступа ===
+  if (!userLoading && !user) {
+    return (
+      <div style={{ ...T.page, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '80vh', textAlign: 'center', padding: 20 }}>
+        <h1 style={T.h1}>Доступ ограничен</h1>
+        <p style={{ fontSize: 15, color: '#8e8e93', marginTop: 8, lineHeight: 1.4 }}>
+          Пожалуйста, откройте приложение через официального бота Roomio.<br/>
+          Прямой доступ к веб-версии запрещен для безопасности ваших данных.
+        </p>
+        <a 
+          href="https://t.me/roomiorent_bot" 
+          target="_blank" 
+          rel="noopener noreferrer"
+          style={{ marginTop: 20, padding: '12px 24px', borderRadius: 10, background: '#0071e3', color: '#fff', fontWeight: 600, textDecoration: 'none', fontSize: 15 }}
+        >
+          Открыть бота
+        </a>
+      </div>
+    )
+  }
+  // ===================================================================================================
+
   useEffect(() => {
     setEarlyPayOpen(false)
     setUtilSaved(null)
@@ -1185,21 +1207,6 @@ export function LandlordDashboard() {
                   <span style={valMoney}>{Number(current.payment?.utilities_amount || current.utilitiesAmount || 0).toFixed(0)} ₽</span>
                 </div>
               )}
-
-              {/* === НОВАЯ ПРОВЕРКА: Просрочка без начисленного штрафа === */}
-              {(() => {
-                const isOverdueNow = openPay && parseDate(openPay.due_date).getTime() < todayMid0.getTime();
-                const hasNoPenaltyYet = Number(current.payment?.penalty_amount || 0) === 0;
-                
-                if (isOverdueNow && hasNoPenaltyYet) {
-                  return (
-                    <Hint text="⚠️ Срок оплаты истек. Штраф будет рассчитан и добавлен к счету автоматически в ближайшую ночную проверку системы." />
-                  );
-                }
-                return null;
-              })()}
-              {/* ========================================================== */}
-
               <div style={T.row}>
                 <span style={valText}>Безналичная оплата</span>
                 {current.payment?.confirmed_card
