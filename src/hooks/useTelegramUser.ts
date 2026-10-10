@@ -38,11 +38,22 @@ export function useTelegramUser() {
       }
 
       const tg = (window as any)?.Telegram?.WebApp
-      const tgId = tg?.initDataUnsafe?.user?.id ? String(tg.initDataUnsafe.user.id) : ''
-      const tgPhoneRaw = String(tg?.initDataUnsafe?.user?.phone_number || '')
+      
+      // === ИСПРАВЛЕНИЕ: УБРАЛИ DEMO FALLBACK ===
+      // Если нет initData от Telegram, выходим сразу с user=null.
+      // Никакого mock-пользователя не создаём.
+      if (!tg || !tg.initDataUnsafe || !tg.initDataUnsafe.user) {
+        console.warn('No Telegram initData found. Access denied.')
+        setLoading(false)
+        return 
+      }
+      // ===========================================
+
+      const tgId = tg.initDataUnsafe.user.id ? String(tg.initDataUnsafe.user.id) : ''
+      const tgPhoneRaw = String(tg.initDataUnsafe.user.phone_number || '')
       const tgDigits = normPhone(tgPhoneRaw)
       const tgLast10 = tgDigits.length >= 10 ? tgDigits.slice(-10) : ''
-
+      
       let email = ''
       try {
         const { data: authData } = await supabase.auth.getUser()
@@ -54,19 +65,19 @@ export function useTelegramUser() {
       }
 
       let row: any = null
-
+      
       // 1) Ищем по email
       if (email) {
         const r = await supabase.from('users').select('*').eq('email', email).limit(1).maybeSingle()
         row = r.data || null
       }
-
+      
       // 2) Ищем по telegram_id
       if (!row && tgId) {
         const r = await supabase.from('users').select('*').eq('telegram_id', tgId).limit(1).maybeSingle()
         row = r.data || null
       }
-
+      
       // 3) ЗАКРЫТИЕ ДЫРЫ: ищем заглушку по телефону (без telegram_id), созданную арендодателем
       //    Если нашли — НЕ создаём новый аккаунт, а дописываем telegram_id/email в существующий.
       if (!row && tgLast10) {
@@ -81,6 +92,7 @@ export function useTelegramUser() {
             .limit(1)
           if (q.data && q.data[0]) { candidates.push(q.data[0]); break }
         }
+        
         // запасной поиск через like (на случай другого формата хранения номера)
         if (candidates.length === 0) {
           const q2 = await supabase
@@ -91,6 +103,7 @@ export function useTelegramUser() {
             .limit(1)
           if (q2.data && q2.data[0]) candidates.push(q2.data[0])
         }
+        
         if (candidates.length > 0) {
           row = candidates[0]
           const updByPhone: any = { telegram_id: tgId }
@@ -99,7 +112,7 @@ export function useTelegramUser() {
           row = { ...row, ...updByPhone }
         }
       }
-
+      
       // 4) Только если ничего не нашли — создаём новый аккаунт
       if (!row && tgId) {
         const tgUser = tg?.initDataUnsafe?.user
