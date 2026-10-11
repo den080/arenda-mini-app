@@ -91,8 +91,10 @@ export function LandlordDashboard() {
   const [archivePays, setArchivePays] = useState<any[]>([])
   const [archiveFrozen, setArchiveFrozen] = useState<any[]>([])
   const [showTeam, setShowTeam] = useState(false)
-  // ИСПРАВЛЕНИЕ TS6133: Переменная earlyPayOpen теперь используется ниже в JSX
+  
+  // ЭТА ПЕРЕМЕННАЯ ТЕПЕРЬ ОБЯЗАТЕЛЬНО ИСПОЛЬЗУЕТСЯ НИЖЕ В JSX
   const [earlyPayOpen, setEarlyPayOpen] = useState(false) 
+  
   const [isPro, setIsPro] = useState(false)
   const [massOpen, setMassOpen] = useState(false)
   const [massOk, setMassOk] = useState(false)
