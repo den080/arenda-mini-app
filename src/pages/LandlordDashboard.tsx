@@ -92,7 +92,7 @@ export function LandlordDashboard() {
   const [archiveFrozen, setArchiveFrozen] = useState<any[]>([])
   const [showTeam, setShowTeam] = useState(false)
   
-  // ЭТА ПЕРЕМЕННАЯ ТЕПЕРЬ ОБЯЗАТЕЛЬНО ИСПОЛЬЗУЕТСЯ НИЖЕ В JSX
+  // ЭТА ПЕРЕМЕННАЯ ТЕПЕРЬ ИСПОЛЬЗУЕТСЯ В JSX НИЖЕ
   const [earlyPayOpen, setEarlyPayOpen] = useState(false) 
   
   const [isPro, setIsPro] = useState(false)
