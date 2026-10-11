@@ -4,9 +4,9 @@ import { useTelegramUser } from '../hooks/useTelegramUser'
 import { T } from '../theme'
 import { Modal, showToast, Toaster, Hint, errText } from './ui'
 
+// Оставлены только используемые стили
 const inp: React.CSSProperties = { width: '100%', padding: '12px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box', outline: 'none' }
 const blueBtn: React.CSSProperties = { width: '100%', padding: 13, borderRadius: 12, border: 'none', background: '#0071e3', color: '#fff', fontWeight: 700, fontSize: 16, cursor: 'pointer', boxSizing: 'border-box', margin: '10px 0 0' }
-const grayBtn: React.CSSProperties = { width: '100%', padding: 13, borderRadius: 12, border: 'none', background: '#e8e8ed', fontWeight: 600, fontSize: 16, cursor: 'pointer', margin: '8px 0 0' }
 const h0: React.CSSProperties = { fontSize: 20, fontWeight: 700, color: '#1d1d1f', marginBottom: 6, lineHeight: 1.25 }
 
 const POLICY = [
@@ -24,9 +24,9 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const [hasSession, setHasSession] = useState(false)
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
-  const isTelegram = !!(window as any)?.Telegram?.WebApp
   
-  // Демо-режим полностью отключен
+  // Демо-режим полностью отключен, проверяем только Telegram
+  const isTelegram = !!(window as any)?.Telegram?.WebApp
   const [stage, setStage] = useState<'landing' | 'email' | 'code'>(isTelegram ? 'email' : 'landing')
   
   const [consent, setConsent] = useState(false)
@@ -157,7 +157,6 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
             <button disabled={busy} onClick={sendCode} style={{ ...blueBtn, opacity: busy ? 0.6 : 1 }}>
               {busy ? 'Отправка…' : 'Получить код'}
             </button>
-            {/* Кнопка "Смотреть демо" удалена отсюда */}
           </>
         ) : (
           <>
