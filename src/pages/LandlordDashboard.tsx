@@ -91,7 +91,8 @@ export function LandlordDashboard() {
   const [archivePays, setArchivePays] = useState<any[]>([])
   const [archiveFrozen, setArchiveFrozen] = useState<any[]>([])
   const [showTeam, setShowTeam] = useState(false)
-  const [earlyPayOpen, setEarlyPayOpen] = useState(false)
+  // ИСПРАВЛЕНИЕ TS6133: Переменная earlyPayOpen теперь используется ниже в JSX
+  const [earlyPayOpen, setEarlyPayOpen] = useState(false) 
   const [isPro, setIsPro] = useState(false)
   const [massOpen, setMassOpen] = useState(false)
   const [massOk, setMassOk] = useState(false)
@@ -110,7 +111,7 @@ export function LandlordDashboard() {
   const [uniMonths, setUniMonths] = useState(11)
   const [uniStart, setUniStart] = useState('')
 
-  // === БЛОКИРОВКА ДЕМО-РЕЖИМА: Если нет юзера и загрузка закончилась — показываем ошибку доступа ===
+  // === БЛОКИРОВКА ДЕМО-РЕЖИМА ===
   if (!userLoading && !user) {
     return (
       <div style={{ ...T.page, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '80vh', textAlign: 'center', padding: 20 }}>
@@ -130,7 +131,7 @@ export function LandlordDashboard() {
       </div>
     )
   }
-  // ===================================================================================================
+  // ==============================
 
   useEffect(() => {
     setEarlyPayOpen(false)
@@ -194,28 +195,22 @@ export function LandlordDashboard() {
         const currentMonth = today.getMonth()
         const currentYear = today.getFullYear()
 
-        // === НАЧАЛО БЛОКА ЗАГРУЗКИ ОБЪЕКТОВ (ИСПРАВЛЕНО TS6133 и TS2339) ===
+        // === НАЧАЛО БЛОКА ЗАГРУЗКИ ОБЪЕКТОВ ===
          const objPromise = (async () => {
            let query = supabase.from('objects').select('*').neq('status', 'archived')
-           // Сценарий 1: Пользователь - Админ или Владелец (Landlord)
            if (user!.role === 'landlord' || user!.role === 'admin') {
-             // Ищем все команды, которыми владеет этот пользователь
              const { data: ownedTeams } = await supabase
                .from('teams')
                .select('id')
                .eq('owner_id', user!.id)
              if (ownedTeams && ownedTeams.length > 0) {
                const teamIds = ownedTeams.map(t => t.id).join(',')
-               // Показываем объекты этих команд + любые личные объекты без команды (на случай миграции)
                query = query.or(`team_id.in.(${teamIds}),landlord_id.eq.${user!.id}`)
              } else {
-               // Если команд нет, показываем только личные объекты
                query = query.eq('landlord_id', user!.id)
              }
            } 
-           // Сценарий 2: Пользователь - Менеджер или Наблюдатель
            else {
-             // Ищем команду, в которой состоит пользователь
              const { data: membership } = await supabase
                .from('team_members')
                .select('team_id')
@@ -223,16 +218,15 @@ export function LandlordDashboard() {
                .limit(1)
                .maybeSingle()
              if (membership?.team_id) {
-               // Показываем все объекты этой команды
                query = query.eq('team_id', membership.team_id)
              } else {
-               // Фоллбек (не должен сработать при нормальной настройке)
                query = query.eq('landlord_id', user!.id) 
              }
            }
-           return query // <-- УБРАЛИ .execute() для исправления TS2339
+           return query
          })()
          // === КОНЕЦ БЛОКА ЗАГРУЗКИ ОБЪЕКТОВ ===
+         
          const [notifRes, objRes] = await Promise.all([
            supabase.from('notifications_log').select('*').eq('user_id', user!.id).order('sent_at', { ascending: false }).limit(5),
            objPromise
@@ -240,13 +234,16 @@ export function LandlordDashboard() {
          if (notifRes.data) setNotifications(notifRes.data)
          const objectsData = objRes.data
          if (!objectsData || objectsData.length === 0) { setObjects([]); setHistory([]); setLoading(false); return }
+         
          const objIds = objectsData.map((o: any) => o.id)
          const { data: contractsData } = await supabase
            .from('contracts').select('*, tenant:users!tenant_id(full_name, phone, email, telegram_id, last_seen)')
            .in('object_id', objIds).eq('status', 'active')
+         
          const contractByObj: Record<string, any> = {}
          for (const c of contractsData || []) contractByObj[c.object_id] = c
          const contractIds = (contractsData || []).map((c: any) => c.id)
+         
          const { data: archData } = await supabase
            .from('contracts').select('*, object:objects(id, address), tenant:users(full_name, phone)')
            .in('object_id', objIds).eq('status', 'terminated')
@@ -254,9 +251,11 @@ export function LandlordDashboard() {
          setArchived(archData || [])
          const terminatedByObj: Record<string, boolean> = {}
          for (const a of archData || []) terminatedByObj[a.object_id] = true
+         
          if (contractIds.length) {
            await Promise.all(contractIds.map((id: string) => ensureNextPayment(id).catch(() => {})))
          }
+         
          const [paysRes, dReqRes, fRowsRes, meetRes, readRes] = await Promise.all([
            supabase.from('payments').select('*').in('contract_id', contractIds).order('period', { ascending: false }),
            supabase.from('deferred_requests').select('*').in('contract_id', contractIds).eq('status', 'proposed'),
@@ -266,6 +265,7 @@ export function LandlordDashboard() {
              .gte('submitted_at', new Date(currentYear, currentMonth, 1).toISOString())
              .lt('submitted_at', new Date(currentYear, currentMonth + 1, 1).toISOString()),
          ])
+         
          const periodISO = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`
          let rulesBy: Record<string, any[]> = {}
          let readPeriodBy: Record<string, any[]> = {}
@@ -277,6 +277,7 @@ export function LandlordDashboard() {
            for (const r of rulesRes.data || []) { (rulesBy[r.contract_id] = rulesBy[r.contract_id] || []).push(r) }
            for (const r of readPeriodRes.data || []) { (readPeriodBy[r.contract_id] = readPeriodBy[r.contract_id] || []).push(r) }
          }
+         
          const paysBy: Record<string, any[]> = {}
          for (const p of paysRes.data || []) { (paysBy[p.contract_id] = paysBy[p.contract_id] || []).push(p) }
          const dReqBy: Record<string, any[]> = {}
@@ -287,19 +288,23 @@ export function LandlordDashboard() {
          for (const m of meetRes.data || []) if (!meetBy[m.contract_id]) meetBy[m.contract_id] = m
          const readCountBy: Record<string, number> = {}
          for (const r of readRes.data || []) readCountBy[r.contract_id] = (readCountBy[r.contract_id] || 0) + 1
+         
          const { data: omRows } = await supabase.from('object_meters').select('*, object_id, meter_types(code)').in('object_id', objIds).eq('is_active', true)
          const { data: skipRows } = await supabase.from('meter_skips').select('object_meter_id').eq('period', periodISO)
          const skipSet = new Set((skipRows || []).map((s: any) => s.object_meter_id))
          const metersByObj: Record<string, any[]> = {}
          for (const m of omRows || []) { (metersByObj[m.object_id] = metersByObj[m.object_id] || []).push(m) }
+         
          const objectsWithStatus: ObjectWithStatus[] = []
          const allHistory: any[] = []
+         
          for (const obj of objectsData) {
            const contract = contractByObj[obj.id]
            if (!contract) {
              if (terminatedByObj[obj.id]) continue
              objectsWithStatus.push({ ...obj, status: 'no_contract', amount: 0, paymentId: null, statusColor: '#888', statusDetail: 'Нет договора' }); continue
            }
+           
            const readingsMode = contract.readings_mode || 'manual'
            const reminder = contract.reminder_days_before || 3
            const sd0 = contract.start_date ? parseDate(contract.start_date) : null
@@ -307,9 +312,11 @@ export function LandlordDashboard() {
            const contractStarted = !sd0 || todayMid.getTime() >= sd0.getTime()
            const allPays = paysBy[contract.id] || []
            for (const p of allPays) allHistory.push({ ...p, objId: obj.id, address: obj.address })
+           
            const fRows = fRowsBy[contract.id] || []
            const graceMonth = String(contract.created_at || '').slice(0, 7) === periodISO.slice(0, 7)
            const retro = !!(contract.created_at && contract.start_date && String(contract.created_at).slice(0, 10) > String(contract.start_date).slice(0, 10))
+           
            if (!graceMonth && !retro && readingsMode === 'manual' && contract.tenant_in_app !== false && contract.meter_deadline_day && contractStarted && (!startMonthISO || periodISO >= startMonthISO)) {
              const rr = (rulesBy[contract.id] || []).find((r: any) => r.violation_type === 'readings_overdue')
              const rRate = rr ? Number(rr.rate) || 0 : 0
@@ -344,18 +351,17 @@ export function LandlordDashboard() {
                }
              }
            }
+           
            const frozenTotal = fRows.reduce((s2: number, d: any) => s2 + Number(d.amount || 0), 0)
            
            // === ИСПРАВЛЕНИЕ ЛОГИКИ ВЫБОРА ПЛАТЕЖА ===
-           // Сортируем все платежи от старых к новым
            const sortedAllPays = [...allPays].sort((a, b) => new Date(a.period).getTime() - new Date(b.period).getTime());
-           // Ищем первый НЕподтвержденный платеж
            const firstUnconfirmedPayment = sortedAllPays.find(p => !p.confirmed_by_landlord);
-           // Если нашли — он становится текущим. Если нет (все оплачены) — берем последний для истории
            const payment = firstUnconfirmedPayment || sortedAllPays[sortedAllPays.length - 1];
            // =========================================
            
            if (!payment) { objectsWithStatus.push({ ...obj, status: 'no_payment', statusDetail: 'Платёж не создан', statusColor: '#a80', amount: contract.rent_amount, baseAmount: contract.rent_amount, penaltyAmount: 0, utilitiesAmount: 0, paymentId: null, contract, readingsMode, frozenTotal, frozenRows: fRows, deferredRequests: dReqBy[contract.id] || [] }); continue }
+           
            const cashMeeting = meetBy[contract.id] || null
            const dueMid = parseDate(payment.due_date)
            const sd = contract.start_date ? parseDate(contract.start_date) : null
@@ -366,6 +372,7 @@ export function LandlordDashboard() {
            const penaltyAmount = payment.penalty_amount || 0
            const utilitiesAmount = Number(payment.utilities_amount || 0)
            const paymentId = String(payment.id)
+           
            let waitingForReadings = false
            if (!graceMonth && readingsMode === 'manual' && contract.tenant_in_app !== false && contract.meter_deadline_day && contractStarted && today.getDate() > contract.meter_deadline_day) {
              const metersW = metersByObj[obj.id] || []
@@ -377,10 +384,13 @@ export function LandlordDashboard() {
                waitingForReadings = !(readCountBy[contract.id] > 0)
              }
            }
+           
            const needUtilitiesReminder = !payment.confirmed_by_landlord && readingsMode !== 'self' && daysUntilDue >= 0 && daysUntilDue <= reminder && utilitiesAmount === 0
+           
            let status: 'paid' | 'overdue' | 'pending' = 'pending'
            let statusDetail = ''
            let statusColor = '#a80'
+           
            if (!payment.confirmed_by_landlord) {
              const paidPart = Number(payment.paid_amount || 0)
              if (firstMonth) {
@@ -408,8 +418,10 @@ export function LandlordDashboard() {
              else if (daysLeft <= reminder) { statusDetail = `${daysLeft} дн. до оплаты (${nextDue.toLocaleDateString('ru-RU')})`; statusColor = '#a80' }
              else { statusDetail = `${daysLeft} дн. до оплаты (${nextDue.toLocaleDateString('ru-RU')})`; statusColor = '#080' }
            }
+           
            objectsWithStatus.push({ ...obj, status, statusDetail, statusColor, amount: baseAmount + penaltyAmount + utilitiesAmount, baseAmount, penaltyAmount, utilitiesAmount, paymentId, contract, payment, daysOverdue: isOverdue ? Math.round((todayMid.getTime() - dueMid.getTime()) / 86400000) : undefined, waitingForReadings, needUtilitiesReminder, readingsMode, frozenTotal, frozenRows: fRows, deferredRequests: dReqBy[contract.id] || [], hasConfirmedCashMeeting: !!cashMeeting, cashMeeting: cashMeeting || null })
          }
+         
          setHistory(allHistory)
          const sortedObjects = objectsWithStatus.sort((a, b) => {
            const order: Record<string, number> = { overdue: 0, pending: 1, no_payment: 1.5, paid: 2, no_contract: 3 }
@@ -428,7 +440,7 @@ export function LandlordDashboard() {
        window.removeEventListener('rentflow-refresh', onRefresh); 
        clearInterval(interval) 
      }
-   }, [user]) // <-- ИСПРАВЛЕНИЕ: Убрали teamId и pool
+   }, [user]) 
 
   useEffect(() => {
     if (user) { setAnalyticsUser(user); trackOpen('landlord') }
