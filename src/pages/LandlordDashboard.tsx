@@ -345,8 +345,16 @@ export function LandlordDashboard() {
              }
            }
            const frozenTotal = fRows.reduce((s2: number, d: any) => s2 + Number(d.amount || 0), 0)
-           const openPays = allPays.filter((p: any) => !p.confirmed_by_landlord)
-           const payment = openPays.length ? openPays[openPays.length - 1] : allPays[0]
+           
+           // === ИСПРАВЛЕНИЕ ЛОГИКИ ВЫБОРА ПЛАТЕЖА ===
+           // Сортируем все платежи от старых к новым
+           const sortedAllPays = [...allPays].sort((a, b) => new Date(a.period).getTime() - new Date(b.period).getTime());
+           // Ищем первый НЕподтвержденный платеж
+           const firstUnconfirmedPayment = sortedAllPays.find(p => !p.confirmed_by_landlord);
+           // Если нашли — он становится текущим. Если нет (все оплачены) — берем последний для истории
+           const payment = firstUnconfirmedPayment || sortedAllPays[sortedAllPays.length - 1];
+           // =========================================
+           
            if (!payment) { objectsWithStatus.push({ ...obj, status: 'no_payment', statusDetail: 'Платёж не создан', statusColor: '#a80', amount: contract.rent_amount, baseAmount: contract.rent_amount, penaltyAmount: 0, utilitiesAmount: 0, paymentId: null, contract, readingsMode, frozenTotal, frozenRows: fRows, deferredRequests: dReqBy[contract.id] || [] }); continue }
            const cashMeeting = meetBy[contract.id] || null
            const dueMid = parseDate(payment.due_date)
@@ -1180,9 +1188,21 @@ export function LandlordDashboard() {
               <button style={T.btn} onClick={() => confirmSigning(current.paymentId!)}>Подтвердить: получено {(Number(current.payment?.base_amount || 0) + Number(current.payment?.utilities_amount || 0) + Number(current.payment?.penalty_amount || 0)).toFixed(0)} ₽ при подписании</button>
             </div>
           )}
-          {contract && current.paymentId && !current.payment?.confirmed_by_landlord && !firstMonthPending && (
+          
+          {/* === ИЗМЕНЕННЫЙ БЛОК: Карточка подтверждения оплаты === */}
+          {contract && current.paymentId && !current.payment?.confirmed_by_landlord && !firstMonthPending && (() => {
+             // Определяем, является ли платеж "будущим" (>7 дней до срока)
+             const isFuturePayment = daysToPay > 7;
+             
+             return (
             <div style={T.card}>
-              <div style={T.h2}>Подтверждение оплаты за {pcMonth}</div>
+              {/* Динамический заголовок */}
+              <div style={T.h2}>
+                {isFuturePayment 
+                  ? `Ожидаемая оплата за ${pcMonth}` 
+                  : `Подтверждение оплаты за ${pcMonth}`}
+              </div>
+              
               {openPay && (
                 <div style={T.row}>
                   <span style={iosMuted}>Срок оплаты</span>
@@ -1207,24 +1227,31 @@ export function LandlordDashboard() {
                   <span style={valMoney}>{Number(current.payment?.utilities_amount || current.utilitiesAmount || 0).toFixed(0)} ₽</span>
                 </div>
               )}
-              <div style={T.row}>
-                <span style={valText}>Безналичная оплата</span>
-                {current.payment?.confirmed_card
-                  ? <span style={iosOk}>получена</span>
-                  : current.payment?.card_claimed
-                    ? <button style={actBlue} onClick={() => { setPayConfirmOk(false); setPayConfirm({ kind: 'card' }) }}>Подтвердить</button>
-                    : <span style={iosMuted}>не заявлена</span>}
-              </div>
-              <div style={{ ...T.row, borderBottom: 'none' }}>
-                <span style={valText}>Оплата наличными</span>
-                {current.payment?.confirmed_cash
-                  ? <span style={iosOk}>получена</span>
-                  : current.payment?.cash_closed
-                    ? <span style={iosMuted}>расчёт завершён</span>
-                    : current.hasConfirmedCashMeeting
-                      ? <span style={{ color: '#b25000', fontSize: 15, fontWeight: 600 }}>встреча согласована</span>
-                      : <span style={iosMuted}>не заявлена</span>}
-              </div>
+
+              {/* Детали способов оплаты показываются только для НЕ будущих платежей */}
+              {!isFuturePayment && (
+                 <>
+                    <div style={T.row}>
+                      <span style={valText}>Безналичная оплата</span>
+                      {current.payment?.confirmed_card
+                        ? <span style={iosOk}>получена</span>
+                        : current.payment?.card_claimed
+                          ? <button style={actBlue} onClick={() => { setPayConfirmOk(false); setPayConfirm({ kind: 'card' }) }}>Подтвердить</button>
+                          : <span style={iosMuted}>не заявлена</span>}
+                    </div>
+                    <div style={{ ...T.row, borderBottom: 'none' }}>
+                      <span style={valText}>Оплата наличными</span>
+                      {current.payment?.confirmed_cash
+                        ? <span style={iosOk}>получена</span>
+                        : current.payment?.cash_closed
+                          ? <span style={iosMuted}>расчёт завершён</span>
+                          : current.hasConfirmedCashMeeting
+                            ? <span style={{ color: '#b25000', fontSize: 15, fontWeight: 600 }}>встреча согласована</span>
+                            : <span style={iosMuted}>не заявлена</span>}
+                    </div>
+                 </>
+              )}
+
               {openPayment && penaltyStart && (
                 <>
                   <div style={T.row}>
@@ -1259,30 +1286,50 @@ export function LandlordDashboard() {
                   <Hint text="«Подтвердить получение» — деньги получены при встрече. «Завершить без оплаты» закрывает наличный расчёт, если договорились о другом способе; штраф тогда считаем от срока оплаты задним числом." />
                 </>
               )}
+              
+              {/* Основная кнопка действия */}
               {!current.payment?.card_claimed && !current.hasConfirmedCashMeeting && (
-                daysToPay <= 7 || pcPaid > 0 ? (
-                  <>
-                    <button style={T.btn} onClick={() => { setPayConfirmOk(false); setPayConfirm({ kind: 'full' }) }}>{pcPaid > 0 ? `Подтвердить получение остатка за ${pcMonth} (${Math.max(0, pcSum - pcPaid).toFixed(0)} ₽)` : `Получил оплату за ${pcMonth} вне приложения`}</button>
-                    <Hint text="Арендатор не отмечал оплату в приложении? Если деньги получены наличными или переводом напрямую — подтвердите здесь, заявка арендатора не нужна." />
-                  </>
+                // Проверяем, далеко ли срок
+                daysToPay > 7 ? (
+                   // === РЕЖИМ ОЖИДАНИЯ (Серая кнопка) ===
+                   <button 
+                     disabled 
+                     style={{ 
+                       ...T.btn, 
+                       backgroundColor: '#e9e9eb', 
+                       color: '#8e8e93', 
+                       cursor: 'not-allowed',
+                       opacity: 1 
+                     }}
+                   >
+                     Оплата станет доступна за {daysToPay} дн.
+                   </button>
                 ) : (
-                  <>
-                    {!earlyPayOpen ? (
-                      <div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0' }}>
-                        <button style={actBlue} onClick={() => setEarlyPayOpen(true)}>Отметить оплату вне приложения (досрочно)</button>
-                      </div>
-                    ) : (
-                      <button style={T.btn} onClick={() => { setPayConfirmOk(false); setPayConfirm({ kind: 'full' }) }}>Получил оплату за {pcMonth} вне приложения</button>
-                    )}
-                    <Hint text={`До оплаты ещё ${daysToPay} дн. Если деньги уже получены досрочно — отметьте это здесь.`} />
-                  </>
+                   // === АКТИВНЫЙ РЕЖИМ (Синяя кнопка) ===
+                   <>
+                     <button style={T.btn} onClick={() => { setPayConfirmOk(false); setPayConfirm({ kind: 'full' }) }}>
+                       {pcPaid > 0 ? `Подтвердить получение остатка за ${pcMonth} (${Math.max(0, pcSum - pcPaid).toFixed(0)} ₽)` : `Получил оплату за ${pcMonth} вне приложения`}
+                     </button>
+                     <Hint text="Арендатор не отмечал оплату в приложении? Если деньги получены наличными или переводом напрямую — подтвердите здесь, заявка арендатора не нужна." />
+                   </>
                 )
               )}
-              <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 4px' }}>
-                <button style={actBlue} onClick={() => setReceiptOpen(true)}>Учесть частичную оплату</button>
-              </div>
+              
+              {/* Подсказка для будущих платежей */}
+              {isFuturePayment && (
+                  <Hint text={`До срока оплаты осталось ${daysToPay} дней. Кнопка станет активной, когда до конца месяца останется неделя.`} />
+              )}
+
+              {/* Остальные элементы (частичная оплата и т.д.) тоже скрываем для будущих платежей */}
+              {!isFuturePayment && (
+                <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 4px' }}>
+                  <button style={actBlue} onClick={() => setReceiptOpen(true)}>Учесть частичную оплату</button>
+                </div>
+              )}
             </div>
-          )}
+          )})()}
+          {/* ================================================================ */}
+          
           {showUtilities && (
             <div style={T.card}>
               <div style={T.h2}>Ресурсы по квитанции</div>
